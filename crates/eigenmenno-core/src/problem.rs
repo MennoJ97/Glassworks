@@ -35,6 +35,12 @@ pub enum Boundary {
     Port,
 }
 
+impl Boundary {
+    pub fn is_open(self) -> bool {
+        matches!(self, Boundary::Absorbing | Boundary::Port)
+    }
+}
+
 /// `order` is the element order (1 to 5). `max_cell` is the largest cell in
 /// vacuum; each layer scales it by its refractive index.
 #[derive(Deserialize, Clone)]
@@ -76,6 +82,13 @@ pub enum Analysis {
     /// Reflection and transmission spectrum of a plane wave.
     Sweep {
         wavelengths: Vec<f64>,
+        #[serde(default)]
+        angle_deg: f64,
+    },
+    /// A plane wave's field and power at one wavelength, plus the gradients of
+    /// that power with respect to the permittivity of each layer not at an open end.
+    DrivenGradient {
+        wavelength: f64,
         #[serde(default)]
         angle_deg: f64,
     },

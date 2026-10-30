@@ -149,15 +149,14 @@ pub fn eigs_near(a: &Csr, b: &Csr, sigma: f64, k: usize, tol: f64) -> Result<Vec
     let mut found: Vec<Mode> = vec![];
     while found.len() < a.n {
         let new = lanczos(&lu, b, &found, k.saturating_sub(found.len()).max(1), tol, &mut seed);
-        found.sort_by(|p, q| q.theta.abs().total_cmp(&p.theta.abs()));
         let kth = found.get(k.wrapping_sub(1)).map_or(0.0, |f| f.theta.abs());
         let finished = new.iter().all(|f| f.theta.abs() < kth * (1.0 - 1e-9));
         found.extend(new);
+        found.sort_by(|p, q| q.theta.abs().total_cmp(&p.theta.abs()));
         if finished {
             break;
         }
     }
-    found.sort_by(|p, q| q.theta.abs().total_cmp(&p.theta.abs()));
     if found.len() < k {
         return Err(format!("the eigensolver converged only {} of {k} modes", found.len()));
     }

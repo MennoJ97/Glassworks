@@ -37,7 +37,6 @@ pub struct Output {
 #[derive(Serialize, Default)]
 pub struct Meta {
     pub n_dofs: usize,
-    pub n_cells: usize,
     pub length: f64,
     pub fields: Vec<FieldMeta>,
 }
@@ -168,12 +167,17 @@ fn validate(req: &Request) -> Result<(), String> {
     if periodic != (req.right == Boundary::Periodic) {
         return err("periodic boundaries must be set on both sides");
     }
-    let open = [req.left, req.right].iter().any(|b| matches!(b, Boundary::Absorbing | Boundary::Port));
+    let open = req.left.is_open() || req.right.is_open();
     let ok_wl = |w: f64| w > 0.0 && w.is_finite();
     match &req.analysis {
         Analysis::Driven { wavelength, source, .. } => {
             if !ok_wl(*wavelength) || periodic || (matches!(source, Source::PlaneWave) && req.left != Boundary::Port) {
                 return err("driven solves need a positive wavelength, no periodic walls, and a left port for a plane wave");
+            }
+        }
+        Analysis::DrivenGradient { wavelength, .. } => {
+            if !ok_wl(*wavelength) || periodic || req.left != Boundary::Port {
+                return err("gradients need a positive wavelength, no periodic walls, and a left port");
             }
         }
         Analysis::Sweep { wavelengths, .. } => {
@@ -209,38 +213,40 @@ pub fn solve(req: &Request) -> Result<Output, String> {
         req.layers.iter().map(|l| req.mesh.max_cell / (c(l.eps) * c(l.mu)).norm().sqrt().max(1.0)).collect();
     let mesh = Mesh::layered_line(&thickness, &max_cell);
     let length: f64 = thickness.iter().sum();
-    let meta = Meta { length, n_cells: mesh.n_cells(), ..Default::default() };
+    let bloch_phase = if let Analysis::Cavity { bloch_phase, .. } = req.analysis { bloch_phase } else { 0.0 };
+    let s = Setup::new(req, &mesh, bloch_phase);
+    let meta = Meta { length, n_dofs: s.dofs.n_free, ..Default::default() };
     let mut out = Output { meta, channels: vec![] };
     let k0_of = |wavelength: f64| 2.0 * PI / wavelength;
     match &req.analysis {
-        Analysis::Cavity { n_modes, target_k0, bloch_phase } => {
-            let s = Setup::new(req, &mesh, *bloch_phase);
+        Analysis::Cavity { n_modes, target_k0, .. } => {
             for (lambda, x) in cavity_modes(&s, *n_modes, *target_k0, length)? {
                 s.push_field(&mut out, &normalized(s.dofs.expand(&x)), lambda.max(0.0).sqrt(), 0.0, None, None);
             }
-            out.meta.n_dofs = s.dofs.n_free;
         }
-        Analysis::Bands { n_bands, n_k } => bands(req, &mesh, *n_bands, *n_k, &mut out)?,
-        Analysis::Waveguide { wavelength, n_modes } => waveguide(req, &mesh, k0_of(*wavelength), *n_modes, &mut out)?,
+        Analysis::Bands { n_bands, n_k } => bands(&s, *n_bands, *n_k, &mut out)?,
+        Analysis::Waveguide { wavelength, n_modes } => waveguide(&s, k0_of(*wavelength), *n_modes, &mut out)?,
         Analysis::Driven { wavelength, angle_deg, source } => {
-            let s = Setup::new(req, &mesh, 0.0);
             let k0 = k0_of(*wavelength);
-            let (u, kt, power) = driven(&s, k0, *angle_deg, *source)?;
-            s.push_field(&mut out, &u, k0, kt, None, power);
-            out.meta.n_dofs = s.dofs.n_free;
+            let d = driven(&s, k0, *angle_deg, *source)?;
+            s.push_field(&mut out, &d.u, k0, d.kt, None, d.power);
+        }
+        Analysis::DrivenGradient { wavelength, angle_deg } => {
+            let k0 = k0_of(*wavelength);
+            let d = driven(&s, k0, *angle_deg, Source::PlaneWave)?;
+            s.push_field(&mut out, &d.u, k0, d.kt, None, d.power);
+            power_gradients(&s, k0, &d, &mut out);
         }
         Analysis::Sweep { wavelengths, angle_deg } => {
-            let s = Setup::new(req, &mesh, 0.0);
             let mut series = [vec![], vec![], vec![]];
             for &w in wavelengths {
-                let power = driven(&s, k0_of(w), *angle_deg, Source::PlaneWave)?.2.unwrap();
+                let power = driven(&s, k0_of(w), *angle_deg, Source::PlaneWave)?.power.unwrap();
                 (0..3).for_each(|i| series[i].push(power[i]));
             }
             out.channels.push(("wavelength".into(), wavelengths.clone()));
             for (name, data) in ["R", "T", "A"].into_iter().zip(series) {
                 out.channels.push((name.into(), data));
             }
-            out.meta.n_dofs = s.dofs.n_free;
         }
     }
     Ok(out)
@@ -255,16 +261,15 @@ fn cavity_modes(s: &Setup, n: usize, target_k0: Option<f64>, length: f64) -> Res
     eigs_near(&a, &b, sigma, n, EIG_TOL)
 }
 
-fn bands(req: &Request, mesh: &Mesh, n_bands: usize, n_k: usize, out: &mut Output) -> Result<(), String> {
+fn bands(s: &Setup, n_bands: usize, n_k: usize, out: &mut Output) -> Result<(), String> {
     let length = out.meta.length;
     let ks: Vec<f64> = (0..n_k).map(|i| PI / length * i as f64 / (n_k - 1) as f64).collect();
     let mut table = vec![vec![]; n_bands];
     for &k in &ks {
-        let s = Setup::new(req, mesh, k * length);
+        let s = Setup::new(s.req, s.space.mesh, k * length);
         for (band, (lambda, _)) in table.iter_mut().zip(cavity_modes(&s, n_bands, None, length)?) {
             band.push(lambda.max(0.0).sqrt());
         }
-        out.meta.n_dofs = s.dofs.n_free;
     }
     out.channels.push(("k".into(), ks));
     out.channels.extend(table.into_iter().enumerate().map(|(i, b)| (format!("band{i}"), b)));
@@ -272,12 +277,11 @@ fn bands(req: &Request, mesh: &Mesh, n_bands: usize, n_k: usize, out: &mut Outpu
 }
 
 /// `(k0^2 Q - S) u = beta^2 P u`, with `P` the mass matrix weighted by `p`.
-fn waveguide(req: &Request, mesh: &Mesh, k0: f64, n_modes: usize, out: &mut Output) -> Result<(), String> {
-    let s = Setup::new(req, mesh, 0.0);
+fn waveguide(s: &Setup, k0: f64, n_modes: usize, out: &mut Output) -> Result<(), String> {
     let k02 = C64::new(k0 * k0, 0.0);
     let a = s.matrix(|p, q| (-p, k02 * q));
     let b = s.matrix(|p, _| (ZERO, p));
-    let n2: Vec<f64> = req.layers.iter().map(|l| l.eps[0] * l.mu[0]).collect();
+    let n2: Vec<f64> = s.req.layers.iter().map(|l| l.eps[0] * l.mu[0]).collect();
     let n2_max = n2.iter().copied().fold(0.0, f64::max);
     let n2_clad = n2[0].max(n2[n2.len() - 1]);
     // Highest effective index first. Modes at or below the cladding index are box
@@ -288,12 +292,20 @@ fn waveguide(req: &Request, mesh: &Mesh, k0: f64, n_modes: usize, out: &mut Outp
             s.push_field(out, &normalized(s.dofs.expand(&x)), k0, beta, Some(beta / k0), None);
         }
     }
-    out.meta.n_dofs = s.dofs.n_free;
     Ok(())
 }
 
-/// Solves one driven problem. Returns the field, `kt`, and power if a plane wave.
-fn driven(s: &Setup, k0: f64, angle_deg: f64, source: Source) -> Result<(Vec<C64>, f64, Option<[f64; 3]>), String> {
+/// A solved driven problem, with `power` set for a plane wave. The factors and
+/// `t_scale` (T per `|u|^2` at the right end) stay around for adjoint solves.
+struct Driven {
+    u: Vec<C64>,
+    kt: f64,
+    power: Option<[f64; 3]>,
+    lu: BandedLu,
+    t_scale: f64,
+}
+
+fn driven(s: &Setup, k0: f64, angle_deg: f64, source: Source) -> Result<Driven, String> {
     let req = s.req;
     let n2 = |l: &Layer| c(l.eps) * c(l.mu);
     let plane = matches!(source, Source::PlaneWave);
@@ -310,10 +322,9 @@ fn driven(s: &Setup, k0: f64, angle_deg: f64, source: Source) -> Result<(Vec<C64
         let w = (k2 * n2(l) - kt2).sqrt();
         layer_coef(req.polarization, l).0 * if w.im < 0.0 || (w.im == 0.0 && w.re < 0.0) { -w } else { w }
     };
-    let open = |b: Boundary| matches!(b, Boundary::Absorbing | Boundary::Port);
     let last = s.space.n_dofs() - 1;
     let (y_left, y_right) = (admittance(first), admittance(last_layer));
-    for (is_open, dof, y) in [(open(req.left), 0, y_left), (open(req.right), last, y_right)] {
+    for (is_open, dof, y) in [(req.left.is_open(), 0, y_left), (req.right.is_open(), last, y_right)] {
         if is_open {
             let (d, _) = s.dofs.map[dof].unwrap();
             t.push((d, d, -I * y));
@@ -324,14 +335,69 @@ fn driven(s: &Setup, k0: f64, angle_deg: f64, source: Source) -> Result<(Vec<C64
         Source::PlaneWave => rhs[s.dofs.map[0].unwrap().0] = -I * y_left * 2.0,
         Source::Line { x } => add_point_load(s, x, I * k0, &mut rhs)?,
     }
-    BandedLu::factor(&Csr::from_triplets(s.dofs.n_free, t))?.solve(&mut rhs);
+    let lu = BandedLu::factor(&Csr::from_triplets(s.dofs.n_free, t))?;
+    lu.solve(&mut rhs);
     let u = s.dofs.expand(&rhs);
+    let t_scale = if req.right.is_open() { y_right.re / y_left.re } else { 0.0 };
     let power = plane.then(|| {
         let r = (u[0] - ONE).norm_sqr();
-        let tr = if open(req.right) { u[last].norm_sqr() * y_right.re / y_left.re } else { 0.0 };
+        let tr = u[last].norm_sqr() * t_scale;
         [r, tr, 1.0 - r - tr]
     });
-    Ok((u, kt, power))
+    Ok(Driven { u, kt, power, lu, t_scale })
+}
+
+/// Adjoint gradients of R, T and A. For a real `J(u)` with `A u = b`,
+/// `dJ/dθ = -2 Re(λᵀ (dA/dθ) u)`, where `Aᵀ λ = dJ/du`. Without periodic walls `A`
+/// is complex symmetric, so the factors of `A` also solve for `λ`, and each output
+/// costs one back-substitution however many layers there are.
+///
+/// Layers at an open end are left out: they also set the angle and the boundary
+/// terms. The result is the exact gradient of the discrete problem on this mesh.
+fn power_gradients(s: &Setup, k0: f64, d: &Driven, out: &mut Output) {
+    let last = s.space.n_dofs() - 1;
+    let adjoint = |dof: usize, g: C64| {
+        let mut x = vec![ZERO; s.dofs.n_free];
+        if let Some((r, _)) = s.dofs.map[dof] {
+            x[r] = g;
+        }
+        d.lu.solve(&mut x);
+        s.dofs.expand(&x)
+    };
+    let dr = layer_sensitivity(s, k0, d, &adjoint(0, (d.u[0] - ONE).conj()));
+    let dt = layer_sensitivity(s, k0, d, &adjoint(last, d.u[last].conj() * d.t_scale));
+    let da: Vec<C64> = dr.iter().zip(&dt).map(|(r, t)| -r - t).collect();
+    let n = s.req.layers.len();
+    let design = 1..if s.req.right.is_open() { n - 1 } else { n };
+    out.channels.push(("layer".into(), design.clone().map(|l| l as f64).collect()));
+    for (name, w) in [("R", &dr), ("T", &dt), ("A", &da)] {
+        // `dε = i dε''` multiplies `λᵀ (dA/dε) u` by `i`, which turns Re into -Im.
+        out.channels.push((format!("d{name}/deps_re"), design.clone().map(|l| -2.0 * w[l].re).collect()));
+        out.channels.push((format!("d{name}/deps_im"), design.clone().map(|l| 2.0 * w[l].im).collect()));
+    }
+}
+
+/// `λᵀ (dA/dε) u` for each layer. The derivative has the usual `a S + b M` form:
+/// TE has `q = ε` in `b = kt^2 p - k0^2 q`, and TM has `p = 1/ε` in both `a` and `b`.
+fn layer_sensitivity(s: &Setup, k0: f64, d: &Driven, lambda: &[C64]) -> Vec<C64> {
+    let n = s.space.local_size();
+    let (mut stiff, mut mass, mut dofs) = (vec![0.0; n * n], vec![0.0; n * n], vec![0; n]);
+    let mut w = vec![ZERO; s.req.layers.len()];
+    for cell in 0..s.space.n_cells() {
+        s.space.cell_dofs(cell, &mut dofs);
+        s.space.local_matrices(cell, &mut stiff, &mut mass);
+        let (p, _) = s.coef(cell);
+        let (a, b) = match s.req.polarization {
+            Polarization::Te => (ZERO, C64::new(-k0 * k0, 0.0)),
+            Polarization::Tm => (-p * p, -p * p * (d.kt * d.kt)),
+        };
+        for i in 0..n {
+            for j in 0..n {
+                w[s.space.mesh.region[cell]] += lambda[dofs[i]] * (a * stiff[i * n + j] + b * mass[i * n + j]) * d.u[dofs[j]];
+            }
+        }
+    }
+    w
 }
 
 /// Adds `amp * v(x)` to the right-hand side: the weak form of a current sheet.

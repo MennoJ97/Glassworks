@@ -11,6 +11,8 @@ It currently handles 1D layered structures, with 2D planned for later:
 - **Guided modes** of slab waveguides
 - **Reflection and transmission spectra**, including lossy layers and oblique incidence
 - **Fields at a single wavelength**, from a plane wave or a current sheet
+- **Adjoint gradients** of reflection, transmission and absorption with respect to each
+  inner layer's permittivity, in the solver only for now
 
 Visitors build their own structure on the page: drag boundaries, split layers, pick
 materials, repeat blocks, and share the result as a link.

@@ -237,6 +237,75 @@ fn lossy_layer_absorbs_and_matches_transfer_matrix() {
     assert!(f.power.unwrap()[2] > 0.1, "the layer should absorb");
 }
 
+fn gradient(layers: &[Layer], pol: Polarization, right: Boundary, order: usize, h: f64, angle: f64) -> Output {
+    let analysis = Analysis::DrivenGradient { wavelength: 1.0, angle_deg: angle };
+    solve(&request(layers.to_vec(), pol, (Boundary::Port, right), order, h, analysis)).unwrap()
+}
+
+/// Central differences of `power(layers)` over each `eps` listed in `layer`,
+/// compared with the adjoint channels. `power` returns `[R, T, A]`.
+fn check_gradient(o: &Output, layers: &[Layer], tol: f64, power: impl Fn(&[Layer]) -> [f64; 3]) {
+    const STEP: f64 = 1e-5;
+    for (row, &l) in channel(o, "layer").iter().enumerate() {
+        for (part, suffix) in ["re", "im"].into_iter().enumerate() {
+            let at = |delta: f64| {
+                let mut moved = layers.to_vec();
+                moved[l as usize].eps[part] += delta;
+                power(&moved)
+            };
+            let (up, down) = (at(STEP), at(-STEP));
+            for (i, name) in ["R", "T", "A"].into_iter().enumerate() {
+                let want = (up[i] - down[i]) / (2.0 * STEP);
+                close(channel(o, &format!("d{name}/deps_{suffix}"))[row], want, tol);
+            }
+        }
+    }
+}
+
+#[test]
+fn adjoint_gradient_matches_transfer_matrix_differences() {
+    let mut lossy = layer(0.2, 1.0);
+    lossy.eps = [4.0, 0.8];
+    let layers = vec![layer(0.3, 1.0), layer(0.17, 2.3), lossy, layer(0.27, 1.38), layer(0.3, 1.5)];
+    for (pol, angle) in [(Polarization::Te, 0.0), (Polarization::Te, 35.0), (Polarization::Tm, 35.0)] {
+        let o = gradient(&layers, pol, Boundary::Absorbing, 5, 0.05, angle);
+        assert_eq!(channel(&o, "layer"), [1.0, 2.0, 3.0]);
+        assert_eq!(o.meta.fields.len(), 1);
+        check_gradient(&o, &layers, 1e-5, |moved| {
+            let (r, t) = transfer_matrix(moved, pol, 2.0 * PI, f64::to_radians(angle));
+            [r, t, 1.0 - r - t]
+        });
+    }
+}
+
+#[test]
+fn adjoint_gradient_is_exact_on_a_coarse_mesh() {
+    let parsed: Analysis = serde_json::from_str(r#"{"type": "driven_gradient", "wavelength": 1.0}"#).unwrap();
+    assert!(matches!(parsed, Analysis::DrivenGradient { .. }));
+    // The mesh is coarse enough to differ from the exact answer, so this only passes
+    // if the adjoint differentiates the discrete problem itself. The small steps
+    // never change a layer's cell count.
+    let mut lossy = layer(0.21, 1.0);
+    lossy.eps = [4.0, 0.8];
+    let layers = vec![layer(0.33, 1.0), layer(0.17, 2.3), lossy, layer(0.27, 1.38)];
+    let cases = [
+        (Polarization::Te, Boundary::Absorbing, vec![1.0, 2.0]),
+        (Polarization::Tm, Boundary::Absorbing, vec![1.0, 2.0]),
+        // A closed right end leaves the last layer free to change, and T at zero.
+        (Polarization::Te, Boundary::Pec, vec![1.0, 2.0, 3.0]),
+        (Polarization::Tm, Boundary::Pec, vec![1.0, 2.0, 3.0]),
+    ];
+    for (pol, right, design) in cases {
+        let o = gradient(&layers, pol, right, 2, 0.13, 25.0);
+        assert_eq!(channel(&o, "layer"), design);
+        check_gradient(&o, &layers, 1e-6, |moved| {
+            let analysis = Analysis::Driven { wavelength: 1.0, angle_deg: 25.0, source: Source::PlaneWave };
+            let r = request(moved.to_vec(), pol, (Boundary::Port, right), 2, 0.13, analysis);
+            solve(&r).unwrap().meta.fields[0].power.unwrap()
+        });
+    }
+}
+
 #[test]
 fn line_source_radiates_the_free_space_green_function() {
     let r = request(
