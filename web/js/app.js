@@ -1,8 +1,9 @@
 // Connects the controls, the solver and the plots.
 
 import { MATERIALS, PRESETS, PROBLEMS, buildRequests, decodeState, defaultState, encodeState, layer, problemOf, totalLength } from './model.js';
-import { FieldPlot, LineChart, seriesColors } from './plot.js';
+import { EvolutionMap, FieldPlot, LineChart, seriesColors } from './plot.js';
 import { Solver } from './solver.js';
+import { STAGES, TOTAL_ITERATIONS, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, references, sharpnessAt } from './design.js';
 
 const $ = (id) => document.getElementById(id);
 const THZ_MICRONS = 299.792458; // c, in THz times microns.
@@ -14,6 +15,8 @@ const VIEW_HELP = {
   cavity: 'The wavelengths at which the structure resonates between its two ends.',
   bands: 'The waves that can travel through an endless repeat of this structure, and the gaps where none can.',
   waveguide: 'The modes that travel along the layers at a fixed wavelength, and how fast each one propagates.',
+  mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
+  antireflection: 'Find the coating that reflects the least light, averaged across a band of wavelengths.',
 };
 const PROBLEM_TEXT = {
   driven: {
@@ -26,12 +29,18 @@ const PROBLEM_TEXT = {
     field: 'This is the shape of the selected mode. Its overall size is arbitrary, because no source sets it.',
     learn: ['learn/06-eigenproblems.html', 'How eigenproblems work'],
   },
+  design: {
+    settings: 'Goal',
+    field: 'This is the field at the goal wavelength. The design starts as a grey mix of both materials and sharpens into layers.',
+  },
 };
 
 const state = decodeState(location.hash.slice(1)) ?? defaultState();
 const solver = new Solver();
 // Switching problem returns to the view last used there.
-const lastView = { driven: 'spectrum', eigen: 'cavity' };
+const lastView = { driven: 'spectrum', eigen: 'cavity', design: 'mirror' };
+// The design in progress. Changing any setting starts it over.
+const design = { rho: null, frames: [], history: [], shown: 0, references: [], finished: false, running: false, run: 0 };
 let selectedLayer = -1;
 let selectedField = 0;
 let results = null;
@@ -59,6 +68,7 @@ const fieldPlot = new FieldPlot($('field-plot'), {
 });
 
 const chart = new LineChart($('chart'), (hit) => {
+  if (problemOf(state.analysis) === 'design') { showFrame(hit.index); return; }
   if (state.analysis === 'spectrum') {
     state.wavelength = hit.x;
     $('wavelength').value = hit.x.toFixed(3);
@@ -67,6 +77,8 @@ const chart = new LineChart($('chart'), (hit) => {
   }
   changed();
 });
+
+const evolution = new EvolutionMap($('evolution'), (frame) => showFrame(frame));
 
 function moveInterface(index, x) {
   const [a, b] = [state.layers[index], state.layers[index + 1]];
@@ -181,13 +193,27 @@ function renderSettings() {
     t.setAttribute('aria-selected', t.dataset.analysis === a);
   });
   $('view-text').textContent = VIEW_HELP[a];
-  $('view-learn').href = text.learn[0];
-  $('view-learn').textContent = text.learn[1];
+  $('view-learn').hidden = !text.learn;
+  if (text.learn) [$('view-learn').href, $('view-learn').textContent] = text.learn;
   $('settings-title').textContent = text.settings;
   $('field-note').textContent = text.field;
   const show = (id, on) => { $(id).hidden = !on; };
-  show('wavelength-field', a === 'waveguide' || a === 'spectrum' || a === 'field');
-  show('angle-field', a === 'spectrum' || (a === 'field' && state.source === 'plane_wave'));
+  const designing = problem === 'design';
+  show('wavelength-field', a === 'waveguide' || a === 'spectrum' || a === 'field' || a === 'mirror');
+  show('angle-field', a === 'spectrum' || (a === 'field' && state.source === 'plane_wave') || designing);
+  show('design-fields', designing);
+  show('design-band', a === 'antireflection');
+  show('design-run', designing);
+  show('left-field', !designing);
+  show('right-field', !designing);
+  show('accuracy', !designing);
+  document.querySelector('.builder').hidden = designing;
+  document.querySelector('main').classList.toggle('design', designing);
+  $('polarization-title').textContent = designing ? 'Polarization' : 'Polarization and ends';
+  $('field-edit').hidden = designing;
+  fieldPlot.locked = designing;
+  if (designing) renderDesignSettings();
+  else fieldPlot.layers = state.layers;
   show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide');
   show('source-field', a === 'field');
   show('range-field', a === 'spectrum');
@@ -235,6 +261,16 @@ function onWall(side) {
 $('left-wall').addEventListener('change', () => onWall('left'));
 $('right-wall').addEventListener('change', () => onWall('right'));
 
+function renderDesignSettings() {
+  const d = state.design[state.analysis];
+  for (const key of ['thickness', 'radius', 'seed']) $(`design-${key}`).value = d[key];
+  for (const key of ['low', 'high', 'left', 'right']) {
+    const select = $(`design-${key}`);
+    select.replaceChildren(...MATERIALS.filter((m) => m.k === 0).map((m) => new Option(m.name, m.name, false, m.name === d[key])));
+  }
+  if (d.from !== undefined) [$('design-from').value, $('design-to').value] = [d.from, d.to];
+}
+
 function bindNumber(id, apply, min = 0) {
   $(id).addEventListener('input', () => {
     const v = parseFloat($(id).value);
@@ -248,6 +284,15 @@ bindNumber('order', (v) => { state.order = Math.min(5, Math.max(1, Math.round(v)
 bindNumber('cells', (v) => { state.cellsPerWavelength = Math.min(200, v); }, 1);
 bindNumber('range-from', (v) => { state.spectrum.from = v; }, 0.01);
 bindNumber('range-to', (v) => { state.spectrum.to = v; }, 0.01);
+const designSettings = () => state.design[state.analysis];
+bindNumber('design-thickness', (v) => { designSettings().thickness = Math.min(5, v); }, 0.05);
+bindNumber('design-radius', (v) => { designSettings().radius = Math.min(100, v); }, 5);
+bindNumber('design-seed', (v) => { designSettings().seed = Math.round(v); }, 1);
+bindNumber('design-from', (v) => { designSettings().from = v; }, 0.05);
+bindNumber('design-to', (v) => { designSettings().to = v; }, 0.05);
+for (const key of ['low', 'high', 'left', 'right']) {
+  $(`design-${key}`).addEventListener('change', () => { designSettings()[key] = $(`design-${key}`).value; changed(); });
+}
 $('polarization').addEventListener('change', () => { state.polarization = $('polarization').value; visible = new Set(); changed(); });
 $('source').addEventListener('change', () => { state.source = $('source').value; renderSettings(); changed(); });
 
@@ -325,6 +370,7 @@ $('save-csv').addEventListener('click', () => {
 // Solving and showing results ----------------------------------------------------
 
 function changed() {
+  resetDesign();
   fieldPlot.draw();
   clearTimeout(timer);
   timer = setTimeout(solveNow, 60);
@@ -335,6 +381,7 @@ function changed() {
 }
 
 async function solveNow() {
+  if (problemOf(state.analysis) === 'design') return previewDesign();
   const reply = await solver.run(buildRequests(state));
   if (!reply) return;
   if (reply.error) {
@@ -348,6 +395,152 @@ async function solveNow() {
   const { n_dofs: dofs } = results[results.length - 1].meta;
   setStatus(`Solved ${dofs.toLocaleString()} unknowns in ${reply.ms < 10 ? reply.ms.toFixed(1) : Math.round(reply.ms)} ms, in your browser.`);
   showResults();
+}
+
+// Inverse design -----------------------------------------------------------------
+
+function resetDesign() {
+  design.run++;
+  design.running = false;
+  design.finished = false;
+  design.history = [];
+  design.frames = [];
+  design.rho = null;
+  $('design-replay').textContent = 'Replay';
+  $('design-start').textContent = 'Start';
+  $('design-use').hidden = true;
+}
+
+// Repaints the map from the stored frames, as when the colour scheme changes.
+function restartEvolution() {
+  const d = state.design[state.analysis];
+  evolution.reset(pixelCount(d), TOTAL_ITERATIONS + 1, d.thickness, STAGES);
+  design.frames.forEach((rho) => evolution.add(rho));
+}
+
+function showDesign(rho, reply) {
+  design.rho = rho;
+  results = reply.results;
+  $('error').hidden = true;
+  fieldPlot.layers = plotLayers(state.design[state.analysis], rho);
+  showResults();
+}
+
+// Solves the hand-made references and the current design, without optimizing.
+async function previewDesign() {
+  const run = design.run;
+  const found = [];
+  for (const { name, requests } of references(state)) {
+    const reply = await solver.run(requests);
+    if (!reply || run !== design.run) return;
+    if (reply.error) return setError(reply.error);
+    found.push({ name, value: meanReflection(reply.results) });
+  }
+  design.references = found;
+  const rho = design.rho ?? new Float64Array(pixelCount(state.design[state.analysis])).fill(0.5);
+  const reply = await solver.run(gradientRequests(state, rho));
+  if (!reply || run !== design.run) return;
+  if (reply.error) return setError(reply.error);
+  setStatus('Press Start to optimize this design.');
+  showDesign(rho, reply);
+}
+
+async function startDesign() {
+  const run = ++design.run;
+  design.running = true;
+  design.finished = false;
+  design.history = [];
+  design.frames = [];
+  restartEvolution();
+  $('design-start').textContent = 'Stop';
+  $('design-replay').textContent = 'Replay';
+  $('design-use').hidden = true;
+  const started = performance.now();
+  let solving = 0;
+  const failure = await optimize(state, (requests) => solver.run(requests), ({ rho, reply, iteration, beta }) => {
+    if (run !== design.run) return false;
+    solving += reply.ms;
+    design.history.push(meanReflection(reply.results));
+    design.frames.push(rho);
+    design.shown = design.frames.length - 1;
+    evolution.add(rho);
+    design.finished = beta === Infinity;
+    const seconds = ((performance.now() - started) / 1000).toFixed(1);
+    setStatus(design.finished
+      ? `Finished in ${seconds} s, of which the solver took ${(solving / 1000).toFixed(1)} s.`
+      : `Iteration ${iteration} of ${TOTAL_ITERATIONS}, sharpness ${beta}.`);
+    showDesign(rho, reply);
+    return true;
+  });
+  if (run !== design.run) return;
+  design.running = false;
+  $('design-start').textContent = 'Start';
+  $('design-use').hidden = !design.finished;
+  if (failure?.error) setError(failure.error);
+  renderChart();
+}
+
+// Shows one stored iteration: its design, field and place on the chart and map.
+async function solveFrame(frame, run) {
+  const rho = design.frames[frame];
+  const reply = await solver.run(gradientRequests(state, rho));
+  if (!reply || reply.error || run !== design.run) return;
+  design.shown = frame;
+  const sharp = sharpnessAt(frame);
+  setStatus(`Showing iteration ${frame + 1}, ${sharp === Infinity ? 'fully sharpened' : `sharpness ${sharp}`}.`);
+  showDesign(rho, reply);
+}
+
+function showFrame(frame) {
+  if (design.running || !design.frames[frame]) return;
+  $('design-replay').textContent = 'Replay';
+  return solveFrame(frame, ++design.run);
+}
+
+$('design-frame').addEventListener('input', () => showFrame(+$('design-frame').value));
+
+$('design-replay').addEventListener('click', async () => {
+  const run = ++design.run;
+  if ($('design-replay').textContent === 'Stop replay') {
+    $('design-replay').textContent = 'Replay';
+    return;
+  }
+  $('design-replay').textContent = 'Stop replay';
+  for (let frame = 0; frame < design.frames.length && run === design.run; frame++) {
+    await solveFrame(frame, run);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  }
+  if (run === design.run) $('design-replay').textContent = 'Replay';
+});
+
+$('design-start').addEventListener('click', () => {
+  if (!design.running) return startDesign();
+  design.run++;
+  design.running = false;
+  $('design-start').textContent = 'Start';
+  setStatus('Stopped. Press Start to begin again from the random start.');
+});
+
+$('design-use').addEventListener('click', () => {
+  const d = state.design[state.analysis];
+  state.layers = finishedLayers(d, design.frames.at(-1));
+  state.spectrum = state.analysis === 'mirror'
+    ? { from: +(0.5 * state.wavelength).toFixed(3), to: +(1.8 * state.wavelength).toFixed(3) }
+    : { from: d.from, to: d.to };
+  state.wavelength = state.analysis === 'mirror' ? state.wavelength : (d.from + d.to) / 2;
+  state.bc.spectrum.right = 'absorbing';
+  selectedLayer = -1;
+  renderLayers();
+  selectView('spectrum');
+});
+
+function renderDesignTable(table, addRow) {
+  addRow(['Structure', 'Reflected'], 'th');
+  const last = design.finished && design.shown === design.frames.length - 1;
+  const count = last && finishedLayers(state.design[state.analysis], design.rho).length - 2;
+  const name = count ? `This design, ${count} layers` : design.frames.length ? `Iteration ${design.shown + 1}` : 'This design';
+  addRow([name, percent(meanReflection(results))]);
+  for (const { name, value: reference } of design.references) addRow([name, percent(reference)]);
 }
 
 // Round-off can leave tiny negative powers, which should read as zero.
@@ -367,6 +560,7 @@ function clearResults() {
   $('empty').hidden = true;
   $('save-csv').hidden = true;
   $('chart-wrap').hidden = true;
+  $('evolution-wrap').hidden = true;
   chart.spec = null;
   fieldPlot.field = null;
   fieldPlot.source = null;
@@ -433,6 +627,8 @@ function resultsTitle() {
     case 'field': return `Response at ${+state.wavelength.toFixed(3)} µm`;
     case 'waveguide': return `Guided modes at ${+state.wavelength.toFixed(3)} µm`;
     case 'bands': return `Modes at kL/π = ${state.bandPick.k.toFixed(2)}`;
+    case 'mirror': return `Reflection at ${+state.wavelength.toFixed(3)} µm`;
+    case 'antireflection': return `Mean reflection, ${designSettings().from} to ${designSettings().to} µm`;
     default: return 'Resonant modes';
   }
 }
@@ -450,6 +646,7 @@ function renderTable(result) {
     return row;
   };
   $('empty').hidden = fields.length > 0;
+  if (problemOf(a) === 'design') return renderDesignTable(table, addRow);
   if (fields.length === 0) {
     $('empty').textContent = a === 'waveguide'
       ? 'No guided modes at this wavelength. Give an inner layer a higher index than both outer layers, or make it thicker.'
@@ -493,11 +690,37 @@ function renderTable(result) {
 function renderChart() {
   const a = state.analysis;
   const wrap = $('chart-wrap');
-  wrap.hidden = a !== 'spectrum' && a !== 'bands';
+  const designing = problemOf(a) === 'design';
+  wrap.hidden = designing ? design.history.length < 2 : a !== 'spectrum' && a !== 'bands';
+  $('evolution-wrap').hidden = !designing || design.frames.length < 2;
   if (wrap.hidden) { chart.spec = null; return; }
   const channels = results[0].channels;
   const colors = seriesColors();
-  if (a === 'spectrum') {
+  if (designing) {
+    // Both goals become light lost, on a log scale, where a mirror's last 1% shows.
+    const lost = (r) => Math.log10(Math.max(1e-5, a === 'mirror' ? 1 - r : r));
+    const x = design.history.map((_, i) => i + 1);
+    const y = design.history.map(lost);
+    const levels = design.references.map(({ name, value }) => ({ name, y: lost(value) }));
+    const yMin = Math.floor(Math.min(...y, ...levels.map((l) => l.y)));
+    const yMax = Math.max(Math.ceil(Math.max(...y)), yMin + 1);
+    $('chart-title').textContent = a === 'mirror'
+      ? 'Light that gets through the mirror at each iteration, lower is better. It jumps where the pixels get sharper.'
+      : 'Light reflected by the coating at each iteration, lower is better. It jumps where the pixels get sharper.';
+    chart.spec = {
+      xMin: 1, xMax: TOTAL_ITERATIONS + 1, yMin, yMax, xLabel: 'Iteration', levels, marker: design.shown + 1,
+      yTicks: Array.from({ length: yMax - yMin + 1 }, (_, i) => yMin + i),
+      yFormat: (v) => `${+(100 * 10 ** v).toPrecision(1)}%`,
+      series: [{ name: 'Lost', x, y, color: colors[0] }],
+      format: (index) => [`Iteration ${x[index]}`, `Reflected ${percent(design.history[index])}`],
+    };
+    evolution.marker = design.shown;
+    evolution.draw();
+    const slider = $('design-frame');
+    slider.max = design.frames.length - 1;
+    slider.value = design.shown;
+    slider.disabled = $('design-replay').disabled = design.running;
+  } else if (a === 'spectrum') {
     const x = channels.wavelength;
     $('chart-title').textContent = 'Click the chart to see the field at a wavelength.';
     chart.spec = {
@@ -539,8 +762,11 @@ function animate(now) {
   requestAnimationFrame(animate);
 }
 
-new ResizeObserver(() => { fieldPlot.draw(); chart.draw(); }).observe($('field-plot'));
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (results) showResults(); });
+new ResizeObserver(() => { fieldPlot.draw(); chart.draw(); evolution.draw(); }).observe($('field-plot'));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (design.frames.length) restartEvolution();
+  if (results) showResults();
+});
 
 $('play').textContent = playing ? 'Pause' : 'Play';
 renderLayers();

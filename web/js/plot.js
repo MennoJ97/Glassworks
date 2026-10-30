@@ -30,7 +30,7 @@ function ticks(min, max, count) {
 
 const label = (v) => String(+v.toPrecision(3));
 
-function drawYAxis(ctx, area, scale, values) {
+function drawYAxis(ctx, area, scale, values, format = label) {
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   for (const v of values) {
@@ -42,7 +42,7 @@ function drawYAxis(ctx, area, scale, values) {
     ctx.lineTo(area.right, y);
     ctx.stroke();
     ctx.fillStyle = css('--muted');
-    ctx.fillText(label(v), area.left - 8, y);
+    ctx.fillText(format(v), area.left - 8, y);
   }
 }
 
@@ -65,6 +65,8 @@ export class FieldPlot {
     this.visible = new Set();
     this.selected = -1;
     this.source = null;
+    // A locked plot shows a design the optimizer owns: no handles, no editing.
+    this.locked = false;
     this.phase = 0;
     this.hover = null;
     this.drag = null;
@@ -73,6 +75,7 @@ export class FieldPlot {
     canvas.addEventListener('pointerup', () => { this.drag = null; });
     canvas.addEventListener('pointerleave', () => { this.hover = null; this.draw(); });
     canvas.addEventListener('dblclick', (e) => {
+      if (this.locked) return;
       const hit = this.layerAt(this.toX(e));
       if (hit) handlers.onSplit(hit.index, hit.offset);
     });
@@ -103,6 +106,7 @@ export class FieldPlot {
 
   // What a pointer at position `x` would grab: an interface or the source marker.
   grab(x) {
+    if (this.locked) return null;
     const rect = this.canvas.getBoundingClientRect();
     const a = this.area(rect.width, rect.height);
     const reach = (10 / (a.right - a.left)) * this.length();
@@ -122,7 +126,7 @@ export class FieldPlot {
       this.canvas.setPointerCapture(e.pointerId);
     } else {
       const hit = this.layerAt(x);
-      if (hit) this.handlers.onSelect(hit.index);
+      if (hit && !this.locked) this.handlers.onSelect(hit.index);
     }
   }
 
@@ -231,6 +235,7 @@ export class FieldPlot {
   }
 
   drawHandles(ctx, a, sx) {
+    if (this.locked) return;
     const ink = css('--ink');
     let edge = 0;
     for (let i = 0; i < this.layers.length - 1; i++) {
@@ -257,6 +262,91 @@ export class FieldPlot {
       ctx.fillStyle = ink;
       ctx.textAlign = 'center';
       ctx.fillText('Source', sx(this.source), a.bottom - 16);
+    }
+  }
+}
+
+// Every pixel's density at every iteration, with iterations on the same x positions
+// as a LineChart above it. Columns are painted once, so long runs stay cheap to draw.
+export class EvolutionMap {
+  constructor(canvas, onPick) {
+    this.canvas = canvas;
+    this.onPick = onPick;
+    this.marker = null;
+    this.total = 0;
+    this.drawn = 0;
+    const pick = (e) => {
+      if (!this.drawn) return;
+      const rect = canvas.getBoundingClientRect();
+      const a = this.area(rect.width, rect.height);
+      const frame = Math.round(((e.clientX - rect.left - a.left) / (a.right - a.left)) * (this.total - 1));
+      onPick(Math.min(this.drawn - 1, Math.max(0, frame)));
+    };
+    canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); pick(e); });
+    canvas.addEventListener('pointermove', (e) => { if (e.buttons) pick(e); });
+  }
+
+  area(width, height) {
+    return { left: 44, right: width - 14, top: 16, bottom: height - 40 };
+  }
+
+  reset(pixels, total, length, stages) {
+    Object.assign(this, { pixels, total, length, stages, drawn: 0, marker: null });
+    this.image = Object.assign(document.createElement('canvas'), { width: total, height: pixels });
+    const rgb = (name) => [1, 3, 5].map((i) => parseInt(css(name).slice(i, i + 2), 16));
+    this.colors = [rgb('--surface'), rgb('--glass')];
+  }
+
+  add(rho) {
+    const column = new ImageData(1, this.pixels);
+    const [from, to] = this.colors;
+    rho.forEach((r, k) => {
+      const at = 4 * (this.pixels - 1 - k);
+      const mix = 0.1 + 0.9 * r;
+      for (let c = 0; c < 3; c++) column.data[at + c] = from[c] + mix * (to[c] - from[c]);
+      column.data[at + 3] = 255;
+    });
+    this.image.getContext('2d').putImageData(column, this.drawn++, 0);
+  }
+
+  draw() {
+    const { ctx, width, height } = fit(this.canvas);
+    if (!this.total) return;
+    const a = this.area(width, height);
+    const step = (a.right - a.left) / (this.total - 1);
+    const sx = (frame) => a.left + frame * step;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(a.left, a.top, a.right - a.left, a.bottom - a.top);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.image, sx(-0.5), a.top, step * this.total, a.bottom - a.top);
+    ctx.restore();
+    const sy = (x) => a.bottom - (x / this.length) * (a.bottom - a.top);
+    drawYAxis(ctx, a, sy, ticks(0, this.length, 3));
+    ctx.fillStyle = css('--muted');
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Iteration, with position (µm) upward', a.right, a.bottom + 7);
+    // The sharpness schedule explains the jumps in the chart above.
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    for (const { frame, name } of this.stages) {
+      ctx.strokeStyle = css('--muted');
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(sx(frame), a.top - 12);
+      ctx.lineTo(sx(frame), a.bottom);
+      ctx.stroke();
+      ctx.fillText(name, sx(frame) + 3, a.top - 1);
+    }
+    if (this.marker !== null) {
+      ctx.strokeStyle = css('--ink');
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx(this.marker), a.top);
+      ctx.lineTo(sx(this.marker), a.bottom);
+      ctx.stroke();
     }
   }
 }
@@ -303,7 +393,7 @@ export class LineChart {
   draw() {
     const { ctx, width, height } = fit(this.canvas);
     if (!this.spec) return;
-    const { xMin, xMax, yMin, yMax, series, xLabel, gaps, marker, format, endLabels } = this.spec;
+    const { xMin, xMax, yMin, yMax, series, xLabel, gaps, marker, format, endLabels, yTicks, yFormat, levels } = this.spec;
     const a = this.area(width, height);
     const sx = (x) => a.left + ((x - xMin) / (xMax - xMin)) * (a.right - a.left);
     const sy = (y) => a.bottom - ((y - yMin) / (yMax - yMin)) * (a.bottom - a.top);
@@ -312,8 +402,24 @@ export class LineChart {
     ctx.globalAlpha = 0.16;
     for (const [lo, hi] of gaps ?? []) ctx.fillRect(a.left, sy(hi), a.right - a.left, sy(lo) - sy(hi));
     ctx.globalAlpha = 1;
-    drawYAxis(ctx, a, sy, ticks(yMin, yMax, 4));
+    drawYAxis(ctx, a, sy, yTicks ?? ticks(yMin, yMax, 4), yFormat);
     drawXAxis(ctx, a, sx, ticks(xMin, xMax, Math.max(3, Math.floor(width / 110))), xLabel);
+
+    // Dashed reference values, labelled at the right edge.
+    for (const { y, name } of levels ?? []) {
+      ctx.strokeStyle = css('--muted');
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(a.left, sy(y));
+      ctx.lineTo(a.right, sy(y));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = css('--muted');
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(name, a.right - 4, sy(y) - 2);
+    }
 
     ctx.save();
     ctx.beginPath();

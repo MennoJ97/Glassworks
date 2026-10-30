@@ -49,15 +49,19 @@ export const PRESETS = {
     analysis: 'waveguide', wavelength: 1,
     layers: [layer('Silica glass', 3), layer('Silicon nitride', 0.8), layer('Silica glass', 3)],
   },
+  'Design a mirror': { analysis: 'mirror', wavelength: 1 },
+  'Design a broadband coating': { analysis: 'antireflection' },
 };
 
-// The two kinds of problem. Driven views solve one linear system for a source the
-// visitor picks; eigenmode views have no source and solve for the modes themselves.
+// The kinds of problem. Driven views solve one linear system for a source the visitor
+// picks; eigenmode views have no source and solve for the modes themselves; design
+// views repeat driven solves, using their gradients to change the structure.
 export const PROBLEMS = {
   driven: { name: 'Driven response', views: ['spectrum', 'field'] },
   eigen: { name: 'Eigenmodes', views: ['cavity', 'bands', 'waveguide'] },
+  design: { name: 'Inverse design', views: ['mirror', 'antireflection'] },
 };
-export const problemOf = (analysis) => (PROBLEMS.driven.views.includes(analysis) ? 'driven' : 'eigen');
+export const problemOf = (analysis) => Object.keys(PROBLEMS).find((p) => PROBLEMS[p].views.includes(analysis));
 
 export function defaultState() {
   return {
@@ -79,6 +83,10 @@ export function defaultState() {
     source: 'plane_wave',
     sourceX: 0.5,
     bandPick: { k: 0.5, band: 0 },
+    design: {
+      mirror: { thickness: 2, low: 'Silica glass', high: 'Titanium dioxide', left: 'Air', right: 'Air', radius: 20, seed: 1 },
+      antireflection: { thickness: 0.6, low: 'Magnesium fluoride', high: 'Titanium dioxide', left: 'Air', right: 'Silica glass', radius: 15, seed: 1, from: 0.4, to: 0.8 },
+    },
     ...structuredClone(PRESETS['Mirror with a resonant gap']),
   };
 }
