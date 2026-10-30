@@ -1,0 +1,13 @@
+{
+  "name": "eigenmenno-docs",
+  "private": true,
+  "type": "module",
+  "description": "Build-time tools that turn docs/ into the website's tutorial pages",
+  "scripts": {
+    "build": "node scripts/build-docs.mjs"
+  },
+  "devDependencies": {
+    "katex": "^0.19.1",
+    "marked": "^18.1.2"
+  }
+}

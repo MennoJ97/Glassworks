@@ -1,0 +1,13 @@
+[package]
+name = "eigenmenno-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+num-complex = { version = "0.4", default-features = false, features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# Independent reference for the handwritten banded LU and Lanczos solvers.
+faer = { version = "0.24", default-features = false, features = ["std", "linalg", "sparse", "sparse-linalg"] }
+serde_json = "1"

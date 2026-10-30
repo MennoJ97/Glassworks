@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eigenmenno</title>
+<meta name="description" content="Build a layered optical structure and watch its electromagnetic modes, solved in your browser with the finite element method.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>Eigenmenno</h1>
+    <p>Stack up layers of material and watch how light behaves inside them. Everything is solved on your own computer.</p>
+    <p><a href="learn/index.html">Learn how it works</a></p>
+  </div>
+  <label class="field">Start from an example
+    <select id="preset"><option value="">Choose an example</option></select>
+  </label>
+</header>
+
+<nav role="tablist" aria-label="What to calculate">
+  <button role="tab" data-analysis="spectrum">Spectrum</button>
+  <button role="tab" data-analysis="field">Single wavelength</button>
+  <button role="tab" data-analysis="cavity">Resonances</button>
+  <button role="tab" data-analysis="bands">Band diagram</button>
+  <button role="tab" data-analysis="waveguide">Guided modes</button>
+</nav>
+
+<main>
+  <section class="stage">
+    <figure id="chart-wrap" hidden>
+      <figcaption id="chart-title"></figcaption>
+      <canvas id="chart" role="img" aria-label="Chart of the results. The table beside it and the data download hold the same values."></canvas>
+    </figure>
+    <figure>
+      <div class="plot-bar">
+        <div id="components" class="chips" aria-label="Field components to show"></div>
+        <button id="play" type="button">Pause</button>
+      </div>
+      <canvas id="field-plot" role="img" aria-label="The field drawn over the layers of the structure. Edit the layers in the table below."></canvas>
+      <figcaption>Drag a boundary to resize its layers. Double-click a layer to split it. Darker layers have a higher refractive index, and hatched layers absorb light.</figcaption>
+    </figure>
+    <p id="error" role="alert" hidden></p>
+  </section>
+
+  <aside class="readout">
+    <h2>Results</h2>
+    <table id="results"></table>
+    <p id="empty" hidden></p>
+    <p id="status" role="status">Starting the solver.</p>
+    <button id="save-csv" type="button">Download data</button>
+  </aside>
+
+  <section class="builder">
+    <h2>Layers, left to right</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Material</th><th>Thickness (µm)</th><th>Index n</th><th>Absorption k</th><th><span class="sr">Actions</span></th></tr></thead>
+        <tbody id="layers"></tbody>
+      </table>
+    </div>
+    <div class="tools">
+      <button id="add-layer" type="button">Add layer</button>
+      <span class="repeat">
+        Repeat layers
+        <input id="repeat-from" type="number" min="1" value="1" aria-label="First layer to repeat">
+        to
+        <input id="repeat-to" type="number" min="1" value="2" aria-label="Last layer to repeat">,
+        <input id="repeat-times" type="number" min="1" max="50" value="2" aria-label="Number of extra copies">
+        more times
+        <button id="repeat" type="button">Repeat</button>
+      </span>
+    </div>
+    <div class="tools">
+      <button id="copy-link" type="button">Copy link to this structure</button>
+      <button id="save-json" type="button">Save as file</button>
+      <label class="file-button">Open a file<input id="load-json" type="file" accept="application/json,.json"></label>
+    </div>
+  </section>
+
+  <section class="settings">
+    <h2>Settings</h2>
+    <label class="field">Polarization
+      <select id="polarization"><option value="te">TE (electric field along the layers)</option><option value="tm">TM (magnetic field along the layers)</option></select>
+    </label>
+    <label class="field" id="source-field">Source
+      <select id="source"><option value="plane_wave">Plane wave from the left</option><option value="line">Current sheet inside the structure</option></select>
+    </label>
+    <label class="field" id="wavelength-field">Wavelength (µm)<input id="wavelength" type="number" step="0.01" min="0.01"></label>
+    <label class="field" id="angle-field">Angle of incidence (degrees)<input id="angle" type="number" step="1" min="0" max="89"></label>
+    <div id="range-field" class="pair">
+      <label class="field">Spectrum from (µm)<input id="range-from" type="number" step="0.05" min="0.01"></label>
+      <label class="field">to (µm)<input id="range-to" type="number" step="0.05" min="0.01"></label>
+    </div>
+    <label class="field" id="modes-field">Number of modes<input id="n-modes" type="number" min="1" max="30"></label>
+    <label class="field">Left end<select id="left-wall"></select></label>
+    <label class="field">Right end<select id="right-wall"></select></label>
+    <details>
+      <summary>Accuracy</summary>
+      <div class="pair">
+        <label class="field">Element order (1 to 5)<input id="order" type="number" min="1" max="5"></label>
+        <label class="field">Cells per wavelength<input id="cells" type="number" min="1" max="200"></label>
+      </div>
+    </details>
+  </section>
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

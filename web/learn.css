@@ -1,0 +1,42 @@
+/* The tutorial pages. Colours and base controls come from style.css. */
+body.learn { max-width: 1120px; font-size: 16px; line-height: 1.6; }
+.learn-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.learn a { color: var(--ink); text-underline-offset: 2px; }
+.learn .brand { font-size: 18px; font-weight: 600; text-decoration: none; }
+.learn .open-solver { font-weight: 500; }
+.learn main { display: block; }
+.learn-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 44px; align-items: start; }
+.learn nav { position: sticky; top: 16px; font-size: 14.5px; line-height: 1.35; }
+.learn nav summary { font-weight: 600; margin-bottom: 8px; }
+.learn nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.learn nav a { display: block; padding: 5px 9px; border-radius: 5px; text-decoration: none; color: var(--muted); }
+.learn nav a:hover { background: var(--panel); color: var(--ink); }
+.learn nav a[aria-current=page] { background: var(--panel); color: var(--ink); font-weight: 500; box-shadow: inset 3px 0 0 var(--glass); }
+
+.learn article { max-width: 72ch; min-width: 0; }
+.learn article h1 { font-size: 34px; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 18px; }
+.learn article h2 { font-size: 22px; line-height: 1.25; margin: 34px 0 10px; }
+.learn article p, .learn article ul, .learn article ol { margin: 0 0 14px; }
+.learn article li { margin-bottom: 4px; }
+.learn code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; background: var(--panel); padding: 1px 4px; border-radius: 3px; }
+.learn p code, .learn li code, .learn td code { overflow-wrap: anywhere; }
+.learn pre { background: var(--panel); padding: 12px 14px; border-radius: 6px; overflow-x: auto; margin: 0 0 16px; line-height: 1.45; }
+.learn pre code { background: none; padding: 0; font-size: 13.5px; }
+.learn .table-scroll { margin: 0 0 18px; }
+.learn article table { font-size: 15px; }
+.learn article th, .learn article td { border-bottom: 1px solid var(--grid); padding: 6px 12px 6px 0; vertical-align: top; }
+
+/* Math is the one place a serif stays: these are the fonts built for equations. */
+.learn math { font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math; font-size: 1.08em; }
+.display-math { overflow-x: auto; overflow-y: hidden; margin: 0 0 16px; padding: 4px 0; }
+
+.source { max-width: none !important; }
+.source pre { counter-reset: line; }
+.source .line { display: block; white-space: pre; counter-increment: line; }
+.source .line::before { content: counter(line); display: inline-block; width: 3.2em; margin-right: 1em; text-align: right; color: var(--muted); user-select: none; }
+
+@media (max-width: 860px) {
+  .learn-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .learn nav { position: static; }
+  .learn article h1 { font-size: 28px; }
+}
