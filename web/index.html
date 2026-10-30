@@ -19,16 +19,31 @@
   </label>
 </header>
 
-<nav role="tablist" aria-label="What to calculate">
+<nav class="problems" role="tablist" aria-label="Kind of problem">
+  <button role="tab" data-problem="driven">
+    <strong>Driven response</strong>
+    <span>Send light in. You choose the wavelength and source, and the solver finds the field they produce.</span>
+  </button>
+  <button role="tab" data-problem="eigen">
+    <strong>Eigenmodes</strong>
+    <span>Send nothing in. The solver finds the waves the structure can hold by itself.</span>
+  </button>
+</nav>
+
+<nav class="views" role="tablist" aria-label="Driven calculations" data-views="driven">
   <button role="tab" data-analysis="spectrum">Spectrum</button>
   <button role="tab" data-analysis="field">Single wavelength</button>
+</nav>
+<nav class="views" role="tablist" aria-label="Eigenmode calculations" data-views="eigen">
   <button role="tab" data-analysis="cavity">Resonances</button>
   <button role="tab" data-analysis="bands">Band diagram</button>
   <button role="tab" data-analysis="waveguide">Guided modes</button>
 </nav>
+<p id="view-help"><span id="view-text"></span> <a id="view-learn"></a></p>
 
 <main>
   <section class="stage">
+    <p id="error" role="alert" hidden></p>
     <figure id="chart-wrap" hidden>
       <figcaption id="chart-title"></figcaption>
       <canvas id="chart" role="img" aria-label="Chart of the results. The table beside it and the data download hold the same values."></canvas>
@@ -39,13 +54,12 @@
         <button id="play" type="button">Pause</button>
       </div>
       <canvas id="field-plot" role="img" aria-label="The field drawn over the layers of the structure. Edit the layers in the table below."></canvas>
-      <figcaption>Drag a boundary to resize its layers. Double-click a layer to split it. Darker layers have a higher refractive index, and hatched layers absorb light.</figcaption>
+      <figcaption><span id="field-note"></span> Drag a boundary to resize its layers. Double-click a layer to split it. Darker layers have a higher refractive index, and hatched layers absorb light.</figcaption>
     </figure>
-    <p id="error" role="alert" hidden></p>
   </section>
 
   <aside class="readout">
-    <h2>Results</h2>
+    <h2 id="results-title">Results</h2>
     <table id="results"></table>
     <p id="empty" hidden></p>
     <p id="status" role="status">Starting the solver.</p>
@@ -80,10 +94,7 @@
   </section>
 
   <section class="settings">
-    <h2>Settings</h2>
-    <label class="field">Polarization
-      <select id="polarization"><option value="te">TE (electric field along the layers)</option><option value="tm">TM (magnetic field along the layers)</option></select>
-    </label>
+    <h2 id="settings-title"></h2>
     <label class="field" id="source-field">Source
       <select id="source"><option value="plane_wave">Plane wave from the left</option><option value="line">Current sheet inside the structure</option></select>
     </label>
@@ -94,6 +105,10 @@
       <label class="field">to (µm)<input id="range-to" type="number" step="0.05" min="0.01"></label>
     </div>
     <label class="field" id="modes-field">Number of modes<input id="n-modes" type="number" min="1" max="30"></label>
+    <h2>Polarization and ends</h2>
+    <label class="field">Polarization
+      <select id="polarization"><option value="te">TE (electric field along the layers)</option><option value="tm">TM (magnetic field along the layers)</option></select>
+    </label>
     <label class="field">Left end<select id="left-wall"></select></label>
     <label class="field">Right end<select id="right-wall"></select></label>
     <details>

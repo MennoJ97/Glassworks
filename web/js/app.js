@@ -1,6 +1,6 @@
 // Connects the controls, the solver and the plots.
 
-import { MATERIALS, PRESETS, buildRequests, decodeState, defaultState, encodeState, layer, totalLength } from './model.js';
+import { MATERIALS, PRESETS, PROBLEMS, buildRequests, decodeState, defaultState, encodeState, layer, problemOf, totalLength } from './model.js';
 import { FieldPlot, LineChart, seriesColors } from './plot.js';
 import { Solver } from './solver.js';
 
@@ -8,9 +8,30 @@ const $ = (id) => document.getElementById(id);
 const THZ_MICRONS = 299.792458; // c, in THz times microns.
 const WALLS = { pec: 'Perfect conductor', pmc: 'Magnetic wall', periodic: 'Periodic', absorbing: 'Open (no reflection)' };
 const PERIOD_MS = 3000;
+const VIEW_HELP = {
+  spectrum: 'Reflection, transmission and absorption across a range of wavelengths, for a plane wave from the left.',
+  field: 'The field at one wavelength, from a plane wave or from a current sheet inside the structure.',
+  cavity: 'The wavelengths at which the structure resonates between its two ends.',
+  bands: 'The waves that can travel through an endless repeat of this structure, and the gaps where none can.',
+  waveguide: 'The modes that travel along the layers at a fixed wavelength, and how fast each one propagates.',
+};
+const PROBLEM_TEXT = {
+  driven: {
+    settings: 'Light source',
+    field: 'This is the field the source produces.',
+    learn: ['learn/07-driven.html', 'How driven problems work'],
+  },
+  eigen: {
+    settings: 'Mode search',
+    field: 'This is the shape of the selected mode. Its overall size is arbitrary, because no source sets it.',
+    learn: ['learn/06-eigenproblems.html', 'How eigenproblems work'],
+  },
+};
 
 const state = decodeState(location.hash.slice(1)) ?? defaultState();
 const solver = new Solver();
+// Switching problem returns to the view last used there.
+const lastView = { driven: 'spectrum', eigen: 'cavity' };
 let selectedLayer = -1;
 let selectedField = 0;
 let results = null;
@@ -148,10 +169,22 @@ $('repeat').addEventListener('click', () => restructure(() => {
 // Settings ---------------------------------------------------------------------
 
 function renderSettings() {
-  document.querySelectorAll('[role=tab]').forEach((t) => {
-    t.setAttribute('aria-selected', t.dataset.analysis === state.analysis);
-  });
   const a = state.analysis;
+  const problem = problemOf(a);
+  const text = PROBLEM_TEXT[problem];
+  lastView[problem] = a;
+  document.querySelectorAll('[data-problem]').forEach((t) => {
+    t.setAttribute('aria-selected', t.dataset.problem === problem);
+  });
+  document.querySelectorAll('[data-views]').forEach((nav) => { nav.hidden = nav.dataset.views !== problem; });
+  document.querySelectorAll('[data-analysis]').forEach((t) => {
+    t.setAttribute('aria-selected', t.dataset.analysis === a);
+  });
+  $('view-text').textContent = VIEW_HELP[a];
+  $('view-learn').href = text.learn[0];
+  $('view-learn').textContent = text.learn[1];
+  $('settings-title').textContent = text.settings;
+  $('field-note').textContent = text.field;
   const show = (id, on) => { $(id).hidden = !on; };
   show('wavelength-field', a === 'waveguide' || a === 'spectrum' || a === 'field');
   show('angle-field', a === 'spectrum' || (a === 'field' && state.source === 'plane_wave'));
@@ -218,14 +251,24 @@ bindNumber('range-to', (v) => { state.spectrum.to = v; }, 0.01);
 $('polarization').addEventListener('change', () => { state.polarization = $('polarization').value; visible = new Set(); changed(); });
 $('source').addEventListener('change', () => { state.source = $('source').value; renderSettings(); changed(); });
 
-document.querySelectorAll('[role=tab]').forEach((t) => t.addEventListener('click', () => {
-  state.analysis = t.dataset.analysis;
+function selectView(analysis) {
+  state.analysis = analysis;
   selectedField = 0;
   renderSettings();
   changed();
+}
+document.querySelectorAll('[data-analysis]').forEach((t) => t.addEventListener('click', () => selectView(t.dataset.analysis)));
+document.querySelectorAll('[data-problem]').forEach((t) => t.addEventListener('click', () => {
+  if (t.dataset.problem !== problemOf(state.analysis)) selectView(lastView[t.dataset.problem]);
 }));
 
-for (const name of Object.keys(PRESETS)) $('preset').add(new Option(name, name));
+for (const [problem, { name: groupName }] of Object.entries(PROBLEMS)) {
+  const group = Object.assign(document.createElement('optgroup'), { label: groupName });
+  for (const [name, preset] of Object.entries(PRESETS)) {
+    if (problemOf(preset.analysis) === problem) group.append(new Option(name, name));
+  }
+  $('preset').append(group);
+}
 $('preset').addEventListener('change', () => {
   const preset = PRESETS[$('preset').value];
   if (!preset) return;
@@ -294,9 +337,14 @@ function changed() {
 async function solveNow() {
   const reply = await solver.run(buildRequests(state));
   if (!reply) return;
-  if (reply.error) return setError(reply.error);
+  if (reply.error) {
+    setError(`${reply.error[0].toUpperCase()}${reply.error.slice(1)}.`);
+    clearResults();
+    return;
+  }
   results = reply.results;
   $('error').hidden = true;
+  $('save-csv').hidden = false;
   const { n_dofs: dofs } = results[results.length - 1].meta;
   setStatus(`Solved ${dofs.toLocaleString()} unknowns in ${reply.ms < 10 ? reply.ms.toFixed(1) : Math.round(reply.ms)} ms, in your browser.`);
   showResults();
@@ -308,6 +356,22 @@ const setStatus = (text) => { $('status').textContent = text; };
 function setError(text) {
   $('error').textContent = text;
   $('error').hidden = false;
+}
+
+// A failed solve must not leave one problem's results showing under another's.
+function clearResults() {
+  results = null;
+  setStatus('No results for these settings.');
+  $('results-title').textContent = 'Results';
+  $('results').replaceChildren();
+  $('empty').hidden = true;
+  $('save-csv').hidden = true;
+  $('chart-wrap').hidden = true;
+  chart.spec = null;
+  fieldPlot.field = null;
+  fieldPlot.source = null;
+  renderComponents(null);
+  fieldPlot.draw();
 }
 
 function fieldFrom(result, i) {
@@ -363,9 +427,20 @@ function renderComponents(field) {
   });
 }
 
+function resultsTitle() {
+  switch (state.analysis) {
+    case 'spectrum':
+    case 'field': return `Response at ${+state.wavelength.toFixed(3)} µm`;
+    case 'waveguide': return `Guided modes at ${+state.wavelength.toFixed(3)} µm`;
+    case 'bands': return `Modes at kL/π = ${state.bandPick.k.toFixed(2)}`;
+    default: return 'Resonant modes';
+  }
+}
+
 function renderTable(result) {
   const a = state.analysis;
   const table = $('results');
+  $('results-title').textContent = resultsTitle();
   table.replaceChildren();
   const fields = result.meta.fields;
   const addRow = (cells, tag = 'td') => {
@@ -424,7 +499,7 @@ function renderChart() {
   const colors = seriesColors();
   if (a === 'spectrum') {
     const x = channels.wavelength;
-    $('chart-title').textContent = 'Reflection, transmission and absorption. Click to see the field at a wavelength.';
+    $('chart-title').textContent = 'Click the chart to see the field at a wavelength.';
     chart.spec = {
       xMin: x[0], xMax: x[x.length - 1], yMin: 0, yMax: 1, xLabel: 'Wavelength (µm)', endLabels: true,
       marker: state.wavelength,
@@ -465,7 +540,7 @@ function animate(now) {
 }
 
 new ResizeObserver(() => { fieldPlot.draw(); chart.draw(); }).observe($('field-plot'));
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { renderChart(); showResults(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (results) showResults(); });
 
 $('play').textContent = playing ? 'Pause' : 'Play';
 renderLayers();

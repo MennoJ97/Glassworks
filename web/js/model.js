@@ -51,6 +51,14 @@ export const PRESETS = {
   },
 };
 
+// The two kinds of problem. Driven views solve one linear system for a source the
+// visitor picks; eigenmode views have no source and solve for the modes themselves.
+export const PROBLEMS = {
+  driven: { name: 'Driven response', views: ['spectrum', 'field'] },
+  eigen: { name: 'Eigenmodes', views: ['cavity', 'bands', 'waveguide'] },
+};
+export const problemOf = (analysis) => (PROBLEMS.driven.views.includes(analysis) ? 'driven' : 'eigen');
+
 export function defaultState() {
   return {
     layers: [],
