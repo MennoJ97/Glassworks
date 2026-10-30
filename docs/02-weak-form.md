@@ -2,7 +2,7 @@
 
 The equation from chapter 1 has a second derivative, but at a material interface
 that derivative doesn't exist. The weak form fixes this, and it's the central idea
-of FEM.
+of FEM ([Strang & Fix 2008](10-references.md#strang-fix-2008); [Brenner & Scott 2008](10-references.md#brenner-scott-2008)).
 
 ## Testing instead of matching
 
@@ -51,7 +51,7 @@ $\phi_1, \dots, \phi_N$ and write
 $$u(x) \approx \sum_{j=1}^N u_j \phi_j(x).$$
 
 The unknowns are now just the numbers $u_j$. For test functions, Galerkin's method
-uses the same basis, $v = \phi_i$. That gives one equation per basis function:
+uses the same basis, $v = \phi_i$ ([Gander & Wanner 2012](10-references.md#gander-wanner-2012)). That gives one equation per basis function:
 
 $$\sum_j \left[\underbrace{\int p\,\phi_i'\phi_j'\,dx}_{S_{ij}} + k_t^2\underbrace{\int p\,\phi_i\phi_j\,dx}_{P_{ij}} - k_0^2\underbrace{\int q\,\phi_i\phi_j\,dx}_{Q_{ij}}\right]u_j = \int f\phi_i\,dx$$
 
@@ -60,7 +60,8 @@ In matrix form, this is
 $$\left(S + k_t^2 P - k_0^2 Q\right)\mathbf{u} = \mathbf{f}.$$
 
 $S$ is called the **stiffness** matrix and $P$ and $Q$ are **mass** matrices, names
-inherited from FEM's origins in structural mechanics.
+inherited from FEM's origins in structural mechanics
+([Turner et al. 1956](10-references.md#turner-1956)).
 
 A differential equation has become a matrix equation. All three of $S$, $P$ and $Q$
 are of the same two kinds, so one function can build them all. See `assemble` in
@@ -72,10 +73,11 @@ $\sum_c (a_c S_c + b_c M_c)$, where the coefficients $a_c$ and $b_c$ are per cel
 When the problem is real and symmetric, Galerkin's method has a strong property. The
 error $u - u_h$ is orthogonal to the whole basis, so the solution is the *best
 possible* approximation available in that basis, measured in the problem's natural
-energy norm.
+energy norm ([Céa 1964](10-references.md#cea-1964)).
 
 There's a matching property for eigenvalues: the approximate eigenvalues are never
 below the true ones for this kind of problem, and their error converges twice as
-fast as the error in the field. We measure both effects in chapter 8.
+fast as the error in the field
+([Strang & Fix 2008](10-references.md#strang-fix-2008); [Boffi 2010](10-references.md#boffi-2010)). We measure both effects in chapter 8.
 
 Next: [elements](03-elements.md), which choose the $\phi_i$.

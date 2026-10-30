@@ -27,10 +27,24 @@ const sources = [
   ...['analytic', 'cross_check'].map((n) => `crates/eigenmenno-core/tests/${n}.rs`),
 ];
 
+// A citation pointing at a missing reference has to fail the build too.
+function checkAnchor(file, id, page) {
+  if (!readFileSync(join(docs, file), 'utf8').includes(`id="${id}"`)) throw new Error(`${page}: no anchor ${file}#${id}`);
+}
+
 // Maps a link in the Markdown to its page on the site.
 function rewriteLink(href, page) {
   if (/^[a-z]+:/.test(href)) return href;
-  if (href.endsWith('.md')) return href === 'README.md' ? 'index.html' : href.replace(/\.md$/, '.html');
+  if (href.startsWith('#')) {
+    checkAnchor(page, href.slice(1), page);
+    return href;
+  }
+  const [path, fragment] = href.split('#');
+  if (path.endsWith('.md')) {
+    if (fragment) checkAnchor(path, fragment, page);
+    const target = path === 'README.md' ? 'index.html' : path.replace(/\.md$/, '.html');
+    return fragment ? `${target}#${fragment}` : target;
+  }
   const target = posix.normalize(posix.join('docs', href));
   if (sources.includes(target)) return `source/${basename(target)}.html`;
   throw new Error(`${page}: no page for link ${href}`);

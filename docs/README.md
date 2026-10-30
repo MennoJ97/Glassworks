@@ -21,6 +21,8 @@ chapter 1 reduces them to one ordinary differential equation.
 8. [Is the answer right?](08-verification.md): testing against exact results
 9. [Toward 2D](09-toward-2d.md): what changes, and why vector fields are harder
 
+The [references](10-references.md) list every source cited in the chapters.
+
 ## Where the code lives
 
 | Chapter | Source file |

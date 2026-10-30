@@ -18,6 +18,7 @@ body.learn { max-width: 1120px; font-size: 16px; line-height: 1.6; }
 .learn article h2 { font-size: 22px; line-height: 1.25; margin: 34px 0 10px; }
 .learn article p, .learn article ul, .learn article ol { margin: 0 0 14px; }
 .learn article li { margin-bottom: 4px; }
+.learn article li:has(> a:target) { background: var(--panel); box-shadow: 0 0 0 4px var(--panel); border-radius: 2px; }
 .learn code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; background: var(--panel); padding: 1px 4px; border-radius: 3px; }
 .learn p code, .learn li code, .learn td code { overflow-wrap: anywhere; }
 .learn pre { background: var(--panel); padding: 12px 14px; border-radius: 6px; overflow-x: auto; margin: 0 0 16px; line-height: 1.45; }
