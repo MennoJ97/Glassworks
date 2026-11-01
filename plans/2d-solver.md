@@ -4,10 +4,9 @@ The agreed plan for adding 2D. Pick up at the first milestone that isn't marked 
 and update this file as things land. Delete it, and `plans/probe-2d/`, once the last
 milestone is finished and the tutorial covers what's here.
 
-**Status (2026-11-01):** milestones 1 and 2 are built, apart from the own-solver decision,
-which was moved until driven matrices existed. Cavities, band diagrams and open scattering
-run on the page, tested against exact and independent results. **Next up: decide on the
-own solver, then milestone 3.** The solver numbers below come from the throwaway probe in
+**Status (2026-11-01):** milestones 1 and 2 are built. Cavities, band diagrams and open
+scattering run on the page, tested against exact and independent results. **Next up:
+milestone 3.** The own-solver decision waits until after milestone 4. The solver numbers below come from the throwaway probe in
 [`probe-2d/`](probe-2d/).
 
 ## Decisions
@@ -26,7 +25,7 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Leaky modes | No non-Hermitian eigensolver. Use one driven solve at complex frequency | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for |
 | Upper size | The page refuses above about 160,000 unknowns | 638,401 failed in WebAssembly, probably out of memory |
 | Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, and about 1,900 after milestone 2 | State the cost before adding more, and keep the tutorial's line count current |
-| Own sparse solver | Not now. Decide after milestone 1 (see below) | `faer` first, behind the trait |
+| Own sparse solver | Keep `faer`. Revisit after milestone 4 (see below) | Speed no longer argues for it, and milestone 4 brings the hard near-resonance matrices to test on |
 
 ## Measurements
 
@@ -154,7 +153,7 @@ as a test in `crates/eigenmenno-core/tests/analytic.rs` before calling it done.
 - [x] **Example 2: rod-lattice band diagram**, Ez and Hz along Γ-X-M-Γ. Checked against
       the plane-wave reference.
 - [x] Add a triangle field renderer and a minimal shape input on the page.
-- [ ] Decide on the own sparse solver (see below).
+- [x] Decide on the own sparse solver: keep `faer`, and revisit after milestone 4.
 
 The page defaults to about 2,500 unknowns per k-point, accurate to about 0.3–0.5%.
 The plane-wave script wasn't kept: it's about 30 lines
@@ -212,8 +211,18 @@ waveguide cross-sections, which are the first real need for Nédélec elements.
 
 ## Own sparse solver
 
-Decide this next, by benchmarking a prototype against `faer` on real 2D matrices, now that
-indefinite driven matrices exist. Keep `faer` as a test reference either way.
+**Decided 2026-11-01: keep `faer`, and revisit after milestone 4.** Then benchmark a
+prototype against `faer` on real 2D matrices, including near-resonance waveguide and cavity
+problems. Keep `faer` as a test reference either way.
+
+Speed isn't the reason to do this. At 2,500 unknowns, factorization is 45 ms of a 476 ms
+band diagram, where Lanczos dominates, and driven solves at about 19,000 unknowns already
+take about 260 ms on the page. The reasons are the tutorial, the download and having no
+major runtime dependency. Measure `faer`'s real share of the download first. A Cholesky-only
+version isn't worth it, because driven solves would still need `faer`.
+
+Near curves, Delaunay flips can create edges that jump over a grid line, and periodic ties
+make the mesh a torus, so separators aren't quite just rows and columns.
 
 **Recommended candidate:** a multifrontal LU with geometric nested dissection, estimated
 at 250–400 lines. On our structured grid the separators are just rows and columns of
@@ -225,8 +234,7 @@ iterations.
 - **Main risk:** pivoting, for driven problems. Pivoting only inside each dense block can
   fail on those matrices, and deferring bad pivots is where the complexity lives.
   Eigenproblems are now positive definite and don't pivot, so they're the easy case.
-- **Blocker:** an unstructured mesh removes the easy separators, so this depends on
-  open problem 1.
+- **Blocker:** an unstructured mesh would remove the easy separators.
 - **Why bother:** about 88 KB less to download, no major runtime dependency, readers
   can still read the whole solver, and it would make a strong tutorial chapter following
   chapter 5's RCM.
