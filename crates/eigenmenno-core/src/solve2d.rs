@@ -22,8 +22,9 @@ use std::collections::HashMap;
 use std::f64::consts::PI;
 
 const EIG_TOL: f64 = 1e-10;
-/// Refuses meshes likely to exhaust a browser tab's memory: 638,401 unknowns did.
-const MAX_DOFS: usize = 160_000;
+/// Refuses meshes likely to exhaust WebAssembly's 4 GiB. An eigenmode solve, the heaviest,
+/// took 3.2 GiB at 579,121 unknowns and 1.7 GiB at 314,721, and a driven one about half that.
+const MAX_DOFS: usize = 400_000;
 /// A pole search that needs more driven solves than this has lost its way.
 const MAX_POLE_STEPS: usize = 30;
 

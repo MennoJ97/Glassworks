@@ -270,7 +270,9 @@ the bend then reads 336% of it, or 418% on a finer mesh, while its own share of 
 emits stays near 14%. The page checks this and shows that share instead. Scaling is the way out:
 Maxwell's equations have no length of their own, so multiplying every length and the wavelength by
 the same number changes nothing. A crystal with rods $0.353$ µm apart reads the same 97.8% at 1 µm
-that the original reads at 2.833 µm.
+that the original reads at 2.833 µm. Without resizing, the crystal has no band gap at 1 µm, so nothing
+guides the light. There, on meshes up to 2.3 million unknowns, about 19% of what the source emits
+reaches a straight guide's output, and 11% the bend's.
 
 ## Inverse design: letting the solver draw the bend
 

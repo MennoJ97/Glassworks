@@ -1057,7 +1057,7 @@ fn scaling_a_structure_with_its_wavelength_changes_nothing() {
     let base = shape(&solve(density_bend(rho.clone())));
     for f in [1.0 / 3.0, 0.353, 0.7, 1.1, 2.1] {
         let scaled = shape(&solve(scaled_request(density_bend(rho.clone()), f)));
-        base.iter().zip(&scaled).for_each(|(a, b)| close(*a, *b, 1e-5));
+        base.iter().zip(&scaled).for_each(|(a, b)| close(*a, *b, 1e-11));
     }
 }
 

@@ -140,7 +140,9 @@ impl Mesh {
         m.region = (0..m.cells.len() / 3)
             .map(|c| {
                 let (x, y) = m.centroid(c);
-                outlines.iter().rposition(|o| o.level(x, y) < 0.0).map_or(0, |i| i + 1)
+                // Where an outline meets the domain's edge, whose nodes can't move, a cell's
+                // centroid can lie exactly on it. Noise mustn't choose its material.
+                outlines.iter().rposition(|o| o.level(x, y) < -1e-9 * lx / nx as f64).map_or(0, |i| i + 1)
             })
             .collect();
         m

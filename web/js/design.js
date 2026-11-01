@@ -30,12 +30,12 @@ const rectangle = (x0, y0, x1, y1) => ({ type: 'rect', x: (x0 + x1) / 2, y: (y0 
 
 export const bendScale = (s) => (s.design.bend2d.from + s.design.bend2d.to) / 2;
 
-// Cells per pixel side, and cells per wavelength in the slab at the band's short end. Two
+// Cells per pixel side, and cells per wavelength in the slab at the band's short end. Three
 // per pixel is as many as the solver's limit on unknowns allows.
 function bendRefinement(s) {
   const shortest = s.design.bend2d.from / bendScale(s);
   const cell = BEND.size / BEND.pixels;
-  const refine = Math.min(2, Math.ceil((4.5 * BEND.n * cell) / shortest));
+  const refine = Math.min(3, Math.ceil((4.5 * BEND.n * cell) / shortest));
   return { refine, cells: (shortest * refine) / (BEND.n * cell) };
 }
 
@@ -180,7 +180,7 @@ function randomStart(n, seed) {
 
 // A cone filter averages each pixel with its neighbours, which removes single-pixel
 // noise. `adjoint` carries gradients back through the same weights.
-function coneFilter(n, radius) {
+export function coneFilter(n, radius) {
   const reach = Math.ceil(radius) - 1;
   const weight = (i, j) => radius - Math.abs(i - j);
   const window = (i) => [Math.max(0, i - reach), Math.min(n - 1, i + reach)];
@@ -280,6 +280,20 @@ export class Mma {
   }
 }
 
+// The slope of what the optimizer minimizes, for each pixel's density before projection,
+// where `slope` is the projection's own. A mirror and a bend want more of what they measure.
+export function goalGradient(s, results, slope) {
+  const d = s.design[s.analysis];
+  const gradient = new Float64Array(slope.length);
+  for (const { channels, meta } of results) {
+    const [slopes, scale] = s.analysis === 'bend2d'
+      ? [channels.gradient, -1 / straightPower.get(meta.fields[0].k0)]
+      : [channels['dR/deps_re'], (s.analysis === 'mirror' ? -1 : 1) * (eps(d.high) - eps(d.low))];
+    for (let k = 0; k < gradient.length; k++) gradient[k] += (scale * slopes[k] * slope[k]) / results.length;
+  }
+  return gradient;
+}
+
 // Runs until the schedule ends or `onStep` returns false. `solve` returns a solver
 // reply, or null if a newer request replaced it. Returns a reply holding any error.
 export async function optimize(s, solve, onStep) {
@@ -287,8 +301,6 @@ export async function optimize(s, solve, onStep) {
   const bend = s.analysis === 'bend2d';
   const n = pixelCount(d);
   const filter = bend ? coneFilter2d(BEND.pixels, BEND.pixels, d.radius) : coneFilter(n, Math.max(d.radius / (PIXEL * 1000), 1));
-  const contrast = bend ? 0 : eps(d.high) - eps(d.low);
-  const direction = s.analysis === 'mirror' ? -1 : 1;
   const prepared = await prepareDesign(s, solve);
   if (!prepared || prepared.error) return prepared;
   let x = randomStart(n, d.seed);
@@ -301,15 +313,7 @@ export async function optimize(s, solve, onStep) {
       const reply = await solve(gradientRequests(s, rho));
       if (!reply || reply.error) return reply;
       if (!onStep({ rho, reply, iteration: ++iteration, beta })) return null;
-      const gradient = new Float64Array(n);
-      for (const { channels, meta } of reply.results) {
-        // The bend's goal is more power through, so minimize its negative.
-        const [slopes, scale] = bend
-          ? [channels.gradient, -1 / straightPower.get(meta.fields[0].k0)]
-          : [channels['dR/deps_re'], direction * contrast];
-        for (let k = 0; k < n; k++) gradient[k] += (scale * slopes[k] * slope[k]) / reply.results.length;
-      }
-      x = mma.step(x, filter.adjoint(gradient));
+      x = mma.step(x, filter.adjoint(goalGradient(s, reply.results, slope)));
     }
   }
   const { rho } = project(filter.apply(x), 1000);

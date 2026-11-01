@@ -57,11 +57,11 @@ const GUIDE_TARGET = 4.5;
 const GUIDE_RESOLVED = 4;
 
 // The cell a guide's mesh uses: finer than asked if this wavelength needs it, as far as
-// the solver's limit on unknowns allows, which is about 190 cells across.
+// the solver's limit on unknowns allows, which is about 310 cells across.
 export function guideCell(s) {
   const p = s.plane.guide2d;
   const { size, pml } = guideGeometry(p.bend, false, guideScale(s));
-  return Math.min(p.cell, Math.max(s.wavelength / (GUIDES[p.bend].n * GUIDE_TARGET), (size + 2 * pml) / 190));
+  return Math.min(p.cell, Math.max(s.wavelength / (GUIDES[p.bend].n * GUIDE_TARGET), (size + 2 * pml) / 310));
 }
 export const guideResolved = (s) => s.wavelength / (GUIDES[s.plane.guide2d.bend].n * guideCell(s)) >= GUIDE_RESOLVED;
 

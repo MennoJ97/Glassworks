@@ -533,7 +533,10 @@ function changed() {
 async function solveNow() {
   if (problemOf(state.analysis) === 'design') return previewDesign();
   const view = state.analysis;
+  // A fine mesh can take seconds, which shouldn't look like nothing happening.
+  const slow = setTimeout(() => setStatus('Solving. A mesh this fine can take a while.'), 1000);
   const reply = await solver.run(buildRequests(state));
+  clearTimeout(slow);
   if (!reply || view !== state.analysis) return;
   if (reply.error) {
     setError(`${reply.error[0].toUpperCase()}${reply.error.slice(1)}.`);
@@ -754,7 +757,7 @@ function renderGuideTable(addRow) {
   if (!resolved) {
     addRow(['Transmitted', lost], 'th');
     addRow(['Not resolved', 'Not resolved']);
-    setResultNote('This wavelength is too short for the mesh to resolve a structure this large, even at the most cells the solver allows, so any percentage here would be noise.', offer);
+    setResultNote('This wavelength is too short for the mesh to resolve a structure this large, even at the most cells the solver allows, so a percentage here would be noise.', offer);
   } else if (!carried && line) {
     addRow(['Reaches the output', 'Goes elsewhere'], 'th');
     addRow([percent(share(bent)), percent(Math.max(0, 1 - share(bent)))]);

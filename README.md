@@ -55,6 +55,12 @@ brew install rustup && $(brew --prefix rustup)/bin/rustup toolchain install stab
 cargo test --release -p eigenmenno-core
 ```
 
+The optimizer has its own tests, which need the build above:
+
+```bash
+npm test
+```
+
 ```bash
 cargo run --release -p eigenmenno-core --example bench
 ```
