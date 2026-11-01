@@ -74,7 +74,7 @@ crates/eigenmenno-core   The solver, with no browser dependencies
   space.rs               Elements (the Space trait is the 2D extension point)
   assemble.rs            Sparse matrices and boundary constraints
   banded.rs              Banded LU and RCM reordering, for 1D
-  sparse.rs              Sparse LU through faer, for 2D
+  sparse.rs              Sparse Cholesky through faer, for 2D
   eigen.rs               Shift-invert Lanczos
   problem.rs             The JSON problem description
   solve.rs               The physics: from a request to fields

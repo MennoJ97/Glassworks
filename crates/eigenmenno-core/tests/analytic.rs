@@ -475,6 +475,34 @@ fn rod_lattice_matches_a_plane_wave_expansion() {
 }
 
 #[test]
+fn bloch_phase_gives_a_wave_travelling_along_k() {
+    // An empty lattice's lowest mode is the plane wave exp(i k.r), with phase k L per
+    // period. So the sign and direction of the tie appear directly in the field.
+    let (width, height) = (1.0, 2.0);
+    let bloch = [PI / 2.0, PI / 4.0];
+    let r = Request2d {
+        width,
+        height,
+        cell: 0.05,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes: vec![],
+        polarization: Polarization::Te,
+        walls: Boundary::Periodic,
+        analysis: Analysis2d::Cavity { n_modes: 1, bloch },
+    };
+    let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+    let (kx, ky) = (bloch[0] / width, bloch[1] / height);
+    close(o.meta.fields[0].k0, kx.hypot(ky), 1e-5);
+    let (x, y) = (channel(&o, "x"), channel(&o, "y"));
+    let (re, im) = (channel(&o, "field0/Ez/re"), channel(&o, "field0/Ez/im"));
+    let reference = C64::new(re[0], im[0]) / C64::from_polar(1.0, kx * x[0] + ky * y[0]);
+    for i in 0..x.len() {
+        let want = reference * C64::from_polar(1.0, kx * x[i] + ky * y[i]);
+        assert!((C64::new(re[i], im[i]) - want).norm() < 1e-4, "dof {i}");
+    }
+}
+
+#[test]
 fn band_path_visits_the_lattice_symmetry_points() {
     let bands = eigenmenno_core::solve2d::solve(&rods(0.05, Polarization::Te, Analysis2d::Bands { n_bands: 2, n_k: 2 })).unwrap();
     let (s, lowest) = (channel(&bands, "s"), channel(&bands, "band0"));

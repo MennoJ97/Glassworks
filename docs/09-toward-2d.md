@@ -20,7 +20,7 @@ identical. Here's what changed:
 | `mesh.rs` | Triangles, with `verts_per_cell = 3`. A structured grid has its nodes snapped onto shape boundaries, which needs no mesher and keeps opposite edges matched for periodic ties. A general mesher such as [Triangle](https://www.cs.cmu.edu/~quake/triangle.html) ([Shewchuk 1996](10-references.md#shewchuk-1996)) would handle harder geometry. |
 | `space.rs` | A new `H1Triangle` implementing `Space`. Its local matrices use gradients on the triangle rather than the scale factor $h/2$. |
 | `assemble.rs` | Assembly is unchanged, because it only sees the `Space` trait. `DofMap` takes many periodic ties rather than one. |
-| `banded.rs` | Kept for 1D. 2D uses `SparseLu`, behind the same small `Factors` trait (see below). |
+| `banded.rs` | Kept for 1D. 2D uses `SparseCholesky`, behind the same small `Factors` trait (see below). |
 | `eigen.rs` | Nothing, apart from taking any `Factors`. |
 | `solve2d.rs` | New: the 2D problems, with boundaries as edges rather than two end points. |
 | Website | A table of shapes, and a triangle renderer alongside `FieldPlot`. |
@@ -38,8 +38,14 @@ needed 12 GB, more than a browser tab can address.
 Sparse solvers do better using **nested dissection**, cutting the mesh recursively so
 elimination creates far less fill
 ([George 1973](10-references.md#george-1973)). `faer`'s sparse LU limits fill in the same spirit, and it took 0.31 s
-on those 40,000 unknowns, about 30 times faster. So
-[`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) wraps `faer` for 2D, at the cost of
+on a similar matrix with those 40,000 unknowns, about 30 times faster.
+
+Eigenproblems can do better still. With the shift below every eigenvalue, $S - \sigma Q$ is
+Hermitian positive definite, so a Cholesky factorization works, with no pivoting and half
+the storage. Over a band diagram it took about a third of the time of sparse LU. The
+fill pattern is also the same at every wavevector, because Bloch phases only change the
+values, so the analysis can be reused.
+[`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) wraps this in `faer`, at the cost of
 more to download.
 
 ## Why vector fields are different

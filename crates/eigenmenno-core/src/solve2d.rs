@@ -16,8 +16,9 @@ use crate::mesh::Mesh;
 use crate::problem::{Analysis2d, Boundary, Polarization, Request2d};
 use crate::solve::{normalized, FieldMeta, Meta, Output};
 use crate::space::{H1Triangle, Space};
-use crate::sparse::SparseLu;
+use crate::sparse::SparseCholesky;
 use crate::{C64, ZERO};
+use faer::sparse::linalg::solvers::SymbolicLlt;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
@@ -67,13 +68,21 @@ fn constraints(req: &Request2d, space: &H1Triangle, nx: usize, ny: usize, phase:
     DofMap::new(pos.len(), &[], &ties)
 }
 
-/// The `n` lowest `(k0^2, x)` for one set of constraints.
-fn modes(space: &H1Triangle, dofs: &DofMap, coef: &[(C64, C64)], n: usize, sigma: f64) -> Result<Vec<(f64, Vec<C64>)>, String> {
+/// The `n` lowest `(k0^2, x)` for one set of constraints. Bloch phases change only the
+/// matrix values, so a band diagram shares one `analysis` across its k-points.
+fn modes(
+    space: &H1Triangle,
+    dofs: &DofMap,
+    coef: &[(C64, C64)],
+    n: usize,
+    sigma: f64,
+    analysis: &mut Option<SymbolicLlt<usize>>,
+) -> Result<Vec<(f64, Vec<C64>)>, String> {
     let region = &space.mesh.region;
     let a = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (coef[region[c]].0, ZERO)));
     let b = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (ZERO, coef[region[c]].1)));
-    let lu = SparseLu::factor(&a.sub_scaled(sigma, &b))?;
-    eigs_with(&lu as &dyn Factors, &b, sigma, n, EIG_TOL)
+    let factors = SparseCholesky::factor(&a.sub_scaled(sigma, &b), analysis)?;
+    eigs_with(&factors as &dyn Factors, &b, sigma, n, EIG_TOL)
 }
 
 fn validate(req: &Request2d, nx: usize, ny: usize) -> Result<(), String> {
@@ -114,7 +123,7 @@ pub fn solve(req: &Request2d) -> Result<Output, String> {
             out.meta.n_dofs = dofs.n_free;
             push_mesh(&space, &mut out);
             let field = if req.polarization == Polarization::Te { "Ez" } else { "Hz" };
-            for (lambda, x) in modes(&space, &dofs, &coef, *n_modes, sigma)? {
+            for (lambda, x) in modes(&space, &dofs, &coef, *n_modes, sigma, &mut None)? {
                 let i = out.meta.fields.len();
                 let u = normalized(dofs.expand(&x));
                 out.channels.push((format!("field{i}/{field}/re"), u.iter().map(|v| v.re).collect()));
@@ -132,10 +141,11 @@ pub fn solve(req: &Request2d) -> Result<Output, String> {
             };
             let path: Vec<f64> = (0..points).map(|i| i as f64 / *n_k as f64).collect();
             let mut table = vec![vec![]; *n_bands];
+            let mut analysis = None;
             for &s in &path {
                 let dofs = constraints(req, &space, nx, ny, phases(s));
                 out.meta.n_dofs = dofs.n_free;
-                for (band, (lambda, _)) in table.iter_mut().zip(modes(&space, &dofs, &coef, *n_bands, sigma)?) {
+                for (band, (lambda, _)) in table.iter_mut().zip(modes(&space, &dofs, &coef, *n_bands, sigma, &mut analysis)?) {
                     band.push(lambda.max(0.0).sqrt());
                 }
             }

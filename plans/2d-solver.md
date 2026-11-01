@@ -24,7 +24,7 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Open boundaries | PML | Exact local conditions don't exist in 2D (chapter 9) |
 | Leaky modes | No non-Hermitian eigensolver. Use one driven solve at complex frequency | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for |
 | Upper size | The page refuses above about 160,000 unknowns | 638,401 failed in WebAssembly, probably out of memory |
-| Size | The 300–400 line estimate was low: milestone 1 alone added about 580 lines of Rust, for about 1,700 in total | State the cost before adding more, and keep the tutorial's line count current |
+| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 in total | State the cost before adding more, and keep the tutorial's line count current |
 | Own sparse solver | Not now. Decide after milestone 1 (see below) | `faer` first, behind the trait |
 
 ## Measurements
@@ -45,12 +45,22 @@ WebAssembly times include assembly:
 | 400 × 400 | 638,401 | Needs 98 GB | 27 s | Failed | Failed |
 | 800 × 800 | 2,556,801 | Needs 784 GB | 345 s | Failed | Failed |
 
-Download size, gzipped: the page's solver went from about 110 KB to 232 KB with milestone
+Download size, gzipped: the page's solver went from about 110 KB to 222 KB with milestone
 1, more than the 88 KB the probe's own build suggested (33 KB without `faer`, 121 KB with).
 
 Eigensolves: three modes at one k-point took about 200 ms at 2,304 unknowns and 2.7 s at
-9,216 on banded LU. With `faer` they took 40 ms and about 300 ms, native. On the page, a
-full band diagram (16 k-points, 6 bands, 2,500 unknowns) takes about 1.8 s.
+9,216 on banded LU. A full band diagram (16 k-points, 6 bands) took, natively:
+
+| Unknowns | `faer` LU | LU, reused analysis | Cholesky, reused analysis |
+|---:|---:|---:|---:|
+| 2,500 | 1.28 s | 1.18 s | 0.48 s |
+| 10,000 | 9.3 s | 6.8 s | 2.9 s |
+
+Cholesky factors about 8× faster than LU at 2,500 unknowns, and its back-substitutions
+are about 3× faster. Reusing the analysis saves little once that's in place, about 10%.
+Lanczos now dominates: about 62 back-substitutions per k-point, across two runs, with
+reorthogonalization about as costly as the solves. On the page, a band diagram at 2,500
+unknowns went from about 1.8 s with LU to about 0.6 s.
 
 Band edges of the rod lattice (eps 12, r = 0.2a, square lattice) from the probe, as error
 against its own 96 × 96 snapped mesh. M1 and X2 are the two edges of the TM gap. The
@@ -98,8 +108,10 @@ high-index material will need refining, which the probe didn't test.
    [MPB tutorial](https://mpb.readthedocs.io/en/latest/Python_Tutorial/)'s 0.28262 to
    0.41933 is 0.5–0.7% higher. The likely cause is its coarse resolution of 32, but no
    MPB run has confirmed that, so it isn't used as a reference.
-3. **The `faer` setup is untuned.** Its default ordering, symmetric factorization for
-   `Aᵀ = A`, and reusing symbolic analysis across solves are all untested.
+3. **The `faer` setup is partly tuned.** Eigenproblems use Cholesky with a reused
+   analysis. Driven problems are indefinite, so milestone 2 must bring back LU, with
+   `Aᵀ = A` and its default ordering still untested. Warm-starting Lanczos from the
+   previous k-point is the next speed-up to try.
 4. **Transposed solves through `faer`.** Bloch-periodic driven problems lose `Aᵀ = A`,
    so their adjoints need `Aᵀ` solves. Not needed before periodic gratings.
 
@@ -144,8 +156,7 @@ as a test in `crates/eigenmenno-core/tests/analytic.rs` before calling it done.
 - [ ] Decide on the own sparse solver (see below).
 
 The page defaults to about 2,500 unknowns per k-point, accurate to about 0.3–0.5%.
-Reusing `faer`'s symbolic analysis across k-points is the obvious way to speed up its
-1.8 s band diagram (open problem 3). The plane-wave script wasn't kept: it's about 30 lines
+The plane-wave script wasn't kept: it's about 30 lines
 of numpy, using `eps(G) = delta eps_b + f (eps_a - eps_b) 2 J1(Gr) / (Gr)`, and the inverse
 rule for Hz.
 
@@ -203,8 +214,9 @@ iterations.
 
 - **Adopt it if** it's within a few times of `faer` in WebAssembly and stays reliable on
   hard matrices, such as lossless structures near resonance.
-- **Main risk:** pivoting. Pivoting only inside each dense block can fail on those
-  matrices, and deferring bad pivots is where the complexity lives.
+- **Main risk:** pivoting, for driven problems. Pivoting only inside each dense block can
+  fail on those matrices, and deferring bad pivots is where the complexity lives.
+  Eigenproblems are now positive definite and don't pivot, so they're the easy case.
 - **Blocker:** an unstructured mesh removes the easy separators, so this depends on
   open problem 1.
 - **Why bother:** about 88 KB less to download, no major runtime dependency, readers

@@ -16,7 +16,7 @@ const VIEW_HELP = {
   bands: 'The waves that can travel through an endless repeat of this structure, and the gaps where none can.',
   waveguide: 'The modes that travel along the layers at a fixed wavelength, and how fast each one propagates.',
   cavity2d: 'The modes of a 2D structure inside walls, uniform along the third direction.',
-  bands2d: 'The waves that can travel through an endless square or rectangular lattice of this cell, along the edge of its symmetry zone.',
+  bands2d: 'The waves that can travel through an endless lattice of this cell. Floquet boundaries tie each edge to the opposite one, with a phase set by the wavevector k.',
   mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
   antireflection: 'Find the coating that reflects the least light, averaged across a band of wavelengths.',
 };
@@ -228,7 +228,6 @@ function renderSettings() {
   if (flat) {
     renderPlane();
     show('plane-walls-field', a === 'cavity2d');
-    $('field-note').textContent = 'Colour shows the field at this moment, with red and blue as opposite signs. Its overall size is arbitrary.';
   }
   // TE and TM keep their meaning for the coefficients, but read differently in a plane.
   $('polarization').options[0].text = flat ? 'Ez (electric field out of the plane, often called TM)' : 'TE (electric field along the layers)';
@@ -662,6 +661,14 @@ function fieldFrom(result, i) {
   return { x: channel('x'), components, names: meta.components, meta };
 }
 
+// In words, what the dashed edges and arrow on the field map mean.
+function planeNote(bloch) {
+  if (!bloch) return 'The solid edges are walls.';
+  const [x, y] = bloch.map((v) => Math.round((v * 180) / Math.PI));
+  if (x === 0 && y === 0) return 'The dashed edges are Floquet boundaries: each repeats the opposite edge exactly, so k = 0.';
+  return `The dashed edges are Floquet boundaries, with matching chevrons on each tied pair. The right edge is the left edge shifted by ${x}° of phase, and the top is the bottom shifted by ${y}°. The arrow shows the wavevector k, the direction the phase advances.`;
+}
+
 function showResults() {
   const a = state.analysis;
   if (!results || resultsView !== a) return;
@@ -674,7 +681,9 @@ function showResults() {
   if (planar()) {
     const p = state.plane[a];
     const { channels } = fieldResult;
-    fieldMap.setMesh({ x: channels.x, y: channels.y, triangles: channels.triangles, width: p.width, height: p.height }, p.shapes);
+    const bloch = a === 'bands2d' ? blochAt(p.pick.s) : p.walls === 'periodic' ? [0, 0] : null;
+    fieldMap.setMesh({ x: channels.x, y: channels.y, triangles: channels.triangles, width: p.width, height: p.height }, p.shapes, bloch);
+    $('field-note').textContent = `${planeNote(bloch)} Colour shows the field at this moment, with red and blue as opposite signs. Its overall size is arbitrary.`;
     const name = fieldResult.meta.fields[selectedField]?.components[0];
     if (name) fieldMap.setField(channels[`field${selectedField}/${name}/re`], channels[`field${selectedField}/${name}/im`]);
     fieldPlot.field = null;
@@ -847,11 +856,11 @@ function renderChart() {
       const [lo, hi] = [Math.max(...bands[i]), Math.min(...bands[i + 1])];
       if (hi - lo > 1e-3) gaps.push([lo, hi]);
     }
-    $('chart-title').textContent = 'Band diagram, with frequency as period over wavelength. Shaded ranges are band gaps, where no wave can travel. Click a point to see its mode.';
     const flat = a === 'bands2d';
+    $('chart-title').textContent = `Band diagram, with frequency as period over wavelength. Shaded ranges are band gaps, where no wave can travel. ${flat ? 'From Γ to X, k grows along x. From X to M, it also grows along y. From M to Γ, it returns along the diagonal. ' : ''}Click a point to see its mode.`;
     chart.spec = {
       xMin: 0, xMax: flat ? 3 : 1, yMin: 0, yMax: Math.max(...bands.flat()) * 1.05 || 1, gaps,
-      xLabel: flat ? 'Bloch wavevector around the zone' : 'Bloch wavevector kL/π',
+      xLabel: flat ? 'Bloch wavevector k' : 'Bloch wavevector kL/π',
       marker: flat ? state.plane.bands2d.pick.s : state.bandPick.k,
       ...(flat ? { xTicks: [0, 1, 2, 3], xFormat: (v) => ['Γ', 'X', 'M', 'Γ'][v] } : {}),
       series: bands.map((y, i) => ({ name: `Band ${i + 1}`, x, y, color: colors[0] })),

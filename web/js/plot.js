@@ -273,14 +273,17 @@ export class FieldMap {
     this.canvas = canvas;
     this.mesh = null;
     this.shapes = [];
+    this.bloch = null;
     this.phase = 0;
     this.raster = null;
     this.image = document.createElement('canvas');
   }
 
-  setMesh(mesh, shapes) {
+  // `bloch` is the phase per period across x and y, or null for solid walls.
+  setMesh(mesh, shapes, bloch) {
     this.mesh = mesh;
     this.shapes = shapes;
+    this.bloch = bloch;
     this.raster = null;
     this.field = null;
     this.values = null;
@@ -387,7 +390,77 @@ export class FieldMap {
       else ctx.rect(sx(s.x - s.w / 2), sy(s.y + s.h / 2), s.w * a.scale, s.h * a.scale);
       ctx.stroke();
     }
+    if (this.bloch) this.drawBloch(ctx, a);
+    else ctx.strokeRect(a.left, a.top, a.right - a.left, a.bottom - a.top);
+  }
+
+  // Matched chevrons mark each pair of tied edges, and the arrow shows the wavevector.
+  drawBloch(ctx, a) {
+    const ink = css('--ink');
+    const halo = css('--surface');
+    ctx.strokeStyle = ink;
+    ctx.fillStyle = ink;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 5]);
     ctx.strokeRect(a.left, a.top, a.right - a.left, a.bottom - a.top);
+    ctx.setLineDash([]);
+    const [cx, cy] = [(a.left + a.right) / 2, (a.top + a.bottom) / 2];
+    const chevrons = (x, y, dx, dy, count) => {
+      for (let n = 0; n < count; n++) {
+        const [px, py] = [x + dx * 7 * n, y + dy * 7 * n];
+        ctx.beginPath();
+        ctx.moveTo(px - dx * 6 - dy * 6, py - dy * 6 - dx * 6);
+        ctx.lineTo(px, py);
+        ctx.lineTo(px - dx * 6 + dy * 6, py - dy * 6 + dx * 6);
+        ctx.stroke();
+      }
+    };
+    // A quarter of the way along, clear of the axis labels at the middle of each side.
+    const [markX, markY] = [(3 * a.left + a.right) / 4, (3 * a.top + a.bottom) / 4];
+    chevrons(a.left, markY, 1, 0, 1);
+    chevrons(a.right, markY, 1, 0, 1);
+    chevrons(markX, a.bottom, 0, -1, 2);
+    chevrons(markX, a.top, 0, -1, 2);
+
+    const [kx, ky] = [this.bloch[0] / this.mesh.width, this.bloch[1] / this.mesh.height];
+    const size = Math.hypot(kx, ky);
+    const label = (text, x, y) => {
+      ctx.font = '600 13px ui-sans-serif, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = halo;
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = ink;
+      ctx.fillText(text, x, y);
+    };
+    if (size < 1e-9) {
+      label('k = 0', cx, cy);
+      return;
+    }
+    // Screen y points down. The longest k on the zone edge gets the longest arrow.
+    const longest = Math.hypot(Math.PI / this.mesh.width, Math.PI / this.mesh.height);
+    const length = (0.14 + 0.2 * (size / longest)) * Math.min(a.right - a.left, a.bottom - a.top);
+    const [ux, uy] = [kx / size, -ky / size];
+    const [tipX, tipY] = [cx + (ux * length) / 2, cy + (uy * length) / 2];
+    const shape = () => {
+      ctx.beginPath();
+      ctx.moveTo(cx - (ux * length) / 2, cy - (uy * length) / 2);
+      ctx.lineTo(tipX, tipY);
+      ctx.moveTo(tipX - 10 * ux - 6 * uy, tipY - 10 * uy + 6 * ux);
+      ctx.lineTo(tipX, tipY);
+      ctx.lineTo(tipX - 10 * ux + 6 * uy, tipY - 10 * uy - 6 * ux);
+      ctx.stroke();
+    };
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = halo;
+    shape();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = ink;
+    shape();
+    ctx.lineCap = 'butt';
+    label('k', tipX + ux * 12, tipY + uy * 12);
   }
 
   paint() {
