@@ -62,8 +62,9 @@
       <canvas id="chart" role="img" aria-label="Chart of the results. The table beside it and the data download hold the same values."></canvas>
     </figure>
     <figure id="evolution-wrap" hidden>
-      <figcaption>How the design changed: each column is one iteration, and stronger colour means more of the high-index material. Drag across this map or the chart above to see any iteration.</figcaption>
+      <figcaption id="evolution-title"></figcaption>
       <canvas id="evolution" role="img" aria-label="Map of the density of every pixel at every iteration. The slider below shows any iteration."></canvas>
+      <div id="design-film"></div>
       <div class="replay">
         <input id="design-frame" type="range" min="0" value="0" aria-label="Iteration to show">
         <button id="design-replay" type="button">Replay</button>
@@ -85,9 +86,12 @@
     <div id="design-run" class="tools" hidden>
       <button id="design-start" type="button">Start</button>
       <button id="design-use" type="button" hidden>Open in Spectrum</button>
+      <progress id="design-progress" aria-label="Iterations finished" hidden></progress>
     </div>
     <table id="results"></table>
     <p id="empty" hidden></p>
+    <p id="result-note" hidden></p>
+    <button id="result-scale" type="button" hidden></button>
     <p id="status" role="status">Starting the solver.</p>
     <button id="save-csv" type="button">Download data</button>
   </aside>
@@ -150,6 +154,7 @@
         <label class="field">Width (µm)<input id="plane-width" type="number" step="0.1" min="0.05"></label>
         <label class="field">Height (µm)<input id="plane-height" type="number" step="0.1" min="0.05"></label>
       </div>
+      <label class="field" id="plane-scale-field">Size, relative to the original<input id="plane-scale" type="number" step="0.01" min="0.01"></label>
       <label class="field">Largest cell (µm)<input id="plane-cell" type="number" step="0.005" min="0.001"></label>
       <label class="field" id="plane-background-field">Background index n<input id="plane-background" type="number" step="0.01" min="0.01"></label>
       <label class="field" id="plane-walls-field">Walls<select id="plane-walls"></select></label>

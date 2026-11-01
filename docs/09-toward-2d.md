@@ -262,6 +262,16 @@ the bend and gave a transmission over 100%. At $6a$ that's gone at these frequen
 for a weaker absorption also helps. Close to the guide's cutoff, below about $\omega = 0.35$,
 light travels slowly enough that reflection returns, so these numbers shouldn't be trusted there.
 
+A transmission is a ratio of two separate solves, so it can't promise to stay below 100%: no energy
+appears from nowhere, but its reference can fail. A line source sends half its power each way, so a
+straight guide's output should get about half of what the source emits, and from $\lambda = 2.3a$ to
+$3.2a$ it gets 41% to 50%. At $\lambda = 2a$ it gets 5%, because nothing guides the light there, and
+the bend then reads 336% of it, or 418% on a finer mesh, while its own share of what its source
+emits stays near 14%. The page checks this and shows that share instead. Scaling is the way out:
+Maxwell's equations have no length of their own, so multiplying every length and the wavelength by
+the same number changes nothing. A crystal with rods $0.353$ µm apart reads the same 97.8% at 1 µm
+that the original reads at 2.833 µm.
+
 ## Inverse design: letting the solver draw the bend
 
 Instead of analysing a bend someone drew, we can ask for the bend. Give each pixel of a region a
@@ -290,7 +300,8 @@ did this for photonic crystal bends).
 
 Take a slab of index 3.5 and width $0.125\lambda$, whose plain sharp corner passes 5% of the light,
 through a monitor far along the output. Give the optimizer a square one wavelength wide at that
-corner, and three wavelengths to serve at once. It takes 200 iterations:
+corner, and three wavelengths to serve at once. This pattern took 200 iterations, and the page
+takes 80, which turned out to do about as well:
 
 | Wavelength | Plain corner | Optimized, 24 cells per $\lambda$ | Optimized, 48 cells per $\lambda$ |
 |---:|---:|---:|---:|

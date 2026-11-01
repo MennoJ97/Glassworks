@@ -15,11 +15,25 @@ pub struct Csr {
 
 impl Csr {
     /// Builds from unsorted triplets, summing duplicates.
-    pub fn from_triplets(n: usize, mut t: Triplets) -> Self {
-        t.sort_unstable_by_key(|&(i, j, _)| (i, j));
+    pub fn from_triplets(n: usize, t: Triplets) -> Self {
+        // Rows are short, so dealing triplets into rows beats sorting them all at once.
+        let mut start = vec![0; n + 1];
+        t.iter().for_each(|e| start[e.0 + 1] += 1);
+        for i in 0..n {
+            start[i + 1] += start[i];
+        }
+        let mut sorted = vec![(0, 0, ZERO); t.len()];
+        let mut next = start.clone();
+        for e in t {
+            sorted[next[e.0]] = e;
+            next[e.0] += 1;
+        }
+        for i in 0..n {
+            sorted[start[i]..start[i + 1]].sort_unstable_by_key(|e| e.1);
+        }
         let mut m = Csr { n, ptr: vec![0; n + 1], col: vec![], val: vec![] };
         let mut last = None;
-        for (i, j, v) in t {
+        for (i, j, v) in sorted {
             if last == Some((i, j)) {
                 *m.val.last_mut().unwrap() += v;
             } else {

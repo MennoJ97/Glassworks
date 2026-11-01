@@ -552,6 +552,30 @@ export class FieldMap {
   }
 }
 
+// A small picture of a design region's densities, with `margin` pixels around them
+// showing the `shapes` that lead into it. Strong colour is the high-index material.
+export function drawDensity(canvas, { x0, y0, width, height, nx, ny }, shapes, rho, margin) {
+  const [w, h] = [nx + 2 * margin, ny + 2 * margin];
+  Object.assign(canvas, { width: w, height: h });
+  const rgb = (name) => [1, 3, 5].map((i) => parseInt(css(name).slice(i, i + 2), 16));
+  const [from, to] = [rgb('--surface'), rgb('--glass')];
+  const image = new ImageData(w, h);
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const [ix, iy] = [px - margin, py - margin];
+      const [x, y] = [x0 + ((ix + 0.5) * width) / nx, y0 + ((iy + 0.5) * height) / ny];
+      const inside = ix >= 0 && iy >= 0 && ix < nx && iy < ny;
+      const solid = inside ? rho[ix + iy * nx] : +shapes.some((s) => Math.abs(x - s.x) < s.w / 2 && Math.abs(y - s.y) < s.h / 2);
+      const mix = 0.1 + 0.9 * solid;
+      // The plots' y runs upward, and an image's downward.
+      const at = 4 * (px + (h - 1 - py) * w);
+      for (let c = 0; c < 3; c++) image.data[at + c] = from[c] + mix * (to[c] - from[c]);
+      image.data[at + 3] = 255;
+    }
+  }
+  canvas.getContext('2d').putImageData(image, 0, 0);
+}
+
 // Every pixel's density at every iteration, with iterations on the same x positions
 // as a LineChart above it. Columns are painted once, so long runs stay cheap to draw.
 export class EvolutionMap {

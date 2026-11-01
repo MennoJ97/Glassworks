@@ -25,7 +25,7 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Open boundaries | PML | Exact local conditions don't exist in 2D (chapter 9) |
 | Leaky modes | No non-Hermitian eigensolver. One driven solve at complex frequency for LDOS, and a secant search on `1/u_0` for Q | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for. It took 6 or 7 solves, and found Q up to 680,000 |
 | Upper size | The page refuses above about 160,000 unknowns | 638,401 failed in WebAssembly, probably out of memory |
-| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, about 2,000 after milestone 3, about 2,150 after milestone 4, about 2,400 with our own sparse solver, and about 2,460 after milestone 5 | State the cost before adding more, and keep the tutorial's line count current |
+| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, about 2,000 after milestone 3, about 2,150 after milestone 4, about 2,400 with our own sparse solver, about 2,460 after milestone 5, and about 2,530 after speeding up design runs | State the cost before adding more, and keep the tutorial's line count current |
 | Own sparse solver | Adopted in `sparse.rs`. `faer` is now only for tests (see below) | It's 2–6× faster than `faer` on driven problems in WebAssembly and within 8% on band diagrams, with 99 KB less to download. Refinement covers its one real risk |
 
 ## Measurements
@@ -254,6 +254,54 @@ pixels. Over wavelengths 0.95, 1 and 1.05, far along the guide with a narrow mon
 It's a saved pattern in `tests/analytic.rs`, since the optimizer is JavaScript. So that test guards
 the pattern's physics, not the optimizer: nothing in the tests would notice `design.js` getting
 worse. The page's own run reached 98.6% on average, in 105 s at 28,000 unknowns, on battery.
+
+That run now takes about 11 s, also on battery, and reaches 98.4%. A run is timed best on a quiet
+machine: one with another process holding a full core took 51.7 s. Most of the gain isn't in the solver:
+
+| Change | Effect | Cost |
+|---|---|---|
+| 10 iterations per sharpness instead of 25 | 2.5× fewer solves | one number |
+| One worker per wavelength, up to three | 339 to 112 ms per iteration | about 20 lines of JS |
+| Sorting triplets by row first | assembly 26 to 12 ms per solve | about 15 lines |
+| Reusing the ordering when the nonzeros match, copying finished fronts by column, and searching only near the port | with the row above, 471 to 339 ms per iteration on one worker | about 30 lines |
+
+Over three starts, T for 0.95 to 1.05 is 98.1 to 98.4% at 10 iterations per stage, and 96.9 to 99.0%
+at 25, so more iterations can reach higher but aren't more dependable. Before the mesh tie-break below,
+which changed these slightly, 7 per stage fell to 95.8% on one start, and skipping every other sharpness
+reached only 96.5 to 97.6% even at 25 per stage. Over 0.85 to 1.15, 10 did as well as 25 (81 and 85%
+against 80 and 84%), and over 0.99 to 1.01 slightly worse (99.0 and 97.2% against 99.5 and 98.3%).
+
+Measured and left out: a handwritten simd128 kernel for `subtract` gained 6% for 22 lines of unsafe
+code, because the kernel already reaches about 0.5 ns per complex update. Not tried: reusing the
+fronts outside the design region between iterations, which needs a solver that keeps state per wavelength.
+
+### Bends at any wavelength
+
+The straight-guide reference was only ever valid where the guide carries light, and the page showed
+465% at the crystal's default of 1 µm. Its straight guide's output gets about half of what the source
+emits when it works (41 to 50% from 2.3 to 3.2 periods), and 16% or less outside that, so:
+
+| Situation | The page shows |
+|---|---|
+| Fewer than 4 cells per wavelength in the rods, even at the solver's limit | no percentage, and an offer to resize |
+| Straight guide's output outside 40 to 60% of what's emitted | the bend's share of what's emitted, and that offer |
+| Ratio above 102% | "Unreliable", and that offer. From 100 to 102% it shows 100%, which is the mesh's error |
+| Otherwise | the ratio |
+
+The mesh aims for 4.5 cells per wavelength in the densest material, as far as the limit on unknowns
+allows, and never coarsens what was asked for. It doesn't change the Mekis numbers at 2.833 µm, but
+does refine below about 2.55 µm: at 2.4 µm the sharp bend's T goes from 95.6% to 91.9%.
+
+Resizing is exact: the sharp bend reads 97.7544% at 0.55, 1, 2.833 and 10 µm. A test holds this to 1e-7,
+and a density map's gradient to 1e-5, where the last 1e-6 or so isn't explained. Getting there took
+three fixes, because whole numbers of cells and points meant rounding noise was choosing: the count of
+steps along a grid, monitor or port, a corner halfway between two nodes, and the order of nodes at equal
+distances from a shape. The tie-break moved the slab bend's T only from 22.770% to 22.767%.
+The optimized bend scales with its band's centre, so 0.475 to 0.525, 0.95 to 1.05 and 1.9 to 2.1 µm
+all finish at 98.37%. Its mesh can double per pixel, to serve a band's short end. A band reaching below
+0.84 of its centre gets a warning, because the slab carries a second mode there. The original crystal
+at 1 µm stays unanswered: a resolved mesh would need about 400,000 unknowns against the limit of 160,000,
+and its straight guide delivered only 3 to 18% of the source's power on the coarser meshes tried.
 
 A first run monitored a wider line near the corner, which read 98.8% against 97.7% far along the
 guide, because it counted radiated light. A narrower monitor closed that gap, to under 1%. Other

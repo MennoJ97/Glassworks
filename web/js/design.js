@@ -2,14 +2,15 @@
 // of thin pixels, each with a density that mixes two materials. The solver supplies
 // the adjoint gradient; everything else here is optimization, not physics.
 
-import { MATERIALS, toShape } from './model.js';
+import { MATERIALS, scaled, toShape } from './model.js';
 
 const PIXEL = 0.005;
 const AMBIENT = 0.3;
 const SHARPNESS = [1, 2, 4, 8, 16, 32, 64, 128];
 const ITERATIONS_PER_STAGE = 40;
-// A 2D solve costs far more than a 1D one, and these converge sooner.
-const stageLength = (s) => (s.analysis === 'bend2d' ? 25 : ITERATIONS_PER_STAGE);
+// A 2D solve costs far more than a 1D one, and these converge sooner: 25 did no better
+// over three starts, while 7 sometimes fell short, and so did skipping every other sharpness.
+export const stageLength = (s) => (s.analysis === 'bend2d' ? 10 : ITERATIONS_PER_STAGE);
 export const totalIterations = (s) => SHARPNESS.length * stageLength(s);
 export const STAGES = SHARPNESS.map((beta, i) => ({ frame: i * ITERATIONS_PER_STAGE, name: `β ${beta}` }));
 export const sharpnessAt = (s, frame) => SHARPNESS[Math.floor(frame / stageLength(s))] ?? Infinity;
@@ -20,14 +21,34 @@ const solverLayer = (thickness, e) => ({ thickness, eps: [e, 0], mu: [1, 0] });
 
 export const pixelCount = (d) => (d.thickness === undefined ? BEND.pixels ** 2 : Math.max(1, Math.round(d.thickness / PIXEL)));
 
-// A slab of index 3.5 turning a corner through a square of pixels, in wavelengths of about 1.
-// Everything lies on a grid of 1/24, so each pixel is exactly a pair of triangles.
+// A slab of index 3.5 turning a corner through a square of pixels, in units of the band's
+// centre wavelength, so a band anywhere gets the same design at its own size.
+// Everything lies on a grid of 1/24, so each pixel is a whole number of pairs of triangles.
 const BEND = { pixels: 24, x0: 1, y0: 0.5, size: 1, width: 0.125, domain: 2.5, n: 3.5, pml: 0.5, span: 0.35 };
 const bendCentre = { x: BEND.x0 + BEND.size / 2, y: BEND.y0 + BEND.size / 2 };
 const rectangle = (x0, y0, x1, y1) => ({ type: 'rect', x: (x0 + x1) / 2, y: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, n: BEND.n });
 
+export const bendScale = (s) => (s.design.bend2d.from + s.design.bend2d.to) / 2;
+
+// Cells per pixel side, and cells per wavelength in the slab at the band's short end. Two
+// per pixel is as many as the solver's limit on unknowns allows.
+function bendRefinement(s) {
+  const shortest = s.design.bend2d.from / bendScale(s);
+  const cell = BEND.size / BEND.pixels;
+  const refine = Math.min(2, Math.ceil((4.5 * BEND.n * cell) / shortest));
+  return { refine, cells: (shortest * refine) / (BEND.n * cell) };
+}
+
+// Why a band's percentages can't be trusted, if they can't. A slab this wide carries a
+// second mode below 0.84 of the centre, and the port launches only the first.
+export function bendWarning(s) {
+  if (bendRefinement(s).cells < 4) return 'This band is too wide for the mesh to resolve its short end, so these percentages aren\'t reliable.';
+  if (s.design.bend2d.from / bendScale(s) < 0.84) return 'The guide carries a second mode at the short end of this band, so these percentages are less reliable there. A narrower band avoids that.';
+  return null;
+}
+
 // What the plot needs, and each solve shares.
-export function bendGeometry(straight = false) {
+export function bendGeometry(straight, scale) {
   const { x0, y0, size, width, domain, span } = BEND;
   const { x, y } = bendCentre;
   const far = domain + 3;
@@ -35,28 +56,29 @@ export function bendGeometry(straight = false) {
     ? [rectangle(-3, y - width / 2, far, y + width / 2)]
     : [rectangle(-3, y - width / 2, x0, y + width / 2), rectangle(x - width / 2, y0 + size, x + width / 2, far)];
   const end = domain - 0.4;
-  return {
+  return scaled({
     size: domain, shapes,
     source: { type: 'port', x: 0.4, y0: y - 0.7, y1: y + 0.7 },
     mark: [0.4, y],
     monitor: straight ? { x0: end, y0: y - span, x1: end, y1: y + span } : { x0: x + span, y0: end, x1: x - span, y1: end },
     region: { x0, y0, width: size, height: size, nx: BEND.pixels, ny: BEND.pixels },
-  };
+  }, scale);
 }
 
-function bendRequest(wavelength, straight, rho) {
-  const g = bendGeometry(straight);
+function bendRequest(s, wavelength, straight, rho) {
+  const scale = bendScale(s);
+  const g = bendGeometry(straight, scale);
   const n2 = BEND.n ** 2;
   return {
     width: g.size,
     height: g.size,
-    cell: BEND.size / BEND.pixels,
+    cell: (BEND.size * scale) / BEND.pixels / bendRefinement(s).refine,
     background: { eps: 1, mu: 1 },
     shapes: g.shapes.map(toShape),
     polarization: 'te',
     walls: 'absorbing',
     monitors: [g.monitor],
-    analysis: { type: 'driven', wavelength, source: g.source, pml: BEND.pml },
+    analysis: { type: 'driven', wavelength, source: g.source, pml: BEND.pml * scale },
     ...(rho ? { density: { ...g.region, eps_low: 1, eps_high: n2, rho: Array.from(rho) } } : {}),
   };
 }
@@ -68,7 +90,7 @@ const straightPower = new Map();
 export async function prepareDesign(s, solve) {
   if (s.analysis !== 'bend2d') return {};
   const wavelengths = goalWavelengths(s);
-  const reply = await solve(wavelengths.map((wavelength) => bendRequest(wavelength, true)));
+  const reply = await solve(wavelengths.map((wavelength) => bendRequest(s, wavelength, true)));
   if (!reply || reply.error) return reply;
   reply.results.forEach((r) => straightPower.set(r.meta.fields[0].k0, r.channels.monitors[0]));
   return reply;
@@ -107,7 +129,7 @@ function pixelLayers(d, rho) {
 }
 
 export const gradientRequests = (s, rho) => (s.analysis === 'bend2d'
-  ? goalWavelengths(s).map((wavelength) => bendRequest(wavelength, false, rho))
+  ? goalWavelengths(s).map((wavelength) => bendRequest(s, wavelength, false, rho))
   : requests(s, pixelLayers(s.design[s.analysis], rho),
     (wavelength) => ({ type: 'driven_gradient', wavelength, angle_deg: s.angle })));
 

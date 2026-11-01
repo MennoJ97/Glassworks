@@ -31,16 +31,46 @@ function defectCavity(n) {
 // al. 1996, whose guided band runs from wavelengths of 3.2a down to 2.26a. Their layer is
 // thick, because rods running through it reflect more than free space does.
 export const GUIDES = {
-  sharp: { name: 'Sharp bend in a photonic crystal', wavelength: 2.833, cell: 0.16667 },
-  stepped: { name: 'Stepped bend in a photonic crystal', wavelength: 2.833, cell: 0.16667 },
-  slab: { name: 'Sharp bend in an ordinary waveguide', wavelength: 1, cell: 0.05 },
+  sharp: { name: 'Sharp bend in a photonic crystal', wavelength: 2.833, cell: 0.16667, n: 3.4, band: [2.4, 3.1] },
+  stepped: { name: 'Stepped bend in a photonic crystal', wavelength: 2.833, cell: 0.16667, n: 3.4, band: [2.4, 3.1] },
+  slab: { name: 'Sharp bend in an ordinary waveguide', wavelength: 1, cell: 0.05, n: 3.5, band: [1, 1.5] },
 };
-const guideSetup = (bend) => ({ bend, cell: GUIDES[bend].cell, background: 1, walls: 'absorbing', shapes: [] });
+const guideSetup = (bend) => ({ bend, scale: 1, cell: GUIDES[bend].cell, background: 1, walls: 'absorbing', shapes: [] });
 const LATTICE = { arm: 5, clad: 3, pml: 5 };
 const SLAB = { size: 4, x: 2.5, y: 1.5, width: 0.143, n: 3.5, pml: 1 };
 
+// Multiplies every length in a geometry. Maxwell's equations have no length of their own,
+// so a structure scaled with its wavelength behaves exactly as it did.
+export function scaled(value, factor, key) {
+  if (typeof value === 'number') return ['n', 'nx', 'ny'].includes(key) ? value : value * factor;
+  if (Array.isArray(value)) return value.map((v) => scaled(v, factor));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, scaled(v, factor, k)]));
+  return value;
+}
+
+// Links from before scaling existed have no scale.
+export const guideScale = (s) => s.plane.guide2d.scale ?? 1;
+
+// Cells per wavelength inside the densest material: the page aims for its target, and a
+// result below `GUIDE_RESOLVED` isn't converged. Second-order cells need only a few.
+const GUIDE_TARGET = 4.5;
+const GUIDE_RESOLVED = 4;
+
+// The cell a guide's mesh uses: finer than asked if this wavelength needs it, as far as
+// the solver's limit on unknowns allows, which is about 190 cells across.
+export function guideCell(s) {
+  const p = s.plane.guide2d;
+  const { size, pml } = guideGeometry(p.bend, false, guideScale(s));
+  return Math.min(p.cell, Math.max(s.wavelength / (GUIDES[p.bend].n * GUIDE_TARGET), (size + 2 * pml) / 190));
+}
+export const guideResolved = (s) => s.wavelength / (GUIDES[s.plane.guide2d.bend].n * guideCell(s)) >= GUIDE_RESOLVED;
+
 // A guide's shapes, source and output monitor, or those of a straight one to compare with.
-export function guideGeometry(bend, straight) {
+export function guideGeometry(bend, straight, scale = 1) {
+  return scaled(unitGuide(bend, straight), scale);
+}
+
+function unitGuide(bend, straight) {
   if (bend === 'slab') {
     const { size, x, y, width, n, pml } = SLAB;
     const far = size + pml + 1;
@@ -197,11 +227,11 @@ export const toShape = (c) => ({
 function guideRequests(s) {
   const p = s.plane.guide2d;
   return [true, false].map((straight) => {
-    const g = guideGeometry(p.bend, straight);
+    const g = guideGeometry(p.bend, straight, guideScale(s));
     return {
       width: g.size,
       height: g.size,
-      cell: p.cell,
+      cell: guideCell(s),
       background: material(1),
       polarization: 'te',
       walls: 'absorbing',

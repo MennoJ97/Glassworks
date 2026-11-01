@@ -12,6 +12,8 @@
 use crate::assemble::Csr;
 use crate::banded::Factors;
 use crate::{C64, ZERO};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Parts this small are eliminated whole.
 const LEAF: usize = 16;
@@ -118,6 +120,23 @@ impl Ordering {
         }
         Self { new, nodes }
     }
+
+    /// The last ordering made if this matrix has its nonzeros, which is cheap to check,
+    /// and otherwise a new one. Each iteration of a design has the same nonzeros.
+    pub fn reused(a: &Csr, pos: &[(f64, f64)]) -> Rc<Self> {
+        LAST.with_borrow_mut(|last| match last {
+            Some((ptr, col, ordering)) if *ptr == a.ptr && *col == a.col => ordering.clone(),
+            _ => {
+                let ordering = Rc::new(Self::new(a, pos));
+                *last = Some((a.ptr.clone(), a.col.clone(), ordering.clone()));
+                ordering
+            }
+        })
+    }
+}
+
+thread_local! {
+    static LAST: RefCell<Option<(Vec<usize>, Vec<usize>, Rc<Ordering>)>> = const { RefCell::new(None) };
 }
 
 /// `y -= sum(u[q] x[q])`, over four columns at once for speed.
@@ -233,8 +252,12 @@ impl<'a> SparseLu<'a> {
             }
             let (swaps, front_weak) = partial_lu(&mut f, m, p, scale);
             weak |= front_weak;
-            let upper = (p..m).flat_map(|c| f[c * m..c * m + p].iter().copied()).collect();
-            updates[i] = (p..m).flat_map(|c| f[c * m + p..(c + 1) * m].iter().copied()).collect();
+            let (mut upper, mut update) = (Vec::with_capacity(p * (m - p)), Vec::with_capacity((m - p) * (m - p)));
+            for column in f[p * m..].chunks_exact(m) {
+                upper.extend_from_slice(&column[..p]);
+                update.extend_from_slice(&column[p..]);
+            }
+            updates[i] = update;
             f.truncate(p * m);
             f.shrink_to_fit();
             fronts.push(Front { lower: f, upper, swaps });

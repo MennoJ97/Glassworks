@@ -1014,6 +1014,53 @@ fn a_sharp_bend_in_a_slab_loses_most_of_its_power() {
     assert!(t > 0.1 && t < 0.3, "T {t}");
 }
 
+/// The same structure with every length multiplied by `f`.
+fn scaled_request(mut r: Request2d, f: f64) -> Request2d {
+    (r.width, r.height, r.cell) = (r.width * f, r.height * f, r.cell * f);
+    for shape in &mut r.shapes {
+        shape.outline = match shape.outline {
+            Outline::Circle { x, y, r } => Outline::Circle { x: x * f, y: y * f, r: r * f },
+            Outline::Rect { x0, y0, x1, y1 } => Outline::Rect { x0: x0 * f, y0: y0 * f, x1: x1 * f, y1: y1 * f },
+        };
+    }
+    for m in &mut r.monitors {
+        *m = Monitor { x0: m.x0 * f, y0: m.y0 * f, x1: m.x1 * f, y1: m.y1 * f };
+    }
+    if let Some(d) = &mut r.density {
+        (d.x0, d.y0, d.width, d.height) = (d.x0 * f, d.y0 * f, d.width * f, d.height * f);
+    }
+    let Analysis2d::Driven { wavelength, source, pml, average_q } = r.analysis else { panic!("a driven solve") };
+    let source = match source {
+        Source2d::Line { x, y } => Source2d::Line { x: x * f, y: y * f },
+        Source2d::Port { x, y0, y1 } => Source2d::Port { x: x * f, y0: y0 * f, y1: y1 * f },
+        other => other,
+    };
+    r.analysis = Analysis2d::Driven { wavelength: wavelength * f, source, pml: pml * f, average_q };
+    r
+}
+
+#[test]
+fn scaling_a_structure_with_its_wavelength_changes_nothing() {
+    let solve = |r| eigenmenno_core::solve2d::solve(&r).unwrap();
+    let transmission = |f| monitors(&solve(scaled_request(lattice_guide(Guide::Sharp, 0.353), f)))[0] / monitors(&solve(scaled_request(lattice_guide(Guide::Straight, 0.353), f)))[0];
+    let original = transmission(1.0);
+    close(transmission(1.0 / 2.833), original, 1e-7);
+    close(transmission(10.0 / 2.833), original, 1e-7);
+
+    // Pixels must stay on the grid at any scale, where rounding could add a row of cells.
+    let rho = vec![0.5; 144];
+    let shape = |out: &eigenmenno_core::solve::Output| {
+        let g = &out.channels.iter().find(|c| c.0 == "gradient").unwrap().1;
+        let largest = g.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+        g.iter().map(|v| v / largest).collect::<Vec<_>>()
+    };
+    let base = shape(&solve(density_bend(rho.clone())));
+    for f in [1.0 / 3.0, 0.353, 0.7, 1.1, 2.1] {
+        let scaled = shape(&solve(scaled_request(density_bend(rho.clone()), f)));
+        base.iter().zip(&scaled).for_each(|(a, b)| close(*a, *b, 1e-5));
+    }
+}
+
 /// A slab bent around a square of pixels. Everything sits on the grid of cells 1/24.
 fn density_bend(rho: Vec<f64>) -> Request2d {
     let (w, n, core) = (0.125, 12, Material { eps: 3.5 * 3.5, mu: 1.0 });

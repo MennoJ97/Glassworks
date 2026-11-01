@@ -1,9 +1,9 @@
 // Connects the controls, the solver and the plots.
 
-import { GUIDES, MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeState, defaultState, encodeState, guideGeometry, layer, problemOf, totalLength } from './model.js';
-import { EvolutionMap, FieldMap, FieldPlot, LineChart, seriesColors } from './plot.js';
+import { GUIDES, MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeState, defaultState, encodeState, guideCell, guideGeometry, guideResolved, guideScale, layer, problemOf, totalLength } from './model.js';
+import { EvolutionMap, FieldMap, FieldPlot, LineChart, drawDensity, seriesColors } from './plot.js';
 import { Solver } from './solver.js';
-import { STAGES, bendGeometry, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, prepareDesign, totalIterations, references, sharpnessAt } from './design.js';
+import { STAGES, bendGeometry, bendScale, bendWarning, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, prepareDesign, stageLength, totalIterations, references, sharpnessAt } from './design.js';
 
 const $ = (id) => document.getElementById(id);
 const THZ_MICRONS = 299.792458; // c, in THz times microns.
@@ -16,12 +16,12 @@ const VIEW_HELP = {
   bands: 'The waves that can travel through an endless repeat of this structure, and the gaps where none can.',
   waveguide: 'The modes that travel along the layers at a fixed wavelength, and how fast each one propagates.',
   scatter2d: 'The field around 2D shapes in open space, from a plane wave or a line source. An absorbing layer outside the plot takes what leaves.',
-  guide2d: 'How much light gets around a sharp corner, compared with a straight guide fed by the same source. Light in a photonic crystal guide has nowhere else to go, for wavelengths from 2.26 to 3.2 µm here, because the crystal has a band gap. An ordinary waveguide radiates at the corner.',
+  guide2d: 'How much light gets around a sharp corner, compared with a straight guide fed by the same source. Light in a photonic crystal guide has nowhere else to go, for wavelengths from 2.26 to 3.2 times its rod spacing, because the crystal has a band gap. An ordinary waveguide radiates at the corner.',
   cavity2d: 'The modes of a 2D structure, uniform along the third direction, inside walls or leaking into open space. Open walls find one mode from a few driven solves, with its Q and how tightly it is confined.',
   bands2d: 'The waves that can travel through an endless lattice of this cell. Floquet boundaries tie each edge to the opposite one, with a phase set by the wavevector k.',
   mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
   antireflection: 'Find the coating that reflects the least light, averaged across a band of wavelengths.',
-  bend2d: 'Find the pattern of material that carries light around a corner in a slab waveguide, within a square one wavelength wide. It stays in the slab instead of radiating away at the corner.',
+  bend2d: 'Find the pattern of material that carries light around a corner in a slab waveguide, within a square one wavelength wide. It stays in the slab instead of radiating away at the corner. The structure and its mesh scale with the middle of the band.',
 };
 const PROBLEM_TEXT = {
   driven: {
@@ -237,6 +237,7 @@ function renderSettings() {
     const leaky = a === 'cavity2d' && state.plane.cavity2d.walls === 'absorbing';
     show('plane-walls-field', a === 'cavity2d');
     show('plane-bend-field', guide2d());
+    show('plane-scale-field', guide2d());
     show('plane-size-fields', !guide2d());
     show('plane-background-field', !guide2d());
     show('plane-target-field', a === 'cavity2d');
@@ -307,7 +308,8 @@ function renderPlane() {
   const p = state.plane[state.analysis];
   $('plane-width').value = p.width;
   $('plane-height').value = p.height;
-  $('plane-cell').value = p.cell;
+  $('plane-cell').value = guide2d() ? +p.cell.toPrecision(4) : p.cell;
+  if (guide2d()) $('plane-scale').value = +guideScale(state).toPrecision(4);
   $('plane-background').value = p.background;
   if (p.sourceX !== undefined) [$('plane-source-x').value, $('plane-source-y').value] = [p.sourceX, p.sourceY];
   if (p.bend) $('plane-bend').replaceChildren(...Object.entries(GUIDES).map(([key, g]) => new Option(g.name, key, false, key === p.bend)));
@@ -341,9 +343,23 @@ function renderPlane() {
 const planeSettings = () => state.plane[state.analysis];
 $('plane-bend').addEventListener('change', () => {
   const bend = $('plane-bend').value;
-  Object.assign(planeSettings(), { bend, cell: GUIDES[bend].cell });
+  Object.assign(planeSettings(), { bend, scale: 1, cell: GUIDES[bend].cell });
   state.wavelength = GUIDES[bend].wavelength;
   renderSettings();
+  changed();
+});
+
+// Resizes a guide, with its mesh. Only its shape and the ratio to the wavelength matter.
+function resizeGuide(scale) {
+  const p = state.plane.guide2d;
+  p.cell *= scale / guideScale(state);
+  p.scale = scale;
+  $('plane-cell').value = +p.cell.toPrecision(4);
+}
+bindNumber('plane-scale', resizeGuide, 0.01);
+$('result-scale').addEventListener('click', () => {
+  resizeGuide(state.wavelength / GUIDES[state.plane.guide2d.bend].wavelength);
+  $('plane-scale').value = +guideScale(state).toPrecision(4);
   changed();
 });
 bindNumber('plane-width', (v) => { planeSettings().width = v; }, 0.05);
@@ -410,7 +426,22 @@ function clearForNewView() {
   setStatus('Solving.');
 }
 
+// The wavelength to go back to after a guide's view, which opens where the guide works.
+let wavelengthBeforeGuide = null;
+
 function selectView(analysis) {
+  if (guide2d() && analysis !== 'guide2d' && wavelengthBeforeGuide !== null) {
+    state.wavelength = wavelengthBeforeGuide;
+    wavelengthBeforeGuide = null;
+  }
+  if (analysis === 'guide2d' && !guide2d()) {
+    const { band, wavelength } = GUIDES[state.plane.guide2d.bend];
+    const scale = guideScale(state);
+    if (state.wavelength < band[0] * scale || state.wavelength > band[1] * scale) {
+      wavelengthBeforeGuide = state.wavelength;
+      state.wavelength = wavelength * scale;
+    }
+  }
   state.analysis = analysis;
   clearForNewView();
   selectedField = 0;
@@ -527,14 +558,37 @@ function resetDesign() {
   design.history = [];
   design.frames = [];
   design.rho = null;
+  // Starting before a new view's preview finishes mustn't show the old view's references.
+  design.references = [];
   $('design-replay').textContent = 'Replay';
   $('design-start').textContent = 'Start';
   $('design-use').hidden = true;
+  $('design-progress').hidden = true;
+  $('design-film').replaceChildren();
+}
+
+// A bend's strip of pictures gets the first iteration, the end of each stage, and the result.
+function addToFilm(frame) {
+  if (frame !== 0 && frame !== totalIterations(state) && (frame + 1) % stageLength(state) !== 0) return;
+  const picture = document.createElement('canvas');
+  const g = bendGeometry(false, bendScale(state));
+  drawDensity(picture, g.region, g.shapes, design.frames[frame], 3);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.dataset.frame = frame;
+  button.setAttribute('aria-label', `Show iteration ${frame + 1}`);
+  button.append(picture, frame === totalIterations(state) ? 'Result' : `${frame + 1}`);
+  button.addEventListener('click', () => showFrame(frame));
+  $('design-film').append(button);
 }
 
 // Repaints the map from the stored frames, as when the colour scheme changes.
 function restartEvolution() {
-  if (bend2d()) return;
+  $('design-film').replaceChildren();
+  if (bend2d()) {
+    design.frames.forEach((_, frame) => addToFilm(frame));
+    return;
+  }
   const d = state.design[state.analysis];
   evolution.reset(pixelCount(d), totalIterations(state) + 1, d.thickness, STAGES);
   design.frames.forEach((rho) => evolution.add(rho));
@@ -582,25 +636,35 @@ async function startDesign() {
   $('design-start').textContent = 'Stop';
   $('design-replay').textContent = 'Replay';
   $('design-use').hidden = true;
+  const total = totalIterations(state);
+  const bar = $('design-progress');
+  bar.max = total;
+  bar.value = 0;
+  bar.hidden = false;
+  setStatus('Starting.');
   const started = performance.now();
   let solving = 0;
   const failure = await optimize(state, (requests) => solver.run(requests), ({ rho, reply, iteration, beta }) => {
     if (run !== design.run) return false;
     solving += reply.ms;
+    bar.value = iteration;
     design.history.push(meanReflection(reply.results));
     design.frames.push(rho);
     design.shown = design.frames.length - 1;
-    if (!bend2d()) evolution.add(rho);
+    if (bend2d()) addToFilm(design.shown);
+    else evolution.add(rho);
     design.finished = beta === Infinity;
-    const seconds = ((performance.now() - started) / 1000).toFixed(1);
+    const elapsed = (performance.now() - started) / 1000;
+    const left = Math.ceil((elapsed / iteration) * (total - iteration));
     setStatus(design.finished
-      ? `Finished in ${seconds} s, of which the solver took ${(solving / 1000).toFixed(1)} s.`
-      : `Iteration ${iteration} of ${totalIterations(state)}, sharpness ${beta}.`);
+      ? `Finished in ${elapsed.toFixed(1)} s, of which the solver took ${(solving / 1000).toFixed(1)} s.`
+      : `Iteration ${iteration} of ${total}, sharpness ${beta}${left >= 2 ? `, about ${left} s left` : ''}.`);
     showDesign(rho, reply);
     return true;
   });
   if (run !== design.run) return;
   design.running = false;
+  bar.hidden = true;
   $('design-start').textContent = 'Start';
   $('design-use').hidden = !design.finished || bend2d();
   if (failure?.error) setError(failure.error);
@@ -645,6 +709,7 @@ $('design-start').addEventListener('click', () => {
   design.run++;
   design.running = false;
   $('design-start').textContent = 'Start';
+  $('design-progress').hidden = true;
   setStatus('Stopped. Press Start to begin again from the random start.');
 });
 
@@ -661,7 +726,54 @@ $('design-use').addEventListener('click', () => {
   selectView('spectrum');
 });
 
+function setResultNote(text, scaleButton) {
+  $('result-note').textContent = text ?? '';
+  $('result-note').hidden = !text;
+  $('result-scale').hidden = !scaleButton;
+  if (scaleButton) $('result-scale').textContent = scaleButton;
+}
+
+// A slab of this width carries a second mode at shorter wavelengths than this.
+const SLAB_SINGLE_MODE = 0.96;
+
+// A bend's transmission compares it with a straight guide, which only means something if
+// that guide carries the light. A line source sends half each way, so its output should
+// get about half of what the source emits, whichever wavelength and scale this is.
+function renderGuideTable(addRow) {
+  const { bend, cell: asked } = state.plane.guide2d;
+  const [straight, bent] = results;
+  const power = (r) => r.channels.monitors[0];
+  const share = (r) => power(r) / (r.meta.fields[0].ldos / 4);
+  const t = power(bent) / power(straight);
+  const line = bend !== 'slab';
+  const resolved = guideResolved(state);
+  const carried = !line || (share(straight) >= 0.4 && share(straight) <= 0.6);
+  const offer = `Resize the structure for ${+state.wavelength.toFixed(3)} µm`;
+  const finer = guideCell(state) < asked * 0.999 ? `The mesh refined itself to ${+guideCell(state).toPrecision(3)} µm cells for this wavelength.` : null;
+  const lost = bend === 'slab' ? 'Reflected or radiated' : 'Reflected';
+  if (!resolved) {
+    addRow(['Transmitted', lost], 'th');
+    addRow(['Not resolved', 'Not resolved']);
+    setResultNote('This wavelength is too short for the mesh to resolve a structure this large, even at the most cells the solver allows, so any percentage here would be noise.', offer);
+  } else if (!carried && line) {
+    addRow(['Reaches the output', 'Goes elsewhere'], 'th');
+    addRow([percent(share(bent)), percent(Math.max(0, 1 - share(bent)))]);
+    setResultNote(`A straight guide doesn't carry this wavelength: ${percent(share(straight))} of what its source emits reaches its output, where about half should. So these are shares of what the source emits, not a comparison with it. ${finer ?? ''}`, offer);
+  } else if (t > 1.02) {
+    addRow(['Transmitted', lost], 'th');
+    addRow(['Unreliable', 'Unreliable']);
+    setResultNote(`The bend reads ${percent(t)} of the straight guide, which can't be a true transmission. This wavelength is too near the edge of what the guide carries for the comparison to work. ${finer ?? ''}`, offer);
+  } else {
+    addRow(['Transmitted', lost], 'th');
+    // Within 2% is the mesh's error at the sizes this page uses.
+    addRow([percent(Math.min(1, t)), percent(Math.max(0, 1 - t))]);
+    const several = bend === 'slab' && state.wavelength < SLAB_SINGLE_MODE * guideScale(state);
+    setResultNote(several ? `This waveguide carries more than one mode at this wavelength, and its source launches only the first. ${finer ?? ''}` : finer, several && offer);
+  }
+}
+
 function renderDesignTable(table, addRow) {
+  if (bend2d()) setResultNote(bendWarning(state));
   addRow(['Structure', bend2d() ? 'Transmitted' : 'Reflected'], 'th');
   const last = design.finished && design.shown === design.frames.length - 1;
   const count = last && !bend2d() && finishedLayers(state.design[state.analysis], design.rho).length - 2;
@@ -681,6 +793,7 @@ function setError(text) {
 // A failed solve must not leave one problem's results showing under another's.
 function clearResults() {
   results = null;
+  setResultNote(null);
   setStatus('No results for these settings.');
   $('results-title').textContent = 'Results';
   $('results').replaceChildren();
@@ -713,11 +826,11 @@ function planeMarks(p) {
   }
   if (a === 'bands2d') return { bloch: blochAt(p.pick.s) };
   if (a === 'bend2d') {
-    const g = bendGeometry();
+    const g = bendGeometry(false, bendScale(state));
     return { open: true, source: g.mark, monitor: g.monitor, density: design.rho && { ...g.region, rho: design.rho } };
   }
   if (a === 'guide2d') {
-    const g = guideGeometry(p.bend, false);
+    const g = guideGeometry(p.bend, false, guideScale(state));
     return { open: true, source: g.mark, monitor: g.monitor };
   }
   if (p.walls === 'absorbing') return { open: true, source: [p.sourceX, p.sourceY] };
@@ -746,7 +859,7 @@ function showResults() {
     const p = state.plane[a];
     const { channels } = fieldResult;
     const marks = planeMarks(p);
-    const guide = guide2d() ? guideGeometry(p.bend, false) : bend2d() ? bendGeometry() : null;
+    const guide = guide2d() ? guideGeometry(p.bend, false, guideScale(state)) : bend2d() ? bendGeometry(false, bendScale(state)) : null;
     const [width, height] = guide ? [guide.size, guide.size] : [p.width, p.height];
     fieldMap.setMesh({ x: channels.x, y: channels.y, triangles: channels.triangles, width, height }, guide ? guide.shapes : p.shapes, marks);
     const size = a === 'scatter2d' ? 'The total field is shown.' : a === 'guide2d' || a === 'bend2d' ? `The source sends light both ways, and the half going left leaves through the layer.${a === 'bend2d' ? ' Shaded pixels are the slab\'s material.' : ''}` : 'Its overall size is arbitrary.';
@@ -846,6 +959,7 @@ function renderTable(result) {
   const table = $('results');
   $('results-title').textContent = resultsTitle();
   table.replaceChildren();
+  setResultNote(null);
   const fields = result.meta.fields;
   const addRow = (cells, tag = 'td') => {
     const row = document.createElement('tr');
@@ -856,12 +970,7 @@ function renderTable(result) {
   $('empty').hidden = fields.length > 0;
   if (problemOf(a) === 'design') return renderDesignTable(table, addRow);
   if (a === 'scatter2d') return renderScatterTable(result, addRow);
-  if (a === 'guide2d') {
-    const t = result.channels.monitors[0] / results[0].channels.monitors[0];
-    addRow(['Transmitted', state.plane.guide2d.bend === 'slab' ? 'Reflected or radiated' : 'Reflected'], 'th');
-    addRow([percent(t), percent(Math.max(0, 1 - t))]);
-    return;
-  }
+  if (a === 'guide2d') return renderGuideTable(addRow);
   if (fields.length === 0) {
     $('empty').textContent = a === 'waveguide'
       ? 'No guided modes at this wavelength. Give an inner layer a higher index than both outer layers, or make it thicker.'
@@ -913,7 +1022,7 @@ function renderChart() {
   const wrap = $('chart-wrap');
   const designing = problemOf(a) === 'design';
   wrap.hidden = designing ? design.history.length < 2 : a !== 'spectrum' && a !== 'bands' && a !== 'bands2d';
-  $('evolution-wrap').hidden = !designing || bend2d() || design.frames.length < 2;
+  $('evolution-wrap').hidden = !designing || design.frames.length < 2;
   if (wrap.hidden) { chart.spec = null; return; }
   const channels = results[0].channels;
   const colors = seriesColors();
@@ -936,7 +1045,16 @@ function renderChart() {
       series: [{ name: 'Lost', x, y, color: colors[0] }],
       format: (index) => [`Iteration ${x[index]}`, `${bend2d() ? 'Transmitted' : 'Reflected'} ${percent(design.history[index])}`],
     };
-    if (!bend2d()) {
+    $('evolution').hidden = bend2d();
+    $('evolution-title').textContent = bend2d()
+      ? 'How the design changed: one picture each time the pixels get sharper, with strong colour for the high-index material. Light enters from the left and leaves through the top. Click a picture, or drag the slider, to see any iteration.'
+      : 'How the design changed: each column is one iteration, and stronger colour means more of the high-index material. Drag across this map or the chart above to see any iteration.';
+    if (bend2d()) {
+      for (const button of $('design-film').children) {
+        button.setAttribute('aria-current', +button.dataset.frame === design.shown);
+        button.disabled = design.running;
+      }
+    } else {
       evolution.marker = design.shown;
       evolution.draw();
     }

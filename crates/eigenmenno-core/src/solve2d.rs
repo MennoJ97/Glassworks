@@ -119,8 +119,14 @@ fn mode_volume(space: &H1Triangle, coef: &[(C64, C64)], u: &[C64], keep: impl Fn
     energy / peak
 }
 
+/// Steps of at most `step` that fill `size`. The tolerance keeps rounding noise from adding
+/// one to a whole number of them, so a scaled structure gets the same mesh and sampling.
+fn steps_in(size: f64, step: f64) -> usize {
+    ((size / step - 1e-9).ceil() as usize).max(1)
+}
+
 fn grid_size(req: &Request2d, width: f64, height: f64) -> Result<(usize, usize), String> {
-    let (nx, ny) = (((width / req.cell).ceil() as usize).max(1), ((height / req.cell).ceil() as usize).max(1));
+    let (nx, ny) = (steps_in(width, req.cell), steps_in(height, req.cell));
     if (2 * nx + 1) * (2 * ny + 1) > MAX_DOFS {
         return Err("this mesh is too fine: use larger cells or a smaller domain".into());
     }
@@ -307,9 +313,13 @@ fn locate(space: &H1Triangle, x: f64, y: f64) -> Option<usize> {
 /// `e_0`, which reads the field at a point as `sum(e_0 u)`, and loads it there as a source.
 fn point_load(space: &H1Triangle, dofs: &DofMap, x: f64, y: f64) -> Result<Vec<(usize, f64)>, String> {
     let cell = locate(space, x, y).ok_or("the source lies outside the mesh")?;
+    Ok(cell_load(space, dofs, cell, x, y))
+}
+
+fn cell_load(space: &H1Triangle, dofs: &DofMap, cell: usize, x: f64, y: f64) -> Vec<(usize, f64)> {
     let mut d = vec![0; 6];
     space.cell_dofs(cell, &mut d);
-    Ok(d.iter().zip(space.basis_at(cell, x, y)).filter_map(|(&g, v)| dofs.map[g].map(|(r, _)| (r, v))).collect())
+    d.iter().zip(space.basis_at(cell, x, y)).filter_map(|(&g, v)| dofs.map[g].map(|(r, _)| (r, v))).collect()
 }
 
 /// `u` for `A(k) u = i k e_0`, and `-sum(e_0 u)`. Dividing by `i k` turns this into the
@@ -326,7 +336,7 @@ fn line_response(lu: &SparseLu, n: usize, load: &[(usize, f64)], k: C64) -> (Vec
 /// propagation constant is unused here, because the sheet's own fields set it. Returns the
 /// profile as `(y, value)` samples, peaking at 1.
 fn port_mode(req: &Request2d, k0: f64, x: f64, y0: f64, y1: f64) -> Result<Vec<(f64, f64)>, String> {
-    let steps = (((y1 - y0) / (req.cell / 8.0)).ceil() as usize).max(1);
+    let steps = steps_in(y1 - y0, req.cell / 8.0);
     let dy = (y1 - y0) / steps as f64;
     let material = |y: f64| req.shapes.iter().rev().find(|s| s.outline.level(x, y) <= 0.0).map_or(req.background, |s| s.material);
     let mut layers: Vec<Layer> = vec![];
@@ -370,7 +380,7 @@ fn monitor_power(space: &H1Triangle, coef: &[(C64, C64)], u: &[C64], k0: f64, ce
         .map(|(index, m)| {
             let (dx, dy) = (m.x1 - m.x0, m.y1 - m.y0);
             let length = dx.hypot(dy);
-            let steps = ((length / (cell / 4.0)).ceil() as usize).max(1);
+            let steps = steps_in(length, cell / 4.0);
             let (nx, ny) = (dy / length, -dx / length);
             // Only cells near the strip need searching.
             let near: Vec<usize> = (0..space.n_cells())
@@ -419,7 +429,7 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_
     let k = C64::new(k0, average_q.map_or(0.0, |q| k0 / (2.0 * q)));
     let dofs = open_dofs(req, &space, pml);
     let a = open_matrix(req, &space, &dofs, &coef, pml, k);
-    let ordering = Ordering::new(&a, &free_positions(&space, &dofs));
+    let ordering = Ordering::reused(&a, &free_positions(&space, &dofs));
     let lu = SparseLu::factor(&a, &ordering);
     let (pb, qb) = coef[0];
     let mut ldos = None;
@@ -461,11 +471,13 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_
             // one, with a field of `-(k / 2 beta) phi exp(i beta |x - x0|)`.
             let profile = port_mode(req, k0, x, y0, y1)?;
             let mut rhs = vec![ZERO; dofs.n_free];
+            // Only cells near the port need searching.
+            let near: Vec<usize> = (0..space.n_cells()).filter(|&c| (cell_center(&mesh, c).0 - pml - x).abs() < 4.0 * req.cell).collect();
             for pair in profile.windows(2).filter(|w| w[1].0 > w[0].0) {
                 let y = (pair[0].0 + pair[1].0) / 2.0;
-                let c = locate(&space, x + pml, y + pml).ok_or("the port lies outside the mesh")?;
+                let c = *near.iter().find(|&&c| space.barycentric(c, x + pml, y + pml).iter().all(|&l| l >= -1e-9)).ok_or("the port lies outside the mesh")?;
                 let weight = coef[mesh.region[c]].0 * (pair[0].1 + pair[1].1) / 2.0 * (pair[1].0 - pair[0].0);
-                for (r, v) in point_load(&space, &dofs, x + pml, y + pml)? {
+                for (r, v) in cell_load(&space, &dofs, c, x + pml, y + pml) {
                     rhs[r] += I * k * weight * v;
                 }
             }
