@@ -280,7 +280,8 @@ export class FieldMap {
   }
 
   // `marks` may hold `bloch`, the phase per period across x and y; `open` for edges that
-  // absorb; `source`, a point; and `incident`, a direction of travel in degrees.
+  // absorb; `source`, a point; `incident`, a direction of travel in degrees; and `monitor`,
+  // a line that power is measured across.
   setMesh(mesh, shapes, marks) {
     this.mesh = mesh;
     this.shapes = shapes;
@@ -390,17 +391,32 @@ export class FieldMap {
     }
     ctx.strokeStyle = css('--ink');
     ctx.lineWidth = 1.5;
+    // Shapes can run on past the plot, into the absorbing layer.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(a.left, a.top, a.right - a.left, a.bottom - a.top);
+    ctx.clip();
     for (const s of this.shapes) {
       ctx.beginPath();
       if (s.type === 'circle') ctx.arc(sx(s.x), sy(s.y), (s.w / 2) * a.scale, 0, 2 * Math.PI);
       else ctx.rect(sx(s.x - s.w / 2), sy(s.y + s.h / 2), s.w * a.scale, s.h * a.scale);
       ctx.stroke();
     }
-    const { bloch, open, source, incident } = this.marks;
+    ctx.restore();
+    const { bloch, open, source, incident, monitor } = this.marks;
     if (bloch) this.drawBloch(ctx, a);
     else if (open) this.drawOpen(ctx, a);
     else ctx.strokeRect(a.left, a.top, a.right - a.left, a.bottom - a.top);
     if (source) this.drawSource(ctx, sx(source[0]), sy(source[1]));
+    if (monitor) {
+      ctx.strokeStyle = css('--ink');
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(sx(monitor.x0), sy(monitor.y0));
+      ctx.lineTo(sx(monitor.x1), sy(monitor.y1));
+      ctx.stroke();
+      this.drawLabel(ctx, 'Monitor', sx((monitor.x0 + monitor.x1) / 2), sy((monitor.y0 + monitor.y1) / 2) - 15);
+    }
     if (incident !== undefined) {
       const angle = (incident * Math.PI) / 180;
       const size = 0.16 * Math.min(a.right - a.left, a.bottom - a.top);

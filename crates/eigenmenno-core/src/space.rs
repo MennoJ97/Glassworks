@@ -105,6 +105,19 @@ const TRIANGLE_RULE: [([f64; 3], f64); 6] = [
     ([0.091576213509771, 0.091576213509771, 0.816847572980459], 0.109951743655322),
 ];
 
+/// One derivative of the six second-order basis functions, given that derivative of each
+/// barycentric coordinate.
+fn basis_gradient([l0, l1, l2]: [f64; 3], g: &[f64; 3]) -> [f64; 6] {
+    [
+        (4.0 * l0 - 1.0) * g[0],
+        (4.0 * l1 - 1.0) * g[1],
+        (4.0 * l2 - 1.0) * g[2],
+        4.0 * (l0 * g[1] + l1 * g[0]),
+        4.0 * (l1 * g[2] + l2 * g[1]),
+        4.0 * (l2 * g[0] + l0 * g[2]),
+    ]
+}
+
 /// Continuous second-order triangles, with dofs on vertices and then edge midpoints.
 pub struct H1Triangle<'a> {
     pub mesh: &'a Mesh,
@@ -137,6 +150,17 @@ impl<'a> H1Triangle<'a> {
         let l1 = ((x - p0.0) * (p2.1 - p0.1) - (p2.0 - p0.0) * (y - p0.1)) / det;
         let l2 = ((p1.0 - p0.0) * (y - p0.1) - (x - p0.0) * (p1.1 - p0.1)) / det;
         [1.0 - l1 - l2, l1, l2]
+    }
+
+    /// The six basis functions' x and y derivatives at a point in a cell.
+    pub fn gradients_at(&self, cell: usize, x: f64, y: f64) -> ([f64; 6], [f64; 6]) {
+        let v = &self.mesh.cells[3 * cell..3 * cell + 3];
+        let [p0, p1, p2] = [self.mesh.vertex(v[0]), self.mesh.vertex(v[1]), self.mesh.vertex(v[2])];
+        let det = (p1.0 - p0.0) * (p2.1 - p0.1) - (p2.0 - p0.0) * (p1.1 - p0.1);
+        let gx = [(p1.1 - p2.1) / det, (p2.1 - p0.1) / det, (p0.1 - p1.1) / det];
+        let gy = [(p2.0 - p1.0) / det, (p0.0 - p2.0) / det, (p1.0 - p0.0) / det];
+        let l = self.barycentric(cell, x, y);
+        (basis_gradient(l, &gx), basis_gradient(l, &gy))
     }
 
     pub fn dof_positions(&self) -> Vec<(f64, f64)> {
@@ -178,17 +202,7 @@ impl Space for H1Triangle<'_> {
         mass.fill(0.0);
         for ([l0, l1, l2], w) in TRIANGLE_RULE {
             let val = [l0 * (2.0 * l0 - 1.0), l1 * (2.0 * l1 - 1.0), l2 * (2.0 * l2 - 1.0), 4.0 * l0 * l1, 4.0 * l1 * l2, 4.0 * l2 * l0];
-            let grad = |g: &[f64; 3]| {
-                [
-                    (4.0 * l0 - 1.0) * g[0],
-                    (4.0 * l1 - 1.0) * g[1],
-                    (4.0 * l2 - 1.0) * g[2],
-                    4.0 * (l0 * g[1] + l1 * g[0]),
-                    4.0 * (l1 * g[2] + l2 * g[1]),
-                    4.0 * (l2 * g[0] + l0 * g[2]),
-                ]
-            };
-            let (dx, dy) = (grad(&gx), grad(&gy));
+            let (dx, dy) = (basis_gradient([l0, l1, l2], &gx), basis_gradient([l0, l1, l2], &gy));
             for i in 0..6 {
                 for j in 0..6 {
                     stiff_x[i * 6 + j] += w * area * dx[i] * dx[j];

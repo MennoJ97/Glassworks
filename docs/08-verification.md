@@ -22,7 +22,7 @@ compares against an independently known answer:
 | $E$ and $H$ fields | $E_y = \sin\pi x$ and $\eta_0 H_z = -i\cos\pi x$ in a cavity |
 
 [`tests/cross_check.rs`](../crates/eigenmenno-core/tests/cross_check.rs) also compares
-the handwritten LU and Lanczos against `faer`, used only in tests as an independent
+the handwritten LUs and Lanczos against `faer`, used only in tests as an independent
 reference.
 
 ## Test the convergence rate

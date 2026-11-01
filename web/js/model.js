@@ -27,6 +27,57 @@ function defectCavity(n) {
   return { width: n, height: n, cell: 0.1, background: 1, walls: 'absorbing', target: 2.65, sourceX: n / 2, sourceY: n / 2, shapes: rods };
 }
 
+// The waveguide bends a view can show, with what each needs. Bends in rods are from Mekis et
+// al. 1996, whose guided band runs from wavelengths of 3.2a down to 2.26a. Their layer is
+// thick, because rods running through it reflect more than free space does.
+export const GUIDES = {
+  sharp: { name: 'Sharp bend in a photonic crystal', wavelength: 2.833, cell: 0.16667 },
+  stepped: { name: 'Stepped bend in a photonic crystal', wavelength: 2.833, cell: 0.16667 },
+  slab: { name: 'Sharp bend in an ordinary waveguide', wavelength: 1, cell: 0.05 },
+};
+const guideSetup = (bend) => ({ bend, cell: GUIDES[bend].cell, background: 1, walls: 'absorbing', shapes: [] });
+const LATTICE = { arm: 5, clad: 3, pml: 5 };
+const SLAB = { size: 4, x: 2.5, y: 1.5, width: 0.143, n: 3.5, pml: 1 };
+
+// A guide's shapes, source and output monitor, or those of a straight one to compare with.
+export function guideGeometry(bend, straight) {
+  if (bend === 'slab') {
+    const { size, x, y, width, n, pml } = SLAB;
+    const far = size + pml + 1;
+    const end = straight ? far : x + width / 2;
+    const rect = (x0, y0, x1, y1) => ({ type: 'rect', x: (x0 + x1) / 2, y: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, n });
+    const shapes = [rect(-pml - 1, y - width / 2, end, y + width / 2)];
+    if (!straight) shapes.push(rect(x - width / 2, y - width / 2, x + width / 2, far));
+    return {
+      size, pml, shapes,
+      source: { type: 'port', x: 0.5, y0: y - 1.2, y1: y + 1.2 },
+      mark: [0.5, y],
+      monitor: straight ? { x0: 3.5, y0: y - 1, x1: 3.5, y1: y + 1 } : { x0: x + 1, y0: 3.5, x1: x - 1, y1: 3.5 },
+    };
+  }
+  const { arm, clad, pml } = LATTICE;
+  const size = arm + 1 + clad;
+  const [i0, j0] = [arm, clad];
+  const removed = (i, j) => {
+    if (straight) return j === j0;
+    if (bend === 'sharp') return (j === j0 && i <= i0) || (i === i0 && j >= j0);
+    return (j === j0 && i < i0) || (i === i0 - 1 && j === j0 + 1) || (i === i0 && j > j0);
+  };
+  const shapes = [];
+  for (let i = -pml - 1; i < size + pml + 1; i++) {
+    for (let j = -pml - 1; j < size + pml + 1; j++) {
+      if (!removed(i, j)) shapes.push({ type: 'circle', x: i + 0.5, y: j + 0.5, w: 0.36, h: 0.36, n: 3.4 });
+    }
+  }
+  const [x, y, span, far] = [i0 + 0.5, j0 + 0.5, 3, size - 1.03];
+  return {
+    size, pml, shapes,
+    source: { type: 'line', x: 1.5, y },
+    mark: [1.5, y],
+    monitor: straight ? { x0: far, y0: y - span, x1: far, y1: y + span } : { x0: x + span, y0: far, x1: x - span, y1: far },
+  };
+}
+
 // Each preset starts on the view that shows it best. A `planeSetup` replaces that view's domain.
 export const PRESETS = {
   'Mirror with a resonant gap': {
@@ -58,6 +109,8 @@ export const PRESETS = {
     layers: [layer('Silica glass', 3), layer('Silicon nitride', 0.8), layer('Silica glass', 3)],
   },
   'Scattering by a rod': { analysis: 'scatter2d', source: 'plane_wave', wavelength: 1, angle: 0 },
+  'Sharp bend in a photonic crystal': { analysis: 'guide2d', wavelength: GUIDES.sharp.wavelength, planeSetup: guideSetup('sharp') },
+  'Bend in an ordinary waveguide': { analysis: 'guide2d', wavelength: GUIDES.slab.wavelength, planeSetup: guideSetup('slab') },
   'Empty square cavity': { analysis: 'cavity2d', planeSetup: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', target: null, sourceX: 0.5, sourceY: 0.5, shapes: [] } },
   'Point-defect cavity': { analysis: 'cavity2d', planeSetup: defectCavity(5) },
   'Lattice of rods': { analysis: 'bands2d' },
@@ -69,7 +122,7 @@ export const PRESETS = {
 // picks; eigenmode views have no source and solve for the modes themselves; design
 // views repeat driven solves, using their gradients to change the structure.
 export const PROBLEMS = {
-  driven: { name: 'Driven response', views: ['spectrum', 'field', 'scatter2d'] },
+  driven: { name: 'Driven response', views: ['spectrum', 'field', 'scatter2d', 'guide2d'] },
   eigen: { name: 'Eigenmodes', views: ['cavity', 'bands', 'waveguide', 'cavity2d', 'bands2d'] },
   design: { name: 'Inverse design', views: ['mirror', 'antireflection'] },
 };
@@ -100,6 +153,7 @@ export function defaultState() {
         width: 3, height: 3, cell: 0.06, background: 1, walls: 'absorbing', sourceX: 0.75, sourceY: 1.5, averageQ: null,
         shapes: [{ type: 'circle', x: 1.5, y: 1.5, w: 1, h: 1, n: 2 }],
       },
+      guide2d: guideSetup('sharp'),
       cavity2d: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', target: null, sourceX: 0.5, sourceY: 0.5, shapes: [] },
       bands2d: {
         width: 1, height: 1, cell: 0.04, background: 1, walls: 'periodic', pick: { s: 1, band: 0 },
@@ -129,7 +183,34 @@ export function blochAt(s) {
   return [Math.PI * (3 - s), Math.PI * (3 - s)];
 }
 
+const toShape = (c) => ({
+  material: material(c.n),
+  ...(c.type === 'circle'
+    ? { type: 'circle', x: c.x, y: c.y, r: c.w / 2 }
+    : { type: 'rect', x0: c.x - c.w / 2, y0: c.y - c.h / 2, x1: c.x + c.w / 2, y1: c.y + c.h / 2 }),
+});
+
+// A straight guide, then the bend. The same source in each gives the bend's transmission.
+function guideRequests(s) {
+  const p = s.plane.guide2d;
+  return [true, false].map((straight) => {
+    const g = guideGeometry(p.bend, straight);
+    return {
+      width: g.size,
+      height: g.size,
+      cell: p.cell,
+      background: material(1),
+      polarization: 'te',
+      walls: 'absorbing',
+      shapes: g.shapes.map(toShape),
+      monitors: [g.monitor],
+      analysis: { type: 'driven', wavelength: s.wavelength, source: g.source, pml: g.pml },
+    };
+  });
+}
+
 function planeRequests(s) {
+  if (s.analysis === 'guide2d') return guideRequests(s);
   const p = s.plane[s.analysis];
   const base = {
     width: p.width,
@@ -138,12 +219,7 @@ function planeRequests(s) {
     background: material(p.background),
     polarization: s.polarization,
     walls: p.walls,
-    shapes: p.shapes.map((c) => ({
-      material: material(c.n),
-      ...(c.type === 'circle'
-        ? { type: 'circle', x: c.x, y: c.y, r: c.w / 2 }
-        : { type: 'rect', x0: c.x - c.w / 2, y0: c.y - c.h / 2, x1: c.x + c.w / 2, y1: c.y + c.h / 2 }),
-    })),
+    shapes: p.shapes.map(toShape),
   };
   const targetK0 = p.target ? (2 * Math.PI) / p.target : null;
   const modes = (bloch) => ({ ...base, analysis: { type: 'cavity', n_modes: s.nModes, bloch, target_k0: targetK0 } });
@@ -212,7 +288,10 @@ export function decodeState(text) {
     const parsed = JSON.parse(decodeURIComponent(text));
     const valid = Array.isArray(parsed.layers) && parsed.layers.length > 0 &&
       parsed.layers.every((l) => [l.n, l.k, l.thickness].every(Number.isFinite));
-    return valid ? { ...defaultState(), ...parsed } : null;
+    if (!valid) return null;
+    const fresh = defaultState();
+    // Links from before a view existed have no settings for it.
+    return { ...fresh, ...parsed, plane: { ...fresh.plane, ...parsed.plane } };
   } catch {
     return null;
   }

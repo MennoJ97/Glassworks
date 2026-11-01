@@ -60,7 +60,7 @@ They vary between runs, so treat them as rough:
 A specialised solver beats a general one here because it needs no symbolic analysis
 of the sparsity. That's specific to 1D, though. In 2D, the bandwidth of a mesh with
 $N$ unknowns grows like $\sqrt{N}$, so the cost becomes $O(N^2)$, and fill-reducing
-sparse solvers such as `faer` win by a wide margin ([George 1973](10-references.md#george-1973)). Chapter 9 covers that switch.
+sparse solvers win by a wide margin ([George 1973](10-references.md#george-1973)). Chapter 9 covers that switch.
 
 In the browser, a complete driven solve with a million unknowns took 217 ms on an
 Apple M4 Pro, including assembly. Expect a slower result on a phone.

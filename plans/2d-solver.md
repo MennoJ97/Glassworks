@@ -1,12 +1,12 @@
 # 2D solver plan
 
 The agreed plan for adding 2D. Pick up at the first milestone that isn't marked done,
-and update this file as things land. Delete it, and `plans/probe-2d/`, once the last
+and update this file as things land. Delete it, with `plans/probe-2d/` and `plans/probe-sparse/`, once the last
 milestone is finished and the tutorial covers what's here.
 
-**Status (2026-11-01):** milestones 1 to 3 are built. Cavities, band diagrams, open
-scattering and leaky modes run on the page, tested against exact and independent results.
-**Next up: milestone 4.** The own-solver decision waits until after milestone 4. The solver numbers below come from the throwaway probe in
+**Status (2026-11-01):** milestones 1 to 4 are built. Cavities, band diagrams, open
+scattering, leaky modes and waveguide bends run on the page, tested against exact and
+independent results. **Next up: milestone 5.** The solver numbers below come from the throwaway probe in
 [`probe-2d/`](probe-2d/).
 
 ## Decisions
@@ -20,12 +20,12 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Elements | `H1Tri`: second-order triangles implementing `Space` | Cavity error falls about 15× per mesh halving. Other orders can wait for a measured reason |
 | Mesh | Structured grid, with nodes snapped onto shape boundaries, diagonals chosen afterwards, then constrained Delaunay flips | No dependency, periodic edges match, and it can serve 2D topology optimization. Worst angle over 200 random placements: 22° for circles, 16° for rectangles |
 | Mesh fallback | An unstructured mesher, such as [`spade`](https://github.com/Stoeoef/spade) (MIT/Apache) | Only if snapping can't be fixed. It makes periodic edges and own-solver separators harder |
-| Linear solver | Add a small factorization trait. 1D keeps `banded.rs`, 2D uses `faer` | See the measurements. Banded LU can't scale in 2D |
+| Linear solver | Add a small factorization trait. 1D keeps `banded.rs`, 2D uses `sparse.rs` | See the measurements. Banded LU can't scale in 2D |
 | Open boundaries | PML | Exact local conditions don't exist in 2D (chapter 9) |
 | Leaky modes | No non-Hermitian eigensolver. One driven solve at complex frequency for LDOS, and a secant search on `1/u_0` for Q | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for. It took 6 or 7 solves, and found Q up to 680,000 |
 | Upper size | The page refuses above about 160,000 unknowns | 638,401 failed in WebAssembly, probably out of memory |
-| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, and about 2,000 after milestone 3 | State the cost before adding more, and keep the tutorial's line count current |
-| Own sparse solver | Keep `faer`. Revisit after milestone 4 (see below) | Speed no longer argues for it, and milestone 4 brings the hard near-resonance matrices to test on |
+| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, about 2,000 after milestone 3, and about 2,150 after milestone 4 | State the cost before adding more, and keep the tutorial's line count current |
+| Own sparse solver | Adopted in `sparse.rs`. `faer` is now only for tests (see below) | It beat `faer`'s LU in WebAssembly, with 99 KB less to download. Refinement covers its one real risk |
 
 ## Measurements
 
@@ -108,18 +108,17 @@ high-index material will need refining, which the probe didn't test.
    [MPB tutorial](https://mpb.readthedocs.io/en/latest/Python_Tutorial/)'s 0.28262 to
    0.41933 is 0.5–0.7% higher. The likely cause is its coarse resolution of 32, but no
    MPB run has confirmed that, so it isn't used as a reference.
-3. **The `faer` setup is partly tuned.** Eigenproblems use Cholesky with a reused
-   analysis. Driven problems are indefinite, so milestone 2 must bring back LU, with
-   `Aᵀ = A` and its default ordering still untested. Warm-starting Lanczos from the
-   previous k-point is the next speed-up to try.
-4. **Transposed solves through `faer`.** Bloch-periodic driven problems lose `Aᵀ = A`,
+3. **Band diagrams are slower than they were.** Eigenproblems now use the LU with a reused
+   ordering, about 1.4× slower than `faer`'s Cholesky. A Hermitian path, or warm-starting
+   Lanczos from the previous k-point, are the next speed-ups to try.
+4. **Transposed solves.** Bloch-periodic driven problems lose `Aᵀ = A`,
    so their adjoints need `Aᵀ` solves. Not needed before periodic gratings.
 
 ## Code changes
 
 | Module | Change |
 |---|---|
-| `solve2d.rs`, later | Monitors and gradients |
+| `solve2d.rs`, later | Gradients |
 | Website, later | Dragging shapes, and the `design.js` optimizer with a 2D filter |
 | Tutorial | Add 2D chapters as each milestone lands. Chapter 9 is current |
 
@@ -134,7 +133,7 @@ PML, as used in the probe, with `s = 1 + i sigma(d) / k` and a quadratic `sigma`
 
 ```text
 a_x = s_y / s_x,  a_y = s_x / s_y,  b = -k^2 s_x s_y
-sigma_max = -3 ln(1e-6) / (2 T),  sigma(d) = sigma_max (d / T)^2
+sigma_max = -3 ln(1e-4) / (2 T),  sigma(d) = sigma_max (d / T)^2
 ```
 
 ## Milestones
@@ -153,7 +152,7 @@ as a test in `crates/eigenmenno-core/tests/analytic.rs` before calling it done.
 - [x] **Example 2: rod-lattice band diagram**, Ez and Hz along Γ-X-M-Γ. Checked against
       the plane-wave reference.
 - [x] Add a triangle field renderer and a minimal shape input on the page.
-- [x] Decide on the own sparse solver: keep `faer`, and revisit after milestone 4.
+- [x] Decide on the own sparse solver: keep `faer` for now, and revisit after milestone 4.
 
 The page defaults to about 2,500 unknowns per k-point, accurate to about 0.3–0.5%.
 The plane-wave script wasn't kept: it's about 30 lines
@@ -167,7 +166,8 @@ rule for Hz.
 - [x] **Example 3: dielectric cylinder scattering.** Checked against the analytic Mie
       series, within 1% at 32 cells per wavelength for both polarizations and at an oblique
       angle. The line source matches `(i/4) H0(kr)` to 0.02% with 1 λ of PML at 24 cells
-      per wavelength, including at the corners.
+      per wavelength, including at the corners, and to 0.05% since milestone 4 weakened the
+      layer's target.
 - [x] Add a scattering view to the page, with the source and travel direction marked.
 
 Materials are still real and positive, so metals and loss aren't available in 2D yet. A
@@ -200,12 +200,37 @@ the analysis across them is the obvious speed-up. Download: 277 KB gzipped.
 
 ### Milestone 4: waveguides
 
-- [ ] Add a waveguide port, taking the mode profile from the existing 1D solver.
-- [ ] Add power monitors along lines.
-- [ ] **Example 5: sharp bend in a photonic-crystal waveguide.** Check against
-      [Mekis et al. 1996](https://doi.org/10.1103/PhysRevLett.77.3787) (98% transmission,
-      against 30% in a conventional guide). Read the paper for its exact parameters
-      first: only the abstract-level numbers have been checked so far.
+- [x] Add a waveguide port, taking the mode profile from the existing 1D solver. Checked
+      against the exact slab mode: field within 1.2%, from error in beta that builds up with
+      distance, and power within 0.5%.
+- [x] Add power monitors along lines, averaged over two cells, since a grid line is where
+      a derivative is worst. Checked against `F / 4` around a line source.
+- [x] **Example 5: sharp bend in a photonic-crystal waveguide.** Checked against
+      [Mekis et al. 1996](https://doi.org/10.1103/PhysRevLett.77.3787), read in full. Chapter
+      9 has the table. Sharp bend: 97.9% at 0.353 against their 98% maximum. Stepped bend:
+      99.8% against 100%. Band: 0.312 and 0.445, against 0.312 and 0.443.
+
+The slab comparison is weak, because the paper gives no width for its sharp bend. It reads 23%
+at their other bend's width over wavelength, against "at most 30%", but 57% at 0.06. Near the
+guide's cutoff, below about 0.35, reflection from the layer returns: with 4a of layer, T reads
+1.02 at 0.33. The paper reports trouble there too. T was stable to about 0.3% from 8 to 16
+cells per period at 0.353, and with cladding from 3 to 5 rows.
+
+The layer needed most of the work. Rods running through it reflect the guided mode: 1.6% of
+its power at 2a, 0.06% at 4a, and 0.001% at 6a, at 0.353. A weaker target of 1e-3 helps
+further at 4a, but fails the line-source test. So the target went from 1e-6 to 1e-4 for
+everything, which leaves all earlier tests passing. The test uses 6a. Monitors and
+ports both assume a straight line, and a port needs its line to cross a layered guide, so a
+port can't launch a photonic-crystal guide's mode: use a line source there, which excites only
+that mode because nothing else exists in the gap.
+
+On the page: 5a of layer at a/6 cells, 51,529 unknowns and two solves in about 5 s with `faer`,
+within 0.3 percentage points of the test's values. The solver adopted afterwards should take
+about 3 s by the ratio in Node, but that hasn't been timed on the page on wall power. The first solve after loading took about 20 s, in a
+hidden browser pane, and milestone 3's first solve was also about 4 times its later ones. The
+cause hasn't been measured: WebAssembly compiling its hot loops is the likely one. The slab takes about 3 s. Spectra would need many
+solves, so the page shows one wavelength at a time, and T can't yet be plotted against
+frequency there. Download: 283 KB gzipped.
 
 ### Milestone 5: 2D inverse design
 
@@ -224,36 +249,100 @@ waveguide cross-sections, which are the first real need for Nédélec elements.
 
 ## Own sparse solver
 
-**Decided 2026-11-01: keep `faer`, and revisit after milestone 4.** Then benchmark a
-prototype against `faer` on real 2D matrices, including near-resonance waveguide and cavity
-problems. Keep `faer` as a test reference either way.
+**Adopted 2026-11-01, in `sparse.rs`.** The prototype and its benchmarks are in
+[`probe-sparse/`](probe-sparse/). It's a multifrontal LU with geometric nested dissection, 289
+lines against the 250–400 estimated. It takes separators from the matrix's graph, not the
+grid, so Delaunay flips and periodic ties need no special care.
 
-Speed isn't the reason to do this. At 2,500 unknowns, factorization is 45 ms of a 476 ms
-band diagram, where Lanczos dominates, and driven solves at about 19,000 unknowns already
-take about 260 ms on the page. The reasons are the tutorial, the download and having no
-major runtime dependency. Measure `faer`'s real share of the download first. A Cholesky-only
-version isn't worth it, because driven solves would still need `faer`.
+This was to be adopted "if it's within a few times of `faer` in WebAssembly and stays reliable
+on hard matrices". It's faster than that asked for, and reliable with refinement:
 
-Near curves, Delaunay flips can create edges that jump over a grid line, and periodic ties
-make the mesh a torus, so separators aren't quite just rows and columns.
+- **Speed:** factoring is 2–11× faster than `faer`'s LU in WebAssembly. Band diagrams are the
+  exception, about 1.4–1.5× slower as whole requests, since `faer`'s Cholesky is far quicker there.
+- **Reliability:** all 38 physics tests pass unchanged on it, including the Mekis bends and the
+  Mie series. Q and T agree with `faer` to about 1e-13, including Q = 740,000.
+- **Download:** 283 KB to 184 KB gzipped, 99 KB less. `faer` itself is 114 KB, not the 88 KB
+  estimated, measured by building with a stub in its place.
+- **Memory:** peak use during factoring is 30–60% of `faer` LU's, which could raise the
+  160,000 limit. That hasn't been tried.
+- **Cost:** about 230 lines of Rust net, to 2,372. Readers can now read everything.
 
-**Recommended candidate:** a multifrontal LU with geometric nested dissection, estimated
-at 250–400 lines. On our structured grid the separators are just rows and columns of
-nodes, and the elimination tree can be reused across wavelengths, k-points and optimizer
-iterations.
+What went with it:
 
-- **Adopt it if** it's within a few times of `faer` in WebAssembly and stays reliable on
-  hard matrices, such as lossless structures near resonance.
-- **Main risk:** pivoting, for driven problems. Pivoting only inside each dense block can
-  fail on those matrices, and deferring bad pivots is where the complexity lives.
-  Eigenproblems are now positive definite and don't pivot, so they're the easy case.
-- **Blocker:** an unstructured mesh would remove the easy separators.
-- **Why bother:** about 88 KB less to download, no major runtime dependency, readers
-  can still read the whole solver, and it would make a strong tutorial chapter following
-  chapter 5's RCM.
+1. **Iterative refinement**, only when a front reports a weak pivot. The stress test below shows
+   why it's required, and that flag was set in every case needing it.
+2. **`faer` as a dev-dependency**, as an independent test reference.
 
-A simple entry-by-entry sparse LU (about 200 lines) is likely several times slower than
-`faer`. Matching `faer` outright isn't worth attempting.
+**Still open:** a Hermitian path, about 40 lines, no pivoting and half the storage, to win back
+band diagrams. The saving hasn't been measured. Open problem 4 should also be simple now, since
+transposed solves are in our own code, though nothing needs them yet.
+
+### Measurements
+
+Each case is a real matrix from the solver. "Ours" includes its analysis. Native times
+are on an Apple Silicon Mac, single-threaded. WebAssembly is in Node, and includes one solve
+and a residual check. Peak memory counts allocations during factoring.
+
+| Matrix | Unknowns | Factor, native: `faer` LU / ours | Peak MB: `faer` LU / ours | Wasm: `faer` LU / ours |
+|---|---:|---:|---:|---:|
+| Sharp bend, a/6, 5a layer | 51,529 | 588 / 347 ms | 620 / 199 | 1,453 / 405 ms |
+| Sharp bend, a/8, 6a layer | 112,225 | 1,725 / 1,272 ms | 1,339 / 494 | 4,484 / 1,385 ms |
+| 7 x 7 cavity, real k at its peak | 27,889 | 165 / 182 ms | 181 / 108 | 406 / 202 ms |
+| 13 x 13 cavity, on its pole | 82,369 | 1,056 / 787 ms | 785 / 357 | 2,844 / 885 ms |
+| 5 x 5 supercell, shift inside the gap | 25,600 | 761 / 236 ms | 376 / 114 | 2,144 / 258 ms |
+| 5 x 5 supercell, shift on the mode | 25,600 | 761 / 237 ms | 376 / 114 | 2,141 / 258 ms |
+| Empty periodic box near a mode | 40,000 | 1,946 / 464 ms | 678 / 200 | 5,622 / 502 ms |
+| Rod lattice at M, definite | 10,000 | 146 / 59 ms | 103 / 42 | 394 / 66 ms |
+| Rod lattice at M, definite | 40,000 | 1,251 / 467 ms | 636 / 200 | 3,500 / 501 ms |
+
+The one native loss is the 7 x 7 cavity, by 10%. On the two definite cases, `faer`'s Cholesky
+took 11 and 63 ms, and 18 and 73 MB, far ahead of both LUs. Solves were 1.2–2× faster than `faer`
+LU's, but 1.7–2.2× slower than its Cholesky's, which is what costs band diagrams. Backward errors
+were 7e-17 to 2.5e-15 for both, with no pivot replaced, and one weak pivot, in two cases.
+
+Whole requests in WebAssembly, with the core's own code on each, settled after warming up. A
+rerun of all builds side by side, on battery, read about 1.5× slower throughout, with the same
+ratios, and the adopted solver matched the prototype within about 4%, so refinement costs nothing
+measurable on these:
+
+| Request | Unknowns | `faer` | Ours |
+|---|---:|---:|---:|
+| Band diagram, the page's default | 2,500 | 497 ms | 684 ms |
+| Band diagram | 10,000 | 2,479 ms | 3,654 ms |
+| Box, 6 lowest modes | 2,401 | 36 ms | 48 ms |
+| Supercell near a target | 10,000 | 980 ms | 432 ms |
+| Leaky 5 x 5, the page's default | 16,129 | 999 ms | 611 ms |
+| Leaky 13 x 13 | 82,369 | 20,424 ms | 7,108 ms |
+| Plane-wave scattering, the page's default | 19,321 | 257 ms | 117 ms |
+| Sharp bend a/6, one of its two solves | 51,529 | 2,433 ms | 1,407 ms |
+
+About 1 s of that last 1.4 s is outside the factor and solve. Meshing around 420 rods, assembly
+and monitors weren't separated, and they're the next thing to look at for bends. Warm-up is
+real too: the first factor in a fresh process took 1,161 ms against 405 ms afterwards, which
+probably explains the slow first solve on the page.
+
+### The main risk: pivoting only inside each front
+
+A matrix can be fine as a whole while a subdomain, walled in by its separator, sits on a
+resonance of its own. Elimination there meets a nearly singular block, and no later unknown can
+help. `src/bin/stress.rs` builds this on a 9,801-unknown closed box, shifted to within `delta` of
+a subdomain's eigenvalue. The nearest global mode is 0.1–6% away:
+
+| `delta` | `faer` residual | Ours | Refined once | Refined twice |
+|---:|---:|---:|---:|---:|
+| 1e-2 | 3e-16 | 3e-16 to 1e-15 | 2e-16 | 2e-16 |
+| 1e-6 | 3e-16 | 3e-13 to 1e-12 | 2e-16 | 1e-16 |
+| 1e-10 | 3e-16 | 8e-9 to 2e-8 | 2e-16 to 2e-15 | 1e-16 |
+| 1e-12 | 3e-16 | 6e-7 to 9e-7 | 3e-13 to 7e-12 | 2e-16 to 1e-15 |
+| 1e-14 | 3e-16 | 2e-5 to 9e-5 | 4e-10 to 4e-7 | 2e-14 to 8e-9 |
+| 0 | 3e-16 | 1e-5 to 8e-5 | 5e-10 to 2e-7 | 2e-14 to 2e-10 |
+
+So error grows as about `1e-18 / delta` without refinement, and two steps recover it, except
+when tuned to within about 1e-14. Reaching that takes deliberately setting a shift from a
+subdomain's own eigenvalue, and a real structure would need that coincidence on one of its many
+blocks. Delayed pivots would remove the risk altogether, at a real cost in complexity, and
+this doesn't justify them. The stress test covers `E_z` on one mesh, so `H_z` and meshes
+tuned this way remain untested, though the physics tests cover `H_z` in ordinary use.
 
 ## Tutorial changes
 
@@ -275,3 +364,21 @@ the output copied next to it as `sparse.wasm`:
 ```bash
 cd plans/probe-2d && CARGO_TARGET_DIR=/tmp/eigenmenno-probe RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown --lib --features sparse
 ```
+
+For the sparse solver comparison, from `plans/probe-sparse`. Give an output directory outside
+the repository. `bench` covers the native table, and `stress` the risk above:
+
+```bash
+CARGO_TARGET_DIR=/tmp/eigenmenno-sparse cargo run --release --bin bench
+```
+
+```bash
+CARGO_TARGET_DIR=/tmp/eigenmenno-sparse cargo run --release --bin stress
+```
+
+```bash
+CARGO_TARGET_DIR=/tmp/eigenmenno-sparse RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown --lib && node run.mjs /tmp/eigenmenno-sparse/wasm32-unknown-unknown/release/probe_sparse.wasm
+```
+
+The whole-request table came from swapping the prototype in for `sparse.rs` in a scratch copy of
+the core, before it was adopted. The prototype's tiny-pivot and stress hooks aren't in the core.

@@ -146,11 +146,24 @@ pub enum Analysis2d {
 
 /// `Line` is a current filament at a point. `PlaneWave` travels at `angle_deg` from the
 /// x-axis through the background, with amplitude 1, and the field returned is the total.
+/// `Port` launches a layered guide's strongest mode both ways along x, from a current
+/// sheet on the line at `x` between `y0` and `y1`, across which the guide must be layered.
 #[derive(Deserialize, Clone, Copy)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Source2d {
     Line { x: f64, y: f64 },
     PlaneWave { angle_deg: f64 },
+    Port { x: f64, y0: f64, y1: f64 },
+}
+
+/// A straight line that power crossing it is measured along. Power counts as positive
+/// when it crosses from the left of the direction `(x0, y0)` to `(x1, y1)` to the right.
+#[derive(Deserialize, Clone, Copy)]
+pub struct Monitor {
+    pub x0: f64,
+    pub y0: f64,
+    pub x1: f64,
+    pub y1: f64,
 }
 
 /// A 2D problem on `[0, width] x [0, height]`. `cell` is the largest grid spacing.
@@ -164,6 +177,9 @@ pub struct Request2d {
     pub polarization: Polarization,
     pub walls: Boundary,
     pub analysis: Analysis2d,
+    /// Lines to measure power along, for driven solves.
+    #[serde(default)]
+    pub monitors: Vec<Monitor>,
 }
 
 #[derive(Deserialize, Clone)]

@@ -2,7 +2,7 @@
 
 This tutorial explains the finite element method (FEM) using Eigenmenno's own
 source code. Each chapter takes one idea, derives it, and points at the few lines
-that implement it. The whole solver is about 2,000 lines of Rust, so you can read
+that implement it. The whole solver is about 2,400 lines of Rust, so you can read
 all of it. The 1D chapters cover about 1,100 of those.
 
 You need calculus (integration by parts) and basic linear algebra (matrices,

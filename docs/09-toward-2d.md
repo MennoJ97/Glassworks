@@ -1,7 +1,7 @@
 # 9. Toward 2D
 
-The solver was written with 2D in mind. Scalar modes, open scattering and leaky cavities on
-triangles now exist, in [`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs). Vector fields don't
+The solver was written with 2D in mind. Scalar modes, open scattering, leaky cavities and
+waveguides on triangles now exist, in [`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs). Vector fields don't
 yet, so that part of this chapter describes what would change, and why they need new
 ideas.
 
@@ -20,7 +20,7 @@ identical. Here's what changed:
 | `mesh.rs` | Triangles, with `verts_per_cell = 3`. A structured grid has its nodes snapped onto shape boundaries, which needs no mesher and keeps opposite edges matched for periodic ties. A general mesher such as [Triangle](https://www.cs.cmu.edu/~quake/triangle.html) ([Shewchuk 1996](10-references.md#shewchuk-1996)) would handle harder geometry. |
 | `space.rs` | A new `H1Triangle` implementing `Space`. Its local matrices use gradients on the triangle rather than the scale factor $h/2$. |
 | `assemble.rs` | Assembly is unchanged, because it only sees the `Space` trait. `DofMap` takes many periodic ties rather than one. |
-| `banded.rs` | Kept for 1D. 2D uses `SparseCholesky`, behind the same small `Factors` trait (see below). |
+| `banded.rs` | Kept for 1D. 2D uses `SparseLu`, behind the same small `Factors` trait (see below). |
 | `eigen.rs` | Nothing, apart from taking any `Factors`. |
 | `solve2d.rs` | New: the 2D problems, with boundaries as edges rather than two end points. |
 | Website | A table of shapes, and a triangle renderer alongside `FieldPlot`. |
@@ -36,17 +36,34 @@ banded LU costs $O(N^2)$. For 40,000 unknowns it took 9.7 s and 1.5 GB, and by 1
 needed 12 GB, more than a browser tab can address.
 
 Sparse solvers do better using **nested dissection**, cutting the mesh recursively so
-elimination creates far less fill
-([George 1973](10-references.md#george-1973)). `faer`'s sparse LU limits fill in the same spirit, and it took 0.31 s
-on a similar matrix with those 40,000 unknowns, about 30 times faster.
+elimination creates far less fill ([George 1973](10-references.md#george-1973)).
+[`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) does this in about 290 lines:
 
-Eigenproblems can do better still. With the shift below every eigenvalue, $S - \sigma Q$ is
-Hermitian positive definite, so a Cholesky factorization works, with no pivoting and half
-the storage. Over a band diagram it took about a third of the time of sparse LU. The
-fill pattern is also the same at every wavevector, because Bloch phases only change the
-values, so the analysis can be reused.
-[`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) wraps this in `faer`, at the cost of
-more to download.
+1. Split the unknowns in two by position, along the longer side. Whatever on the left touches
+   the right becomes a **separator**. The two parts then don't interact, so each can be
+   eliminated without touching the other. Reading separators from the matrix, not the grid,
+   means flipped edges and periodic ties need no special care. A tie just makes the separator
+   two lines long.
+2. Number each part first and its separator last, recursively. This **ordering** depends only
+   on where the nonzeros are, so a band diagram computes it once for all its wavevectors.
+3. Eliminate each separator in a dense **front**, which holds its own matrix entries, plus
+   whatever its two parts left behind. Eliminating it leaves a smaller dense block for
+   its parent. This is the **multifrontal** method.
+
+Fronts stay small until near the end, and dense loops run fast. Around 40,000 unknowns, this
+factored in about 0.5 s in WebAssembly, against about 3.5 to 5.6 s for
+[`faer`](https://docs.rs/faer)'s general sparse LU, which has to find its ordering with no
+knowledge of the geometry. `faer`'s Cholesky is still the faster on band diagrams, where the
+matrix is positive definite, and needs no pivoting and half the storage. This solver doesn't
+use that yet, which makes band diagrams about 1.4 times slower than with `faer`.
+
+The cost is in the pivoting. A pivot can only come from a front's own unknowns, because using
+one from elsewhere would change the fronts that follow. A part walled in by its separator can
+sit on a resonance of its own, and then its front has only a poor pivot, even though the whole
+matrix is fine. `sparse.rs` notes any weak pivot, and then corrects each solve with two steps of
+**iterative refinement**: find what the answer gets wrong, solve for that, and add it.
+`sparse_lu_recovers_when_a_part_sits_on_its_own_resonance` builds this case on purpose: the
+error is 0.12 without refinement and 9e-13 with it.
 
 ## Why vector fields are different
 
@@ -185,6 +202,61 @@ With open walls, more crystal blocks more leakage, while the mode's shape stays 
 These use 12 cells per period, and finer meshes move $Q$ by about 4%. So in 2D, $Q/V$ still
 changes mostly through $Q$ here, but $V$ now has a real meaning: this mode's area is smaller
 than one lattice cell.
+
+## Waveguides: power around a corner
+
+To ask how much light gets around a bend, you need to launch one guided mode, and to measure
+power. Both are short.
+
+A **port** is a current sheet with the mode's shape. The 1D solver from chapter 7 already
+finds a layered guide's modes, so `port_mode` reads the layers along the sheet and asks it.
+Modes are orthogonal with weight $p$, so a sheet of $p\,\phi(y)$ excites only that mode, with
+
+$$u = -\frac{k_0}{2\beta}\,\phi(y)\,e^{i\beta|x - x_0|},$$
+
+going both ways. The half going backwards leaves through the absorbing layer.
+
+A **monitor** integrates the Poynting flux across a line,
+
+$$P = \frac{1}{2k_0}\int p\,\mathrm{Im}\!\left(u^*\frac{\partial u}{\partial n}\right)ds.$$
+
+There's a trap here. A second-order element's derivative is least accurate at the edge of a
+cell, which is exactly where a line along the grid sits: this read 2% high on a slab. Power
+is conserved across a thin strip, so `monitor_power` averages over two cells instead. Around
+a line source, the power crossing a closed loop then matches $F/4$, with the LDOS $F$ from
+earlier, within 0.3%.
+
+### Example: a sharp bend
+
+[Mekis et al. 1996](10-references.md#mekis-1996) showed that a photonic crystal can steer light
+around a corner of zero radius. Their crystal has rods of index 3.4 and radius $0.18a$ on a
+square lattice, with a row removed to make the guide. No extended mode exists in the band gap
+for light to radiate into, so what doesn't get through must come back. A line source in the
+guide excites the one guided mode, and transmission is the power through a monitor, divided by
+the same source's power through a straight guide:
+
+| Check | Mekis et al. | This solver |
+|---|---:|---:|
+| Guided band at $k = 0$ | 0.312 | 0.312 |
+| Top of the gap, reached at $k = 0.38$ | 0.443 | 0.445 |
+| Sharp bend at $\omega = 0.353$ | 98% at most | 97.9% |
+| Sharp bend at $\omega = 0.392$ | over 95% | 96.6% |
+| Sharp bend at $\omega = 0.403$ | about 95% | 95.8% |
+| Sharp bend at $\omega = 0.42$, read from their figure | about 90% | 90.8% |
+| Stepped bend at $\omega = 0.353$ | 100% | 99.8% |
+| Slab of index 3.5, sharp bend | 30% at most | 23% |
+
+Frequencies are in units of $a/\lambda$. They computed these with a time-domain method, so
+the agreement is between two quite different solvers. The slab row is the weakest: they don't
+give that guide's width, so this uses a width of $0.143\lambda$, from their other bend. Thinner
+slabs do exceed 30%, reaching 57% at $0.06\lambda$, because the mode is then mostly in the air.
+A wider monitor also collects some of the radiated light, which reads about 18% to 23%.
+
+Getting this right took a thicker layer than free space needs. Rods running through a thin
+layer reflect the guided mode: 2% of its power at $2a$ of layer, which formed a resonance with
+the bend and gave a transmission over 100%. At $6a$ that's gone at these frequencies, and asking
+for a weaker absorption also helps. Close to the guide's cutoff, below about $\omega = 0.35$,
+light travels slowly enough that reflection returns, so these numbers shouldn't be trusted there.
 
 ## When the browser isn't the right tool
 

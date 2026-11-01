@@ -39,7 +39,7 @@ impl Outline {
     }
 
     /// Negative inside and positive outside. Only its sign and rough size are used.
-    fn level(&self, px: f64, py: f64) -> f64 {
+    pub(crate) fn level(&self, px: f64, py: f64) -> f64 {
         match *self {
             Outline::Circle { x, y, r } => (px - x).hypot(py - y) - r,
             Outline::Rect { x0, y0, x1, y1 } => (x0 - px).max(px - x1).max(y0 - py).max(py - y1),

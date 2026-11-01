@@ -4,7 +4,7 @@ A small finite element solver for Maxwell eigenmode and driven problems. It runs
 entirely in the visitor's browser, so a website hosting it only serves static files
 and does no computing.
 
-It handles 1D layered structures, and 2D eigenmodes, scattering and leaky cavities, with [more of 2D planned](plans/2d-solver.md):
+It handles 1D layered structures, and 2D eigenmodes, scattering, leaky cavities and waveguide bends, with [more of 2D planned](plans/2d-solver.md):
 
 - **Resonances** of closed structures
 - **Photonic band diagrams** of periodic structures
@@ -13,6 +13,7 @@ It handles 1D layered structures, and 2D eigenmodes, scattering and leaky caviti
 - **2D scattering** of a plane wave or line source by shapes in open space, with the local
   density of states at a source, optionally averaged over a bandwidth
 - **2D leaky modes**, with their quality factor Q and mode area V
+- **2D waveguide bends**, from a port or line source to a power monitor
 - **Reflection and transmission spectra**, including lossy layers and oblique incidence
 - **Fields at a single wavelength**, from a plane wave or a current sheet
 - **Inverse design** of mirrors and broadband coatings, using adjoint gradients of
@@ -77,7 +78,7 @@ crates/eigenmenno-core   The solver, with no browser dependencies
   space.rs               Elements (the Space trait is the 2D extension point)
   assemble.rs            Sparse matrices and boundary constraints
   banded.rs              Banded LU and RCM reordering, for 1D
-  sparse.rs              Sparse Cholesky and LU through faer, for 2D
+  sparse.rs              Multifrontal sparse LU with nested dissection, for 2D
   eigen.rs               Shift-invert Lanczos
   problem.rs             The JSON problem description
   solve.rs               The physics: from a request to fields
@@ -97,17 +98,17 @@ scripts/build-docs.mjs   Turns docs/ into web/learn, with equations as MathML
 
 ## Why it's built this way
 
-The 1D linear algebra is handwritten because 1D doesn't need more, and a banded LU is
-faster there than a general sparse library. See
-[chapter 5](docs/05-linear-systems.md) for measurements. It also keeps the code short
-enough to read as a tutorial. `faer` solves 2D problems, where bandwidth grows and a sparse
-solver wins by about 30 times at 40,000 unknowns, and it's the independent reference in
-the 1D tests.
+All the linear algebra is handwritten, so you can read the whole solver. In 1D a banded LU
+is faster than a general sparse library, as [chapter 5](docs/05-linear-systems.md) measures.
+In 2D, where bandwidth grows, `sparse.rs` uses the mesh's geometry to cut the fill. In
+WebAssembly it beat `faer`'s general sparse LU on these matrices, though `faer`'s Cholesky is
+still faster for band diagrams. `faer` is a dependency of the tests only, as an independent
+reference.
 
 | If you need | Use |
 |---|---|
 | A readable solver, or modes and spectra in a browser | This project |
-| Fast sparse linear algebra or eigensolvers in Rust | [`faer`](https://docs.rs/faer), which this project uses for 2D |
+| Fast sparse linear algebra or eigensolvers in Rust | [`faer`](https://docs.rs/faer), which this project tests against |
 | A serious FEM library with Nédélec elements | [MFEM](https://mfem.org), [NGSolve](https://ngsolve.org), or [FEniCSx](https://fenicsproject.org) |
 | Large 3D electromagnetic eigenmode or driven simulations | [Palace](https://github.com/awslabs/palace) |
 
