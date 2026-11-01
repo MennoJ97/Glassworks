@@ -4,7 +4,7 @@ A small finite element solver for Maxwell eigenmode and driven problems. It runs
 entirely in the visitor's browser, so a website hosting it only serves static files
 and does no computing.
 
-It currently handles 1D layered structures, with 2D planned for later:
+It currently handles 1D layered structures, with 2D [planned](plans/2d-solver.md) for later:
 
 - **Resonances** of closed structures
 - **Photonic band diagrams** of periodic structures

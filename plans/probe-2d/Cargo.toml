@@ -1,0 +1,18 @@
+[package]
+name = "proto2d"
+version = "0.1.0"
+edition = "2021"
+[lib]
+crate-type = ["rlib", "cdylib"]
+[features]
+default = []
+sparse = ["faer"]
+[dependencies]
+eigenmenno-core = { path = "../../crates/eigenmenno-core" }
+faer = { version = "0.24", default-features = false, features = ["std", "linalg", "sparse", "sparse-linalg"], optional = true }
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+[workspace]
