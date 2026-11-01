@@ -2,28 +2,85 @@
 // of thin pixels, each with a density that mixes two materials. The solver supplies
 // the adjoint gradient; everything else here is optimization, not physics.
 
-import { MATERIALS } from './model.js';
+import { MATERIALS, toShape } from './model.js';
 
 const PIXEL = 0.005;
 const AMBIENT = 0.3;
 const SHARPNESS = [1, 2, 4, 8, 16, 32, 64, 128];
 const ITERATIONS_PER_STAGE = 40;
-export const TOTAL_ITERATIONS = SHARPNESS.length * ITERATIONS_PER_STAGE;
+// A 2D solve costs far more than a 1D one, and these converge sooner.
+const stageLength = (s) => (s.analysis === 'bend2d' ? 25 : ITERATIONS_PER_STAGE);
+export const totalIterations = (s) => SHARPNESS.length * stageLength(s);
 export const STAGES = SHARPNESS.map((beta, i) => ({ frame: i * ITERATIONS_PER_STAGE, name: `β ${beta}` }));
-export const sharpnessAt = (frame) => SHARPNESS[Math.floor(frame / ITERATIONS_PER_STAGE)] ?? Infinity;
+export const sharpnessAt = (s, frame) => SHARPNESS[Math.floor(frame / stageLength(s))] ?? Infinity;
 
 const material = (name) => MATERIALS.find((m) => m.name === name);
 const eps = (name) => material(name).n ** 2;
 const solverLayer = (thickness, e) => ({ thickness, eps: [e, 0], mu: [1, 0] });
 
-export const pixelCount = (d) => Math.max(1, Math.round(d.thickness / PIXEL));
+export const pixelCount = (d) => (d.thickness === undefined ? BEND.pixels ** 2 : Math.max(1, Math.round(d.thickness / PIXEL)));
+
+// A slab of index 3.5 turning a corner through a square of pixels, in wavelengths of about 1.
+// Everything lies on a grid of 1/24, so each pixel is exactly a pair of triangles.
+const BEND = { pixels: 24, x0: 1, y0: 0.5, size: 1, width: 0.125, domain: 2.5, n: 3.5, pml: 0.5, span: 0.35 };
+const bendCentre = { x: BEND.x0 + BEND.size / 2, y: BEND.y0 + BEND.size / 2 };
+const rectangle = (x0, y0, x1, y1) => ({ type: 'rect', x: (x0 + x1) / 2, y: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, n: BEND.n });
+
+// What the plot needs, and each solve shares.
+export function bendGeometry(straight = false) {
+  const { x0, y0, size, width, domain, span } = BEND;
+  const { x, y } = bendCentre;
+  const far = domain + 3;
+  const shapes = straight
+    ? [rectangle(-3, y - width / 2, far, y + width / 2)]
+    : [rectangle(-3, y - width / 2, x0, y + width / 2), rectangle(x - width / 2, y0 + size, x + width / 2, far)];
+  const end = domain - 0.4;
+  return {
+    size: domain, shapes,
+    source: { type: 'port', x: 0.4, y0: y - 0.7, y1: y + 0.7 },
+    mark: [0.4, y],
+    monitor: straight ? { x0: end, y0: y - span, x1: end, y1: y + span } : { x0: x + span, y0: end, x1: x - span, y1: end },
+    region: { x0, y0, width: size, height: size, nx: BEND.pixels, ny: BEND.pixels },
+  };
+}
+
+function bendRequest(wavelength, straight, rho) {
+  const g = bendGeometry(straight);
+  const n2 = BEND.n ** 2;
+  return {
+    width: g.size,
+    height: g.size,
+    cell: BEND.size / BEND.pixels,
+    background: { eps: 1, mu: 1 },
+    shapes: g.shapes.map(toShape),
+    polarization: 'te',
+    walls: 'absorbing',
+    monitors: [g.monitor],
+    analysis: { type: 'driven', wavelength, source: g.source, pml: BEND.pml },
+    ...(rho ? { density: { ...g.region, eps_low: 1, eps_high: n2, rho: Array.from(rho) } } : {}),
+  };
+}
+
+// A straight guide's power at each wavelength, by its `k0`, which turns power into transmission.
+const straightPower = new Map();
+
+// Solves the straight guide once for these wavelengths. Returns a reply holding any error.
+export async function prepareDesign(s, solve) {
+  if (s.analysis !== 'bend2d') return {};
+  const wavelengths = goalWavelengths(s);
+  const reply = await solve(wavelengths.map((wavelength) => bendRequest(wavelength, true)));
+  if (!reply || reply.error) return reply;
+  reply.results.forEach((r) => straightPower.set(r.meta.fields[0].k0, r.channels.monitors[0]));
+  return reply;
+}
 
 // Goal wavelengths, with the centre last so the plotted field comes from it.
 function goalWavelengths(s) {
   if (s.analysis === 'mirror') return [s.wavelength];
-  const { from, to } = s.design.antireflection;
-  const wavelengths = Array.from({ length: 11 }, (_, i) => from + ((to - from) * i) / 10);
-  wavelengths.push(wavelengths.splice(5, 1)[0]);
+  const { from, to } = s.design[s.analysis];
+  const count = s.analysis === 'bend2d' ? 3 : 11;
+  const wavelengths = Array.from({ length: count }, (_, i) => from + ((to - from) * i) / (count - 1));
+  wavelengths.push(wavelengths.splice((count - 1) / 2, 1)[0]);
   return wavelengths;
 }
 
@@ -49,13 +106,22 @@ function pixelLayers(d, rho) {
   ];
 }
 
-export const gradientRequests = (s, rho) => requests(s, pixelLayers(s.design[s.analysis], rho),
-  (wavelength) => ({ type: 'driven_gradient', wavelength, angle_deg: s.angle }));
+export const gradientRequests = (s, rho) => (s.analysis === 'bend2d'
+  ? goalWavelengths(s).map((wavelength) => bendRequest(wavelength, false, rho))
+  : requests(s, pixelLayers(s.design[s.analysis], rho),
+    (wavelength) => ({ type: 'driven_gradient', wavelength, angle_deg: s.angle })));
 
-export const meanReflection = (results) => results.reduce((sum, r) => sum + r.meta.fields[0].power[0], 0) / results.length;
+// What a design is judged by: reflection for layers, and transmission for a bend.
+const measure = ({ meta, channels }) => (channels.monitors
+  ? channels.monitors[0] / straightPower.get(meta.fields[0].k0)
+  : meta.fields[0].power[0]);
+export const meanReflection = (results) => results.reduce((sum, r) => sum + measure(r), 0) / results.length;
 
 // The structures a designer would try by hand, solved at the same wavelengths.
 export function references(s) {
+  if (s.analysis === 'bend2d') {
+    return [{ name: 'Plain corner', requests: gradientRequests(s, new Float64Array(BEND.pixels ** 2)) }];
+  }
   const d = s.design[s.analysis];
   const quarter = (name, wavelength) => wavelength / (4 * material(name).n);
   const wrap = (inner) => [
@@ -122,8 +188,33 @@ function coneFilter(n, radius) {
   };
 }
 
+// The same filter over a rectangle of pixels, stored by rows.
+export function coneFilter2d(nx, ny, radius) {
+  const reach = Math.ceil(radius) - 1;
+  const neighbours = Array.from({ length: nx * ny }, (_, i) => {
+    const [cx, cy] = [i % nx, Math.floor(i / nx)];
+    const list = [];
+    for (let y = Math.max(0, cy - reach); y <= Math.min(ny - 1, cy + reach); y++) {
+      for (let x = Math.max(0, cx - reach); x <= Math.min(nx - 1, cx + reach); x++) {
+        const weight = radius - Math.hypot(x - cx, y - cy);
+        if (weight > 0) list.push([x + y * nx, weight]);
+      }
+    }
+    const total = list.reduce((sum, [, w]) => sum + w, 0);
+    return list.map(([j, w]) => [j, w / total]);
+  });
+  return {
+    apply: (x) => Float64Array.from(neighbours, (list) => list.reduce((sum, [j, w]) => sum + w * x[j], 0)),
+    adjoint(g) {
+      const out = new Float64Array(nx * ny);
+      neighbours.forEach((list, i) => list.forEach(([j, w]) => { out[j] += w * g[i]; }));
+      return out;
+    },
+  };
+}
+
 // Pushes densities toward 0 or 1. Larger `beta` is sharper.
-function project(x, beta) {
+export function project(x, beta) {
   const half = Math.tanh(beta / 2);
   const rho = x.map((v) => (half + Math.tanh(beta * (v - 0.5))) / (2 * half));
   const slope = x.map((v) => beta / (2 * half * Math.cosh(beta * (v - 0.5)) ** 2));
@@ -132,7 +223,7 @@ function project(x, beta) {
 
 // Svanberg's method of moving asymptotes, for bounds only. Each step minimizes a
 // convex approximation, which has a closed form when there are no other constraints.
-class Mma {
+export class Mma {
   // `move` is the largest change to any variable in one step.
   constructor(move) {
     this.move = move;
@@ -171,24 +262,30 @@ class Mma {
 // reply, or null if a newer request replaced it. Returns a reply holding any error.
 export async function optimize(s, solve, onStep) {
   const d = s.design[s.analysis];
+  const bend = s.analysis === 'bend2d';
   const n = pixelCount(d);
-  const filter = coneFilter(n, Math.max(d.radius / (PIXEL * 1000), 1));
-  const contrast = eps(d.high) - eps(d.low);
+  const filter = bend ? coneFilter2d(BEND.pixels, BEND.pixels, d.radius) : coneFilter(n, Math.max(d.radius / (PIXEL * 1000), 1));
+  const contrast = bend ? 0 : eps(d.high) - eps(d.low);
   const direction = s.analysis === 'mirror' ? -1 : 1;
+  const prepared = await prepareDesign(s, solve);
+  if (!prepared || prepared.error) return prepared;
   let x = randomStart(n, d.seed);
   let iteration = 0;
   for (const beta of SHARPNESS) {
     // Projection amplifies a change in x by about beta, so steps shrink to match.
     const mma = new Mma(Math.min(0.1, 0.2 / beta));
-    for (let i = 0; i < ITERATIONS_PER_STAGE; i++) {
+    for (let i = 0; i < stageLength(s); i++) {
       const { rho, slope } = project(filter.apply(x), beta);
       const reply = await solve(gradientRequests(s, rho));
       if (!reply || reply.error) return reply;
       if (!onStep({ rho, reply, iteration: ++iteration, beta })) return null;
       const gradient = new Float64Array(n);
-      for (const { channels } of reply.results) {
-        const dR = channels['dR/deps_re'];
-        for (let k = 0; k < n; k++) gradient[k] += (direction * dR[k] * contrast * slope[k]) / reply.results.length;
+      for (const { channels, meta } of reply.results) {
+        // The bend's goal is more power through, so minimize its negative.
+        const [slopes, scale] = bend
+          ? [channels.gradient, -1 / straightPower.get(meta.fields[0].k0)]
+          : [channels['dR/deps_re'], direction * contrast];
+        for (let k = 0; k < n; k++) gradient[k] += (scale * slopes[k] * slope[k]) / reply.results.length;
       }
       x = mma.step(x, filter.adjoint(gradient));
     }

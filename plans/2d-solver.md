@@ -4,9 +4,10 @@ The agreed plan for adding 2D. Pick up at the first milestone that isn't marked 
 and update this file as things land. Delete it, with `plans/probe-2d/` and `plans/probe-sparse/`, once the last
 milestone is finished and the tutorial covers what's here.
 
-**Status (2026-11-01):** milestones 1 to 4 are built. Cavities, band diagrams, open
-scattering, leaky modes and waveguide bends run on the page, tested against exact and
-independent results. **Next up: milestone 5.** The solver numbers below come from the throwaway probe in
+**Status (2026-11-01):** milestones 1 to 5 are built, apart from one optional item. Cavities,
+band diagrams, open scattering, leaky modes, waveguide bends and inverse design run on the page,
+tested against exact and independent results. **What's left is a proper 2D tutorial chapter,
+and optionally optimizing the cavity.** The solver numbers below come from the throwaway probe in
 [`probe-2d/`](probe-2d/).
 
 ## Decisions
@@ -24,7 +25,7 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Open boundaries | PML | Exact local conditions don't exist in 2D (chapter 9) |
 | Leaky modes | No non-Hermitian eigensolver. One driven solve at complex frequency for LDOS, and a secant search on `1/u_0` for Q | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for. It took 6 or 7 solves, and found Q up to 680,000 |
 | Upper size | The page refuses above about 160,000 unknowns | 638,401 failed in WebAssembly, probably out of memory |
-| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, about 2,000 after milestone 3, and about 2,150 after milestone 4 | State the cost before adding more, and keep the tutorial's line count current |
+| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, about 2,000 after milestone 3, about 2,150 after milestone 4, about 2,400 with our own sparse solver, and about 2,460 after milestone 5 | State the cost before adding more, and keep the tutorial's line count current |
 | Own sparse solver | Adopted in `sparse.rs`. `faer` is now only for tests (see below) | It's 2–6× faster than `faer` on driven problems in WebAssembly and within 8% on band diagrams, with 99 KB less to download. Refinement covers its one real risk |
 
 ## Measurements
@@ -117,8 +118,7 @@ high-index material will need refining, which the probe didn't test.
 
 | Module | Change |
 |---|---|
-| `solve2d.rs`, later | Gradients |
-| Website, later | Dragging shapes, and the `design.js` optimizer with a 2D filter |
+| Website, later | Dragging shapes |
 | Tutorial | Add 2D chapters as each milestone lands. Chapter 9 is current |
 
 Milestone 1 added `Mesh::fitted_grid`, `H1Triangle`, many-tie `DofMap`, the `Factors` trait
@@ -233,13 +233,40 @@ frequency there. Download: 283 KB gzipped.
 
 ### Milestone 5: 2D inverse design
 
-- [ ] Reuse `design.js` with a 2D filter, and density per cell. Add 2D adjoint gradients
-      in the solver, and keep `A` symmetric for PML problems.
-- [ ] **Example 6: topology-optimized bend.** Compare against the hand-designed bend
-      from example 5. [Jensen & Sigmund 2004](https://doi.org/10.1063/1.1688450) is the
-      precedent.
+- [x] Reuse `design.js` with a 2D filter, and density per cell. Add 2D adjoint gradients
+      in the solver, and keep `A` symmetric for PML problems. Checked against finite differences,
+      to 7 digits. It took about 75 lines of Rust.
+- [x] **Example 6: topology-optimized bend.** Compared against the hand-designed bend from
+      example 5, in chapter 9. [Jensen & Sigmund 2004](https://doi.org/10.1063/1.1688450) is the
+      precedent, but this is a slab bend rather than a crystal one, so it isn't a repeat of theirs.
 - [ ] Optionally, optimize the cavity from example 4 by raising the LDOS bandwidth's Q
       in stages, as in [Liang & Johnson 2013](https://doi.org/10.1364/OE.21.030812).
+
+The example is a slab of index 3.5 and width 0.125, through a square one wavelength wide of 24 x 24
+pixels. Over wavelengths 0.95, 1 and 1.05, far along the guide with a narrow monitor:
+
+| Wavelength | Empty region | Optimized, 1/24 | Optimized, 1/48 |
+|---:|---:|---:|---:|
+| 0.95 | 5.4% | 97.8% | 97.6% |
+| 1 | 5.3% | 99.3% | 99.3% |
+| 1.05 | 5.5% | 99.4% | 99.6% |
+
+It's a saved pattern in `tests/analytic.rs`, since the optimizer is JavaScript. So that test guards
+the pattern's physics, not the optimizer: nothing in the tests would notice `design.js` getting
+worse. The page's own run reached 98.6% on average, in 105 s at 28,000 unknowns, on battery.
+
+A first run monitored a wider line near the corner, which read 98.8% against 97.7% far along the
+guide, because it counted radiated light. A narrower monitor closed that gap, to under 1%. Other
+findings: a single-wavelength optimization reached only 43% and 82% at the band's edges, and a
+square half a wavelength wide reached 96% at the centre, but 81% and 92% at the edges.
+
+Against the crystal bend, this one is smaller and needs no band gap, while the crystal's T stays
+above 95% over about 13% of bandwidth against the 10% tried here. How wide this design could go
+wasn't measured: a run over 0.9 to 1.1 with a 1.5-wavelength square reached 99.6% while optimizing,
+but crashed on its finer-mesh check, for exceeding the mesh limit, so it isn't verified.
+
+Only `E_z` has gradients, since `q = eps` is simple there. `H_z` would need `p = 1/eps` in the
+stiffness. The adjoint here needs `A^T = A`, so a Bloch-periodic structure would need open problem 4.
 
 ### Later, not part of this plan
 

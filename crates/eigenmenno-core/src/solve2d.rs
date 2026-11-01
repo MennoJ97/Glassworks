@@ -17,7 +17,7 @@ use crate::problem::{Analysis, Analysis2d, Boundary, Layer, MeshSpec, Monitor, P
 use crate::solve::{normalized, FieldMeta, Meta, Output};
 use crate::space::{H1Triangle, Space};
 use crate::sparse::{Ordering, SparseLu};
-use crate::{C64, I, ZERO};
+use crate::{C64, I, ONE, ZERO};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
@@ -134,6 +134,15 @@ fn validate(req: &Request2d) -> Result<(), String> {
     let positive = |m: crate::problem::Material| m.eps > 0.0 && m.mu > 0.0;
     if !positive(req.background) || !req.shapes.iter().all(|s| positive(s.material)) {
         return Err("eigenmode analyses support lossless materials with positive eps and mu".into());
+    }
+    if let Some(d) = &req.density {
+        let plane_wave = matches!(req.analysis, Analysis2d::Driven { source: Source2d::PlaneWave { .. }, .. });
+        if !matches!(req.analysis, Analysis2d::Driven { .. }) || plane_wave || req.polarization != Polarization::Te || req.monitors.is_empty() {
+            return Err("a density map needs a driven E_z solve from a line source or port, and a monitor".into());
+        }
+        if d.rho.len() != d.nx * d.ny || !(d.width > 0.0 && d.height > 0.0 && d.eps_low > 0.0 && d.eps_high > 0.0) {
+            return Err("the density map's size or materials are invalid".into());
+        }
     }
     let driven = matches!(req.analysis, Analysis2d::Driven { .. } | Analysis2d::Resonance { .. });
     if !driven && matches!(req.walls, Boundary::Absorbing | Boundary::Port) {
@@ -254,6 +263,14 @@ fn cell_center(mesh: &Mesh, c: usize) -> (f64, f64) {
     (x / 3.0, y / 3.0)
 }
 
+/// The pixel of `req.density` holding a cell on an extended mesh, if any.
+fn pixel_of(req: &Request2d, mesh: &Mesh, pml: f64, c: usize) -> Option<usize> {
+    let d = req.density.as_ref()?;
+    let p = cell_center(mesh, c);
+    let (u, v) = ((p.0 - pml - d.x0) / d.width, (p.1 - pml - d.y0) / d.height);
+    ((0.0..1.0).contains(&u) && (0.0..1.0).contains(&v)).then(|| (v * d.ny as f64) as usize * d.nx + (u * d.nx as f64) as usize)
+}
+
 /// The operator at any `k0`, real or complex. Coordinates in the layer stretch by
 /// `s = 1 + i sigma / k`, which makes outgoing waves decay. With `sigma` growing
 /// quadratically into the layer, a wave crossing it and back loses a factor of about 1e-4.
@@ -271,7 +288,11 @@ fn open_matrix(req: &Request2d, space: &H1Triangle, dofs: &DofMap, coef: &[(C64,
         C64::new(1.0, 0.0) + I * (sigma_max * depth * depth) / k
     };
     let t = assemble_split(space, dofs, |c| {
-        let (p, q) = coef[space.mesh.region[c]];
+        let (mut p, mut q) = coef[space.mesh.region[c]];
+        if let Some(pixel) = pixel_of(req, space.mesh, pml, c) {
+            let d = req.density.as_ref().unwrap();
+            (p, q) = (ONE, C64::new(d.eps_low + d.rho[pixel] * (d.eps_high - d.eps_low), 0.0));
+        }
         let (x, y) = cell_center(space.mesh, c);
         let (sx, sy) = (stretch(x, req.width), stretch(y, req.height));
         (p * sy / sx, p * sx / sy, -k0 * k0 * q * sx * sy)
@@ -293,10 +314,10 @@ fn point_load(space: &H1Triangle, dofs: &DofMap, x: f64, y: f64) -> Result<Vec<(
 
 /// `u` for `A(k) u = i k e_0`, and `-sum(e_0 u)`. Dividing by `i k` turns this into the
 /// Green's function. So `2 Re(-u_0)` is `pi` times the LDOS per unit k, or `k / 2` in vacuum.
-fn line_response(a: &Csr, ordering: &Ordering, load: &[(usize, f64)], k: C64) -> (Vec<C64>, C64) {
-    let mut u = vec![ZERO; a.n];
+fn line_response(lu: &SparseLu, n: usize, load: &[(usize, f64)], k: C64) -> (Vec<C64>, C64) {
+    let mut u = vec![ZERO; n];
     load.iter().for_each(|&(r, v)| u[r] += I * k * v);
-    SparseLu::factor(a, ordering).solve(&mut u);
+    lu.solve(&mut u);
     let response = -load.iter().map(|&(r, v)| u[r] * v).sum::<C64>();
     (u, response)
 }
@@ -340,11 +361,13 @@ fn port_mode(req: &Request2d, k0: f64, x: f64, y0: f64, y1: f64) -> Result<Vec<(
 /// in units where a unit plane wave in vacuum carries 1/2 per unit length. A derivative is
 /// least accurate at a cell's edge, where a line along the grid would sit. Power is conserved
 /// across a thin strip, so this averages it over two cells, which cancels that error.
-fn monitor_power(space: &H1Triangle, coef: &[(C64, C64)], u: &[C64], k0: f64, cell: f64, pml: f64, monitors: &[Monitor]) -> Result<Vec<f64>, String> {
+/// `P = u^H B u` for a Hermitian `B`, and the first monitor's `B u` goes into `first`.
+fn monitor_power(space: &H1Triangle, coef: &[(C64, C64)], u: &[C64], k0: f64, cell: f64, pml: f64, monitors: &[Monitor], first: &mut [C64]) -> Result<Vec<f64>, String> {
     let mut d = vec![0; 6];
     monitors
         .iter()
-        .map(|m| {
+        .enumerate()
+        .map(|(index, m)| {
             let (dx, dy) = (m.x1 - m.x0, m.y1 - m.y0);
             let length = dx.hypot(dy);
             let steps = ((length / (cell / 4.0)).ceil() as usize).max(1);
@@ -371,7 +394,13 @@ fn monitor_power(space: &H1Triangle, coef: &[(C64, C64)], u: &[C64], k0: f64, ce
                         v += u[d[j]] * val[j];
                         dn += u[d[j]] * (gx[j] * nx + gy[j] * ny);
                     }
-                    total += coef[space.mesh.region[c]].0.re * (v.conj() * dn).im * length / steps as f64 / 4.0;
+                    let weight = coef[space.mesh.region[c]].0.re * length / steps as f64 / 4.0;
+                    total += weight * (v.conj() * dn).im;
+                    if index == 0 {
+                        for j in 0..6 {
+                            first[d[j]] += (v * -(gx[j] * nx + gy[j] * ny) + dn * val[j]) * weight / (2.0 * k0) / (I * 2.0);
+                        }
+                    }
                 }
             }
             Ok(total / (2.0 * k0))
@@ -391,11 +420,12 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_
     let dofs = open_dofs(req, &space, pml);
     let a = open_matrix(req, &space, &dofs, &coef, pml, k);
     let ordering = Ordering::new(&a, &free_positions(&space, &dofs));
+    let lu = SparseLu::factor(&a, &ordering);
     let (pb, qb) = coef[0];
     let mut ldos = None;
     let u = match source {
         Source2d::Line { x, y } => {
-            let (u, response) = line_response(&a, &ordering, &point_load(&space, &dofs, x + pml, y + pml)?, k);
+            let (u, response) = line_response(&lu, a.n, &point_load(&space, &dofs, x + pml, y + pml)?, k);
             ldos = Some(2.0 * response.re);
             dofs.expand(&u)
         }
@@ -421,7 +451,7 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_
                     }
                 }
             }
-            SparseLu::factor(&a, &ordering).solve(&mut rhs);
+            lu.solve(&mut rhs);
             let mut u = dofs.expand(&rhs);
             u.iter_mut().zip(inc).for_each(|(v, i)| *v += i);
             u
@@ -439,13 +469,37 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_
                     rhs[r] += I * k * weight * v;
                 }
             }
-            SparseLu::factor(&a, &ordering).solve(&mut rhs);
+            lu.solve(&mut rhs);
             dofs.expand(&rhs)
         }
     };
     let meta = FieldMeta { k0, ldos, ..Default::default() };
     let mut out = open_output(req, &space, &dofs, pml, &u, meta);
-    out.channels.push(("monitors".into(), monitor_power(&space, &coef, &u, k0, req.cell, pml, &req.monitors)?));
+    let mut bu = vec![ZERO; u.len()];
+    out.channels.push(("monitors".into(), monitor_power(&space, &coef, &u, k0, req.cell, pml, &req.monitors, &mut bu)?));
+    if let Some(density) = &req.density {
+        // With `dP = 2 Re(u^H B du)` and `A du = -dA u`, an adjoint `A^T w = conj(B u)` gives
+        // `dP = -2 Re(w^T dA u)`. The operator is complex symmetric, even in the layer, so
+        // `A^T = A` and the same factors solve it. Each pixel's `dA` is `-k^2 deps M`.
+        let mut w = vec![ZERO; dofs.n_free];
+        for (g, v) in dofs.map.iter().zip(&bu) {
+            if let Some((r, _)) = g {
+                w[*r] += v.conj();
+            }
+        }
+        lu.solve(&mut w);
+        let w = dofs.expand(&w);
+        let mut gradient = vec![0.0; density.rho.len()];
+        let (mut sx, mut sy, mut m, mut d) = (vec![0.0; 36], vec![0.0; 36], vec![0.0; 36], vec![0; 6]);
+        for c in 0..space.n_cells() {
+            let Some(pixel) = pixel_of(req, &mesh, pml, c) else { continue };
+            space.cell_dofs(c, &mut d);
+            space.local_matrices(c, &mut sx, &mut sy, &mut m);
+            let product: C64 = (0..36).map(|n| w[d[n / 6]] * m[n] * u[d[n % 6]]).sum();
+            gradient[pixel] += 2.0 * k0 * k0 * (density.eps_high - density.eps_low) * product.re;
+        }
+        out.channels.push(("gradient".into(), gradient));
+    }
     Ok(out)
 }
 
@@ -459,7 +513,10 @@ fn resonance(req: &Request2d, target_k0: f64, (x, y): (f64, f64), pml: f64) -> R
     let dofs = open_dofs(req, &space, pml);
     let load = point_load(&space, &dofs, x + pml, y + pml)?;
     let ordering = Ordering::new(&open_matrix(req, &space, &dofs, &coef, pml, C64::new(target_k0, 0.0)), &free_positions(&space, &dofs));
-    let at = |k: C64| line_response(&open_matrix(req, &space, &dofs, &coef, pml, k), &ordering, &load, k);
+    let at = |k: C64| {
+        let a = open_matrix(req, &space, &dofs, &coef, pml, k);
+        line_response(&SparseLu::factor(&a, &ordering), a.n, &load, k)
+    };
     let mut prev = C64::new(target_k0, 0.0);
     let mut k = prev * C64::new(1.0, -2e-3);
     let (mut g_prev, mut g) = (at(prev).1.inv(), at(k).1.inv());

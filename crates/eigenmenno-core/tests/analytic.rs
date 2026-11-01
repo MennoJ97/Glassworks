@@ -1,7 +1,7 @@
 //! Every test compares against an exact result, not against stored numbers.
 
 use eigenmenno_core::mesh::{Mesh, Outline};
-use eigenmenno_core::problem::{Analysis, Analysis2d, Boundary, Layer, Material, MeshSpec, Polarization, Request, Request2d, Shape, Source, Source2d, Monitor};
+use eigenmenno_core::problem::{Analysis, Analysis2d, Boundary, Density, Layer, Material, MeshSpec, Polarization, Request, Request2d, Shape, Source, Source2d, Monitor};
 use eigenmenno_core::solve::{solve, Output};
 use eigenmenno_core::C64;
 use std::f64::consts::PI;
@@ -373,6 +373,7 @@ fn rods(cell: f64, pol: Polarization, analysis: Analysis2d) -> Request2d {
         walls: Boundary::Periodic,
         analysis,
         monitors: vec![],
+        density: None,
     }
 }
 
@@ -424,6 +425,7 @@ fn rectangular_cavity_matches_mode_formula() {
         walls,
         analysis: Analysis2d::Cavity { n_modes: 6, bloch: [0.0, 0.0], target_k0: None },
         monitors: vec![],
+        density: None,
     };
     let k2 = |m: f64, n: f64| PI * PI * (m * m + n * n / 2.25);
     // E_z vanishes on a perfect conductor, so the mode numbers start from 1.
@@ -455,6 +457,7 @@ fn layered_box_matches_the_1d_solver() {
         walls: Boundary::Pmc,
         analysis: Analysis2d::Cavity { n_modes: 4, bloch: [0.0, 0.0], target_k0: None },
         monitors: vec![],
+        density: None,
     };
     let o = request(vec![layer(0.7, 1.0), layer(0.4, 2.5)], Polarization::Te, (Boundary::Pmc, Boundary::Pmc), 5, 0.02, cavity(4));
     let (two, one) = (eigenmenno_core::solve2d::solve(&r).unwrap(), solve(&o).unwrap());
@@ -493,6 +496,7 @@ fn bloch_phase_gives_a_wave_travelling_along_k() {
         walls: Boundary::Periodic,
         analysis: Analysis2d::Cavity { n_modes: 1, bloch, target_k0: None },
         monitors: vec![],
+        density: None,
     };
     let o = eigenmenno_core::solve2d::solve(&r).unwrap();
     let (kx, ky) = (bloch[0] / width, bloch[1] / height);
@@ -560,6 +564,7 @@ fn open_box(shapes: Vec<Shape>, pol: Polarization, cell: f64, pml: f64, source: 
         walls: Boundary::Absorbing,
         analysis: Analysis2d::Driven { wavelength: 1.0, source, pml, average_q: None },
         monitors: vec![],
+        density: None,
     }
 }
 
@@ -682,6 +687,7 @@ fn defect_crystal(n: usize, cell: f64, walls: Boundary, analysis: Analysis2d) ->
         walls,
         analysis,
         monitors: vec![],
+        density: None,
     }
 }
 
@@ -710,6 +716,7 @@ fn mode_area_of_a_box_is_a_quarter_of_it() {
         walls: Boundary::Pec,
         analysis: Analysis2d::Cavity { n_modes: 1, bloch: [0.0, 0.0], target_k0: None },
         monitors: vec![],
+        density: None,
     };
     // sin^2 sin^2 averages to 1/4 and peaks at 1, whatever eps is.
     let o = eigenmenno_core::solve2d::solve(&r).unwrap();
@@ -731,6 +738,7 @@ fn ldos_request(shapes: Vec<Shape>, k: f64, average_q: Option<f64>) -> Request2d
         walls: Boundary::Absorbing,
         analysis: Analysis2d::Driven { wavelength: 2.0 * PI / k, source: Source2d::Line { x: 1.0, y: 1.0 }, pml: 0.5, average_q },
         monitors: vec![],
+        density: None,
     }
 }
 
@@ -827,6 +835,7 @@ fn power_around_a_line_source_matches_its_ldos() {
             Monitor { x0: m, y0: w - m, x1: m, y1: m },
             Monitor { x0: m, y0: m, x1: w - m, y1: m },
         ],
+        density: None,
     };
     let o = eigenmenno_core::solve2d::solve(&r).unwrap();
     let total: f64 = monitors(&o).iter().sum();
@@ -855,6 +864,7 @@ fn slab(w: f64, bent: bool, cell: f64, span: f64) -> Request2d {
         walls: Boundary::Absorbing,
         analysis: Analysis2d::Driven { wavelength: 1.0, source: Source2d::Port { x: 0.5, y0: cy - 1.2, y1: cy + 1.2 }, pml: 1.0, average_q: None },
         monitors: vec![monitor],
+        density: None,
     }
 }
 
@@ -941,6 +951,7 @@ fn lattice_guide(kind: Guide, freq: f64) -> Request2d {
         walls: Boundary::Absorbing,
         analysis: Analysis2d::Driven { wavelength: 1.0 / freq, source: Source2d::Line { x: 1.5, y: cy }, pml, average_q: None },
         monitors: vec![output, Monitor { x0: 3.03, y0: cy - span, x1: 3.03, y1: cy + span }],
+        density: None,
     }
 }
 
@@ -959,6 +970,7 @@ fn guided_band_matches_mekis() {
             walls: Boundary::Periodic,
             analysis: Analysis2d::Cavity { n_modes: 3, bloch: [2.0 * PI * phase, 0.0], target_k0: Some(2.0 * PI * want) },
             monitors: vec![],
+            density: None,
         };
         let o = eigenmenno_core::solve2d::solve(&r).unwrap();
         let nearest = o.meta.fields.iter().map(|f| f.k0 / (2.0 * PI)).min_by(|a, b| (a - want).abs().total_cmp(&(b - want).abs())).unwrap();
@@ -1000,4 +1012,151 @@ fn a_sharp_bend_in_a_slab_loses_most_of_its_power() {
     let t = monitors(&eigenmenno_core::solve2d::solve(&bend).unwrap())[0] / monitors(&eigenmenno_core::solve2d::solve(&straight).unwrap())[0];
     eprintln!("slab bend T {t:.4}");
     assert!(t > 0.1 && t < 0.3, "T {t}");
+}
+
+/// A slab bent around a square of pixels. Everything sits on the grid of cells 1/24.
+fn density_bend(rho: Vec<f64>) -> Request2d {
+    let (w, n, core) = (0.125, 12, Material { eps: 3.5 * 3.5, mu: 1.0 });
+    let (x0, y0, size) = (1.0, 0.5, 0.5);
+    let (cx, cy) = (x0 + size / 2.0, y0 + size / 2.0);
+    let rect = |x0, y0, x1, y1| Shape { outline: Outline::Rect { x0, y0, x1, y1 }, material: core };
+    Request2d {
+        width: 2.5,
+        height: 2.5,
+        cell: 1.0 / 24.0,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes: vec![rect(-3.0, cy - w / 2.0, x0, cy + w / 2.0), rect(cx - w / 2.0, y0 + size, cx + w / 2.0, 5.0)],
+        polarization: Polarization::Te,
+        walls: Boundary::Absorbing,
+        analysis: Analysis2d::Driven { wavelength: 1.0, source: Source2d::Port { x: 0.4, y0: 0.0, y1: 1.5 }, pml: 0.5, average_q: None },
+        monitors: vec![Monitor { x0: cx + 0.6, y0: 2.1, x1: cx - 0.6, y1: 2.1 }],
+        density: Some(Density { x0, y0, width: size, height: size, nx: n, ny: n, eps_low: 1.0, eps_high: 3.5 * 3.5, rho }),
+    }
+}
+
+#[test]
+fn density_gradient_matches_finite_differences() {
+    let n = 12 * 12;
+    let rho: Vec<f64> = (0..n).map(|i| 0.5 + 0.4 * ((i * 37 % 101) as f64 / 101.0 - 0.5)).collect();
+    let power = |rho: &[f64]| {
+        let o = eigenmenno_core::solve2d::solve(&density_bend(rho.to_vec())).unwrap();
+        (monitors(&o)[0], channel(&o, "gradient").to_vec())
+    };
+    let (_, gradient) = power(&rho);
+    for pixel in [0, 40, 77, 143] {
+        let step = 1e-5;
+        let (mut up, mut down) = (rho.clone(), rho.clone());
+        up[pixel] += step;
+        down[pixel] -= step;
+        let difference = (power(&up).0 - power(&down).0) / (2.0 * step);
+        eprintln!("pixel {pixel}: adjoint {:.6e}, difference {difference:.6e}", gradient[pixel]);
+        close(gradient[pixel], difference, 1e-5 * difference.abs().max(1e-3));
+    }
+}
+
+#[test]
+fn density_requests_are_checked() {
+    let mut wrong = density_bend(vec![0.5; 144]);
+    wrong.polarization = Polarization::Tm;
+    assert!(eigenmenno_core::solve2d::solve(&wrong).is_err());
+    assert!(eigenmenno_core::solve2d::solve(&density_bend(vec![0.5; 3])).is_err());
+    let mut unmeasured = density_bend(vec![0.5; 144]);
+    unmeasured.monitors.clear();
+    assert!(eigenmenno_core::solve2d::solve(&unmeasured).is_err());
+}
+
+/// The page's optimizer's result for a bend over wavelengths 0.95 to 1.05, top row first.
+const OPTIMIZED_BEND: [&str; 24] = [
+    "........######....##.###",
+    "........#####......#####",
+    "........#####......#####",
+    ".......######......#####",
+    "#......#####......######",
+    "##.....#####......######",
+    "......#####.....#..#####",
+    "...#######....####..####",
+    "..#######.....####...###",
+    "########.....####....###",
+    "#######.....#####.....##",
+    "######......#####.....##",
+    "####.......#####......##",
+    "#........#######.....###",
+    "........######.......###",
+    "......#######.........##",
+    ".....#######...........#",
+    "#########..............#",
+    "#######................#",
+    "..###...............####",
+    "............#......#####",
+    "........#######...#####.",
+    "...##############.####..",
+    "...##################...",
+];
+
+/// A slab of width 0.125 turning a corner through that pattern, as the page builds it, or an
+/// empty region, or a straight guide. `extra` lengthens the output.
+fn optimized_bend(pattern: Option<&[&str; 24]>, straight: bool, wavelength: f64, cell: f64, extra: f64, monitors: Vec<Monitor>) -> Request2d {
+    let core = Material { eps: 3.5 * 3.5, mu: 1.0 };
+    let (x0, y0, size, w) = (1.0, 0.5, 1.0, 0.125);
+    let (cx, cy) = (x0 + size / 2.0, y0 + size / 2.0);
+    let rect = |x0, y0, x1, y1| Shape { outline: Outline::Rect { x0, y0, x1, y1 }, material: core };
+    let shapes = if straight {
+        vec![rect(-3.0, cy - w / 2.0, 9.0, cy + w / 2.0)]
+    } else {
+        vec![rect(-3.0, cy - w / 2.0, x0, cy + w / 2.0), rect(cx - w / 2.0, y0 + size, cx + w / 2.0, 9.0)]
+    };
+    let rho = |p: &[&str; 24]| p.iter().rev().flat_map(|row| row.chars().map(|c| if c == '#' { 1.0 } else { 0.0 })).collect::<Vec<f64>>();
+    let density = (!straight).then(|| Density {
+        x0, y0, width: size, height: size, nx: 24, ny: 24, eps_low: 1.0, eps_high: 3.5 * 3.5,
+        rho: pattern.map_or(vec![0.0; 576], rho),
+    });
+    Request2d {
+        width: 2.5,
+        height: 2.5 + extra,
+        cell,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes,
+        polarization: Polarization::Te,
+        walls: Boundary::Absorbing,
+        analysis: Analysis2d::Driven { wavelength, source: Source2d::Port { x: 0.4, y0: cy - 0.7, y1: cy + 0.7 }, pml: 0.5, average_q: None },
+        monitors,
+        density,
+    }
+}
+
+#[test]
+fn optimized_bend_survives_a_finer_mesh() {
+    let (cx, cy) = (1.5, 1.0);
+    let power = |r: Request2d| monitors(&eigenmenno_core::solve2d::solve(&r).unwrap())[0];
+    for wavelength in [0.95, 1.0, 1.05] {
+        for cell in [1.0 / 24.0, 1.0 / 48.0] {
+            // Far along the guide, and narrow, so that no light radiated at the corner counts.
+            let (far, span) = (2.85, 0.35);
+            let straight = power(optimized_bend(None, true, wavelength, cell, 0.75, vec![Monitor { x0: 2.1, y0: cy - span, x1: 2.1, y1: cy + span }]));
+            let output = vec![Monitor { x0: cx + span, y0: far, x1: cx - span, y1: far }];
+            let t = power(optimized_bend(Some(&OPTIMIZED_BEND), false, wavelength, cell, 0.75, output.clone())) / straight;
+            let plain = power(optimized_bend(None, false, wavelength, cell, 0.75, output)) / straight;
+            eprintln!("wavelength {wavelength} cell {cell:.4}: T {t:.4}, empty region {plain:.4}");
+            assert!(t > 0.97 && t < 1.005, "T {t}");
+            assert!(plain < 0.15, "empty region {plain}");
+        }
+    }
+}
+
+#[test]
+fn power_is_conserved_around_an_optimized_bend() {
+    // The port is outside this loop, and everything inside it is lossless.
+    let (a, b, c, d) = (0.7, 2.3, 0.2, 2.3);
+    let around = vec![
+        Monitor { x0: b, y0: c, x1: b, y1: d },
+        Monitor { x0: b, y0: d, x1: a, y1: d },
+        Monitor { x0: a, y0: d, x1: a, y1: c },
+        Monitor { x0: a, y0: c, x1: b, y1: c },
+    ];
+    let o = eigenmenno_core::solve2d::solve(&optimized_bend(Some(&OPTIMIZED_BEND), false, 1.0, 1.0 / 48.0, 0.0, around)).unwrap();
+    let m = monitors(&o);
+    let net: f64 = m.iter().sum();
+    let largest = m.iter().fold(0f64, |x, v| x.max(v.abs()));
+    eprintln!("around the bend: {m:?}, net {net:.2e}");
+    assert!(net.abs() < 2e-3 * largest, "net {net} of {largest}");
 }

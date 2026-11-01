@@ -166,6 +166,22 @@ pub struct Monitor {
     pub y1: f64,
 }
 
+/// A rectangle of pixels, each mixing two permittivities by its density in `rho`, by rows
+/// from the corner `(x0, y0)`. It replaces whatever shapes are there. Driven `E_z` solves
+/// then return `gradient`, the derivative of the first monitor's power with each density.
+#[derive(Deserialize, Clone)]
+pub struct Density {
+    pub x0: f64,
+    pub y0: f64,
+    pub width: f64,
+    pub height: f64,
+    pub nx: usize,
+    pub ny: usize,
+    pub eps_low: f64,
+    pub eps_high: f64,
+    pub rho: Vec<f64>,
+}
+
 /// A 2D problem on `[0, width] x [0, height]`. `cell` is the largest grid spacing.
 #[derive(Deserialize, Clone)]
 pub struct Request2d {
@@ -180,6 +196,8 @@ pub struct Request2d {
     /// Lines to measure power along, for driven solves.
     #[serde(default)]
     pub monitors: Vec<Monitor>,
+    #[serde(default)]
+    pub density: Option<Density>,
 }
 
 #[derive(Deserialize, Clone)]
