@@ -49,6 +49,8 @@ export const PRESETS = {
     analysis: 'waveguide', wavelength: 1,
     layers: [layer('Silica glass', 3), layer('Silicon nitride', 0.8), layer('Silica glass', 3)],
   },
+  'Empty square cavity': { analysis: 'cavity2d' },
+  'Lattice of rods': { analysis: 'bands2d' },
   'Design a mirror': { analysis: 'mirror', wavelength: 1 },
   'Design a broadband coating': { analysis: 'antireflection' },
 };
@@ -58,7 +60,7 @@ export const PRESETS = {
 // views repeat driven solves, using their gradients to change the structure.
 export const PROBLEMS = {
   driven: { name: 'Driven response', views: ['spectrum', 'field'] },
-  eigen: { name: 'Eigenmodes', views: ['cavity', 'bands', 'waveguide'] },
+  eigen: { name: 'Eigenmodes', views: ['cavity', 'bands', 'waveguide', 'cavity2d', 'bands2d'] },
   design: { name: 'Inverse design', views: ['mirror', 'antireflection'] },
 };
 export const problemOf = (analysis) => Object.keys(PROBLEMS).find((p) => PROBLEMS[p].views.includes(analysis));
@@ -83,6 +85,13 @@ export function defaultState() {
     source: 'plane_wave',
     sourceX: 0.5,
     bandPick: { k: 0.5, band: 0 },
+    plane: {
+      cavity2d: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', shapes: [] },
+      bands2d: {
+        width: 1, height: 1, cell: 0.04, background: 1, walls: 'periodic', pick: { s: 1, band: 0 },
+        shapes: [{ type: 'circle', x: 0.5, y: 0.5, w: 0.4, h: 0.4, n: 3.4641 }],
+      },
+    },
     design: {
       mirror: { thickness: 2, low: 'Silica glass', high: 'Titanium dioxide', left: 'Air', right: 'Air', radius: 20, seed: 1 },
       antireflection: { thickness: 0.6, low: 'Magnesium fluoride', high: 'Titanium dioxide', left: 'Air', right: 'Silica glass', radius: 15, seed: 1, from: 0.4, to: 0.8 },
@@ -97,8 +106,39 @@ function toLayer(l) {
   return { thickness: l.thickness, eps: [l.n * l.n - l.k * l.k, 2 * l.n * l.k], mu: [1, 0] };
 }
 
+const material = (n) => ({ eps: n * n, mu: 1 });
+
+// The Bloch phases per period at a place `s` on the path from Gamma to X to M to Gamma.
+export function blochAt(s) {
+  if (s <= 1) return [Math.PI * s, 0];
+  if (s <= 2) return [Math.PI, Math.PI * (s - 1)];
+  return [Math.PI * (3 - s), Math.PI * (3 - s)];
+}
+
+function planeRequests(s) {
+  const p = s.plane[s.analysis];
+  const base = {
+    width: p.width,
+    height: p.height,
+    cell: p.cell,
+    background: material(p.background),
+    polarization: s.polarization,
+    walls: p.walls,
+    shapes: p.shapes.map((c) => ({
+      material: material(c.n),
+      ...(c.type === 'circle'
+        ? { type: 'circle', x: c.x, y: c.y, r: c.w / 2 }
+        : { type: 'rect', x0: c.x - c.w / 2, y0: c.y - c.h / 2, x1: c.x + c.w / 2, y1: c.y + c.h / 2 }),
+    })),
+  };
+  const modes = (bloch) => ({ ...base, analysis: { type: 'cavity', n_modes: s.nModes, bloch } });
+  if (s.analysis === 'cavity2d') return [modes([0, 0])];
+  return [{ ...base, analysis: { type: 'bands', n_bands: s.nModes, n_k: 5 } }, modes(blochAt(p.pick.s))];
+}
+
 // One or two solves: a chart's data, then the field of the point picked on it.
 export function buildRequests(s) {
+  if (s.plane[s.analysis]) return planeRequests(s);
   const optical = s.layers.reduce((sum, l) => sum + l.thickness * Math.max(l.n, 1), 0);
   const make = (analysis, left, right, referenceWavelength) => ({
     layers: s.layers.map(toLayer),

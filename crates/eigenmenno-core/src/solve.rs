@@ -43,7 +43,7 @@ pub struct Meta {
 
 #[derive(Serialize)]
 pub struct FieldMeta {
-    pub components: [&'static str; 3],
+    pub components: Vec<&'static str>,
     pub k0: f64,
     /// Effective index of a waveguide mode.
     pub n_eff: Option<f64>,
@@ -85,7 +85,7 @@ impl<'a> Setup<'a> {
             zero.push(last);
         }
         let tie = (req.left == Boundary::Periodic).then(|| (last, 0, C64::from_polar(1.0, bloch_phase)));
-        let dofs = DofMap::new(space.n_dofs(), &zero, tie);
+        let dofs = DofMap::new(space.n_dofs(), &zero, tie.as_slice());
         Self { req, space, dofs }
     }
 
@@ -137,12 +137,12 @@ impl<'a> Setup<'a> {
         for (k, d) in data.into_iter().enumerate() {
             out.channels.push((format!("field{i}/{}/{}", components[k / 2], ["re", "im"][k % 2]), d));
         }
-        out.meta.fields.push(FieldMeta { components, k0, n_eff, power });
+        out.meta.fields.push(FieldMeta { components: components.to_vec(), k0, n_eff, power });
     }
 }
 
 /// Scales a mode to a unit real peak, so plots are comparable.
-fn normalized(mut u: Vec<C64>) -> Vec<C64> {
+pub(crate) fn normalized(mut u: Vec<C64>) -> Vec<C64> {
     let peak = u.iter().fold(ZERO, |m, x| if x.norm() > m.norm() { *x } else { m });
     if peak != ZERO {
         u.iter_mut().for_each(|x| *x /= peak);

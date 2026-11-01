@@ -33,6 +33,11 @@ pub fn rcm(a: &Csr) -> Vec<usize> {
     perm
 }
 
+/// Anything that can solve `A x = rhs` in place once `A` has been factored.
+pub trait Factors {
+    fn solve(&self, rhs: &mut [C64]);
+}
+
 /// LU factors in LAPACK band layout: entry (i, j) lives at offset `2b + i - j` of
 /// column j, which leaves room for pivoting to grow the upper band from b to 2b.
 pub struct BandedLu {
@@ -101,6 +106,12 @@ impl BandedLu {
 
     /// Solves `A x = rhs` in place.
     pub fn solve(&self, rhs: &mut [C64]) {
+        Factors::solve(self, rhs)
+    }
+}
+
+impl Factors for BandedLu {
+    fn solve(&self, rhs: &mut [C64]) {
         let (n, b, ld, diag) = (self.n, self.b, self.ld, 2 * self.b);
         let mut x: Vec<C64> = self.perm.iter().map(|&old| rhs[old]).collect();
         for j in 0..n {

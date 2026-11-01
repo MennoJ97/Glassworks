@@ -4,8 +4,10 @@ The agreed plan for adding 2D. Pick up at the first milestone that isn't marked 
 and update this file as things land. Delete it, and `plans/probe-2d/`, once the last
 milestone is finished and the tutorial covers what's here.
 
-**Status (2026-11-01):** nothing is implemented. The numbers below come from the
-throwaway probe in [`probe-2d/`](probe-2d/). **Next up: milestone 1.**
+**Status (2026-11-01):** milestone 1 is built, apart from the own-solver decision. Band
+diagrams and cavities run on the page, tested against exact and independent results.
+**Next up: decide on the own solver (end of milestone 1), then milestone 2.** The
+solver numbers below come from the throwaway probe in [`probe-2d/`](probe-2d/).
 
 ## Decisions
 
@@ -16,13 +18,13 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Physics | One scalar field, `u = Ez` (`p = 1/mu`, `q = eps`) or `u = Hz` (`p = 1/eps`, `q = mu`) | Chapter 1's weak form carries over, and spurious modes can't arise |
 | Vector fields | No Nédélec elements yet | Only full-vector waveguide cross-sections need them, and that's after this plan |
 | Elements | `H1Tri`: second-order triangles implementing `Space` | Cavity error falls about 15× per mesh halving. Other orders can wait for a measured reason |
-| Mesh | Structured grid, with the nearest nodes snapped onto shape boundaries | About 40 lines with no dependency, periodic edges match, and it can serve 2D topology optimization. See open problem 1 |
+| Mesh | Structured grid, with nodes snapped onto shape boundaries, diagonals chosen afterwards, then constrained Delaunay flips | No dependency, periodic edges match, and it can serve 2D topology optimization. Worst angle over 200 random placements: 22° for circles, 16° for rectangles |
 | Mesh fallback | An unstructured mesher, such as [`spade`](https://github.com/Stoeoef/spade) (MIT/Apache) | Only if snapping can't be fixed. It makes periodic edges and own-solver separators harder |
 | Linear solver | Add a small factorization trait. 1D keeps `banded.rs`, 2D uses `faer` | See the measurements. Banded LU can't scale in 2D |
 | Open boundaries | PML | Exact local conditions don't exist in 2D (chapter 9) |
 | Leaky modes | No non-Hermitian eigensolver. Use one driven solve at complex frequency | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for |
 | Upper size | The page refuses above about 160,000 unknowns | 638,401 failed in WebAssembly, probably out of memory |
-| Target size | 300–400 more lines of Rust, about 1,500 in total (estimate) | State the cost before adding more, and update the tutorial's "about 1,000 lines" |
+| Size | The 300–400 line estimate was low: milestone 1 alone added about 580 lines of Rust, for about 1,700 in total | State the cost before adding more, and keep the tutorial's line count current |
 | Own sparse solver | Not now. Decide after milestone 1 (see below) | `faer` first, behind the trait |
 
 ## Measurements
@@ -43,15 +45,16 @@ WebAssembly times include assembly:
 | 400 × 400 | 638,401 | Needs 98 GB | 27 s | Failed | Failed |
 | 800 × 800 | 2,556,801 | Needs 784 GB | 345 s | Failed | Failed |
 
-Download size, gzipped: the current page's solver is about 110 KB, and `faer` adds about
-88 KB. Measured on the probe's own build (33 KB without `faer`, 121 KB with it).
+Download size, gzipped: the page's solver went from about 110 KB to 232 KB with milestone
+1, more than the 88 KB the probe's own build suggested (33 KB without `faer`, 121 KB with).
 
-Eigensolves: three modes at one k-point took 14 ms at 576 unknowns, about 200 ms at
-2,304 and about 2.7 s at 9,216, all on banded LU. At 9,216 that's several times one
-factorization, because Lanczos adds back-substitutions and reorthogonalization.
+Eigensolves: three modes at one k-point took about 200 ms at 2,304 unknowns and 2.7 s at
+9,216 on banded LU. With `faer` they took 40 ms and about 300 ms, native. On the page, a
+full band diagram (16 k-points, 6 bands, 2,500 unknowns) takes about 1.8 s.
 
-Band edges of the rod lattice (eps 12, r = 0.2a, square lattice), as error against the
-probe's own 96 × 96 snapped mesh. M1 and X2 are the two edges of the TM gap:
+Band edges of the rod lattice (eps 12, r = 0.2a, square lattice) from the probe, as error
+against its own 96 × 96 snapped mesh. M1 and X2 are the two edges of the TM gap. The
+staircase columns show why fitting matters, and the final mesher's values follow:
 
 | Grid (unknowns) | TM staircase | TM snapped | TE staircase | TE snapped |
 |---|---:|---:|---:|---:|
@@ -59,9 +62,16 @@ probe's own 96 × 96 snapped mesh. M1 and X2 are the two edges of the TM gap:
 | 24 × 24 (2,304) | 6.7e-4 | 9.0e-4 | 9.3e-3 | 1.6e-3 |
 | 48 × 48 (9,216) | 5.9e-4 | 9.6e-5 | 9.7e-3 | 1.2e-4 |
 
-The reference values were TM 0.28068 (M1) and 0.41721 (X2), and TE 0.49594 (band 1 at M)
-and 0.44131 (band 2 at X). These are worst-of-two errors per cell, and they only show
-self-consistency until open problem 2 is settled.
+These are worst-of-two errors per cell. With the final mesher, the band edges converge
+from above as straight cells cut the corners of the curved rod:
+
+| Grid (unknowns) | Ez M1 | Ez X2 | Hz M1 | Hz X2 |
+|---|---:|---:|---:|---:|
+| 12 × 12 (576) | 0.28456 | 0.42346 | 0.50783 | 0.44746 |
+| 24 × 24 (2,304) | 0.28138 | 0.41835 | 0.49786 | 0.44235 |
+| 48 × 48 (9,216) | 0.28084 | 0.41747 | 0.49637 | 0.44155 |
+| 96 × 96 (36,864) | 0.28071 | 0.41724 | 0.49600 | 0.44135 |
+| Plane waves (2,401), see below | 0.28066 | 0.41716 | 0.49588 | 0.44109, still rising |
 
 A line source against the exact `(i/4) H0(kr)`, on rings of r = 0.8 to 1.2 wavelengths:
 
@@ -78,15 +88,16 @@ high-index material will need refining, which the probe didn't test.
 
 ## Open problems
 
-1. **Slivers from snapping.** The smallest triangle angle falls from 23° to 4° to 0.3°
-   on the 12, 24 and 48 grids. Accuracy held up, but this isn't safe to build on. Try
-   limiting how far a node may move, then flipping bad diagonals. Milestone 1 can't
-   finish without this.
-2. **Unexplained gap to MPB.** The probe's TM gap is 0.28068 to 0.41721. The
-   [MPB tutorial](https://mpb.readthedocs.io/en/latest/Python_Tutorial/) gives 0.28262
-   to 0.41933, about 0.5–0.7% higher, from a run at resolution 32 that may simply be
-   under-resolved. Settle it by getting a converged reference, such as a
-   high-resolution MPB run or an independent plane-wave calculation.
+1. **Slivers from snapping: solved.** Slivers came from diagonal edges forcing two
+   neighbours across a curve onto almost the same point. Now only grid lines force a
+   move, and each cell's diagonal is chosen afterwards. With no grid line crossing an
+   outline, one diagonal is always clear. Flips then clean up, but may not cross an
+   outline.
+2. **Gap to MPB: settled.** An independent plane-wave expansion gives a TM gap of 0.28066
+   to 0.41716, which this solver converges to. The
+   [MPB tutorial](https://mpb.readthedocs.io/en/latest/Python_Tutorial/)'s 0.28262 to
+   0.41933 is 0.5–0.7% higher. The likely cause is its coarse resolution of 32, but no
+   MPB run has confirmed that, so it isn't used as a reference.
 3. **The `faer` setup is untuned.** Its default ordering, symmetric factorization for
    `Aᵀ = A`, and reusing symbolic analysis across solves are all untested.
 4. **Transposed solves through `faer`.** Bloch-periodic driven problems lose `Aᵀ = A`,
@@ -96,18 +107,16 @@ high-index material will need refining, which the probe didn't test.
 
 | Module | Change |
 |---|---|
-| `mesh.rs` | A structured grid and snapping. `coords` holds x, y per vertex. Finally reads `verts_per_cell` |
-| `space.rs` | `H1Tri`. `local_matrices` returns `S_xx`, `S_yy` and `M` separately, with `S_yy = 0` in 1D |
-| `assemble.rs` | `coef` returns `(a_x, a_y, b)` for `a_x S_xx + a_y S_yy + b M`, which PML needs. `DofMap` takes many ties, including corners with two Bloch phases |
-| A new solver trait | One factor-and-solve interface, used by `eigs_near` and `driven`. `banded.rs` and `faer` implement it |
-| `problem.rs` | A tagged geometry: the current layers, or a 2D domain with background, shapes, lattice and PML |
-| `solve.rs` | Boundaries become edges. Field output adds node positions and triangles |
-| Website | A shape editor and a triangle field renderer alongside `FieldPlot`. The `design.js` optimizer keeps projection and MMA, with a 2D filter |
-| Tutorial | Correct chapter 9 and add 2D chapters as each milestone lands (see "Tutorial changes") |
+| `space.rs`, milestone 2 | `local_matrices` returns `S_xx`, `S_yy` and `M` separately, with `S_yy = 0` in 1D |
+| `assemble.rs`, milestone 2 | `coef` returns `(a_x, a_y, b)` for `a_x S_xx + a_y S_yy + b M`, which PML needs |
+| `solve2d.rs`, later | Sources, monitors and gradients. `driven` should move onto the `Factors` trait too |
+| Website, later | Dragging shapes, and the `design.js` optimizer with a 2D filter |
+| Tutorial | Add 2D chapters as each milestone lands. Chapter 9 is current |
 
-The probe's `H1Tri`, `snap`, `bloch_map` and `helmholtz_pml` are good starting points,
-but they aren't production code. `bloch_map` keys on the unsnapped positions, because
-snapped nodes never sit on the periodic edges.
+Milestone 1 added `Mesh::fitted_grid`, `H1Triangle`, many-tie `DofMap`, the `Factors` trait
+with `SparseLu`, and `solve2d.rs`. 2D requests are a separate `Request2d`, sent to
+`solve_2d`, rather than a tagged geometry. On the page, `FieldMap` sits alongside
+`FieldPlot`. The probe's `helmholtz_pml` is the starting point for milestone 2.
 
 PML, as used in the probe, with `s = 1 + i sigma(d) / k` and a quadratic `sigma`:
 
@@ -123,18 +132,22 @@ as a test in `crates/eigenmenno-core/tests/analytic.rs` before calling it done.
 
 ### Milestone 1: bands on a good mesh
 
-- [ ] Fix the slivers (open problem 1), with a test on the minimum angle.
-- [ ] Settle the MPB gap (open problem 2) and write the result here.
-- [ ] Add `H1Tri`, the grid and snapping, the many-tie `DofMap` and the solver trait to
-      the core, with `faer` as a real dependency.
-- [ ] **Example 1: square cavity.** Check against the exact `k^2 = pi^2 (m^2 + n^2)`.
-- [ ] **Example 2: rod-lattice band diagram**, TM and TE along Γ-X-M-Γ. Check against
-      the converged reference from the MPB work.
-- [ ] Add a triangle field renderer and a minimal shape input on the page.
+- [x] Fix the slivers (open problem 1), with a test on the minimum angle.
+- [x] Settle the MPB gap (open problem 2) and write the result here.
+- [x] Add `H1Triangle`, the grid and snapping, the many-tie `DofMap` and the solver trait
+      to the core, with `faer` as a real dependency.
+- [x] **Example 1: square cavity.** Checked against the exact mode formula, and a layered
+      box against the 1D solver.
+- [x] **Example 2: rod-lattice band diagram**, Ez and Hz along Γ-X-M-Γ. Checked against
+      the plane-wave reference.
+- [x] Add a triangle field renderer and a minimal shape input on the page.
 - [ ] Decide on the own sparse solver (see below).
 
-Done when a visitor can see a correct band diagram and click a point to see its mode.
-Aim for about 2,300 unknowns per k-point at first, which is accurate to about 0.1–0.3%.
+The page defaults to about 2,500 unknowns per k-point, accurate to about 0.3–0.5%.
+Reusing `faer`'s symbolic analysis across k-points is the obvious way to speed up its
+1.8 s band diagram (open problem 3). The plane-wave script wasn't kept: it's about 30 lines
+of numpy, using `eps(G) = delta eps_b + f (eps_a - eps_b) 2 J1(Gr) / (Gr)`, and the inverse
+rule for Hz.
 
 ### Milestone 2: open structures
 
@@ -203,13 +216,8 @@ A simple entry-by-entry sparse LU (about 200 lines) is likely several times slow
 
 ## Tutorial changes
 
-Chapter 9 says a few things these measurements correct. Fix them in milestone 1:
-
-- Banded LU is already slow at 10,000 unknowns: about 0.6 s native, and more once an
-  eigensolve multiplies it.
-- PML doesn't quite slot into the existing assembly, because it needs the split stiffness.
-- Leaky modes don't need `faer`'s Krylov-Schur for what's planned here.
-- The README and `docs/README.md` give the solver's size and describe `faer` as tests-only.
+Chapter 9, the README and `docs/README.md` were corrected in milestone 1. A proper 2D
+chapter, covering snapping and Bloch ties, is still to write.
 
 ## Running the probe
 

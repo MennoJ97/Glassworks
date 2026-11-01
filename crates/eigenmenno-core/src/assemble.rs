@@ -61,15 +61,17 @@ pub struct DofMap {
 }
 
 impl DofMap {
-    /// `zero` lists Dirichlet dofs; `tie = (slave, master, phase)` sets
-    /// `u[slave] = phase * u[master]`.
-    pub fn new(n: usize, zero: &[usize], tie: Option<(usize, usize, C64)>) -> Self {
+    /// `zero` lists Dirichlet dofs; each tie `(slave, master, phase)` sets
+    /// `u[slave] = phase * u[master]`, and no master may itself be a slave.
+    pub fn new(n: usize, zero: &[usize], ties: &[(usize, usize, C64)]) -> Self {
         let mut d = DofMap { map: vec![None; n], n_free: 0 };
-        for i in (0..n).filter(|i| !zero.contains(i) && tie.is_none_or(|t| t.0 != *i)) {
+        let mut fixed = vec![false; n];
+        zero.iter().chain(ties.iter().map(|t| &t.0)).for_each(|&i| fixed[i] = true);
+        for i in (0..n).filter(|&i| !fixed[i]) {
             d.map[i] = Some((d.n_free, ONE));
             d.n_free += 1;
         }
-        if let Some((slave, master, phase)) = tie {
+        for &(slave, master, phase) in ties {
             d.map[slave] = d.map[master].map(|(i, f)| (i, f * phase));
         }
         d

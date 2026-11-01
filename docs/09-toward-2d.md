@@ -1,7 +1,9 @@
 # 9. Toward 2D
 
-The solver was written with 2D in mind, though none of this chapter is implemented
-yet. It describes what would change, and why vector fields need new ideas.
+The solver was written with 2D in mind. Scalar eigenmodes on triangles now exist, in
+[`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs). Open boundaries and vector
+fields don't yet, so those parts of this chapter describe what would change, and why
+vector fields need new ideas.
 
 ## Step one: scalar fields on triangles
 
@@ -11,30 +13,34 @@ $z$, with $u = E_z$ or $u = \eta_0 H_z$, gives
 $$-\nabla\cdot(p\nabla u) - k_0^2 q\,u = f.$$
 
 This is chapter 1's equation with $d/dx$ replaced by $\nabla$, so the weak form is
-identical. What changes:
+identical. Here's what changed:
 
 | Module | Change |
 |---|---|
-| `mesh.rs` | Triangles: `verts_per_cell = 3`. The storage already allows this. A mesher is needed, such as a compiled [Triangle](https://www.cs.cmu.edu/~quake/triangle.html) ([Shewchuk 1996](10-references.md#shewchuk-1996)) or a JavaScript Delaunay library. |
-| `space.rs` | A new `H1Triangle` implementing `Space`. Its local matrices use a $2\times2$ Jacobian rather than the scale factor $h/2$. |
-| `assemble.rs` | Nothing. It already only sees the `Space` trait. |
-| `banded.rs` | Works for small meshes, then gets replaced (see below). |
-| `eigen.rs` | Nothing, apart from swapping the linear solver. |
-| `solve.rs` | Boundaries become edges rather than two end points. |
-| Website | A geometry editor for shapes, and a WebGL renderer in place of `FieldPlot`. |
+| `mesh.rs` | Triangles, with `verts_per_cell = 3`. A structured grid has its nodes snapped onto shape boundaries, which needs no mesher and keeps opposite edges matched for periodic ties. A general mesher such as [Triangle](https://www.cs.cmu.edu/~quake/triangle.html) ([Shewchuk 1996](10-references.md#shewchuk-1996)) would handle harder geometry. |
+| `space.rs` | A new `H1Triangle` implementing `Space`. Its local matrices use gradients on the triangle rather than the scale factor $h/2$. |
+| `assemble.rs` | Assembly is unchanged, because it only sees the `Space` trait. `DofMap` takes many periodic ties rather than one. |
+| `banded.rs` | Kept for 1D. 2D uses `SparseLu`, behind the same small `Factors` trait (see below). |
+| `eigen.rs` | Nothing, apart from taking any `Factors`. |
+| `solve2d.rs` | New: the 2D problems, with boundaries as edges rather than two end points. |
+| Website | A table of shapes, and a triangle renderer alongside `FieldPlot`. |
+
+The curved boundary limits accuracy. Straight cells cut the corners of a circle, so a
+rod's band edges converge at second order, even with second-order elements. On a staircase
+mesh with no snapping, they stop converging altogether.
 
 ## The solver has to change
 
 In 2D, a mesh of $N$ unknowns has a bandwidth of about $\sqrt{N}$ even after RCM, so
-banded LU costs $O(N^2)$. Rough scale: around 10,000 unknowns is still fine, but
-100,000 won't be interactive.
+banded LU costs $O(N^2)$. For 40,000 unknowns it took 9.7 s and 1.5 GB, and by 160,000 it
+needed 12 GB, more than a browser tab can address.
 
 Sparse solvers do better using **nested dissection**, cutting the mesh recursively so
 elimination creates far less fill
-([George 1973](10-references.md#george-1973)). This is where `faer` comes back in. It's already
-been shown to compile to WebAssembly here, and `BandedLu` is used in just a handful
-of places, so the swap is small. For 2D problems `faer` should be used unless
-measurements say otherwise.
+([George 1973](10-references.md#george-1973)). `faer`'s sparse LU limits fill in the same spirit, and it took 0.31 s
+on those 40,000 unknowns, about 30 times faster. So
+[`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) wraps `faer` for 2D, at the cost of
+more to download.
 
 ## Why vector fields are different
 
@@ -97,14 +103,14 @@ Chapter 7's open end was exact because in 1D a wave has only one direction to go
 2D, a local boundary condition can't be reflectionless for all angles at once
 ([Engquist & Majda 1977](10-references.md#engquist-majda-1977); [Johnson 2021](10-references.md#johnson-2021)).
 
-The standard solution is a **perfectly matched layer** (PML): an artificial absorbing
+This isn't implemented yet. The standard solution is a **perfectly matched layer** (PML): an artificial absorbing
 region around the domain, equivalent to a complex stretch of the coordinates
-([Bérenger 1994](10-references.md#berenger-1994); [Chew & Weedon 1994](10-references.md#chew-weedon-1994)). The
-useful part for us is that PML looks like a complex, anisotropic *material*, so it
-slots into the existing assembly
-([Sacks et al. 1995](10-references.md#sacks-1995); [Johnson 2021](10-references.md#johnson-2021)). It also makes the eigenproblem non-Hermitian, so
-lossy and leaky modes would need `faer`'s general Krylov-Schur eigensolver
-([Stewart 2002](10-references.md#stewart-2002)).
+([Bérenger 1994](10-references.md#berenger-1994); [Chew & Weedon 1994](10-references.md#chew-weedon-1994)). PML looks like a complex, anisotropic *material*
+([Sacks et al. 1995](10-references.md#sacks-1995); [Johnson 2021](10-references.md#johnson-2021)). That nearly fits the existing assembly, but the anisotropy means
+the stiffness has to split into separate $x$ and $y$ parts. It also makes the eigenproblem
+non-Hermitian. Leaky modes could use a general eigensolver such as Krylov-Schur
+([Stewart 2002](10-references.md#stewart-2002)), but a driven solve at complex frequency
+gets the local density of states directly, with no eigensolver at all.
 
 ## When the browser isn't the right tool
 

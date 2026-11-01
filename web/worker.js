@@ -1,5 +1,5 @@
 // Runs the WebAssembly solver off the main thread, so the page stays responsive.
-import init, { solve } from './pkg/eigenmenno_wasm.js';
+import init, { solve, solve_2d } from './pkg/eigenmenno_wasm.js';
 
 const ready = init();
 
@@ -9,7 +9,8 @@ onmessage = async ({ data: { id, requests } }) => {
   try {
     const transfer = [];
     const results = requests.map((request) => {
-      const solution = solve(JSON.stringify(request));
+      // Only 2D requests give the domain a width.
+      const solution = (request.width === undefined ? solve : solve_2d)(JSON.stringify(request));
       const channels = {};
       solution.channel_names().forEach((name, i) => {
         channels[name] = solution.channel(i);

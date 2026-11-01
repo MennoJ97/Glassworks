@@ -4,11 +4,12 @@ A small finite element solver for Maxwell eigenmode and driven problems. It runs
 entirely in the visitor's browser, so a website hosting it only serves static files
 and does no computing.
 
-It currently handles 1D layered structures, with 2D [planned](plans/2d-solver.md) for later:
+It handles 1D layered structures, and 2D eigenmodes, with [more of 2D planned](plans/2d-solver.md):
 
 - **Resonances** of closed structures
 - **Photonic band diagrams** of periodic structures
 - **Guided modes** of slab waveguides
+- **2D resonances and band diagrams** of shapes in a box or lattice, for either polarization
 - **Reflection and transmission spectra**, including lossy layers and oblique incidence
 - **Fields at a single wavelength**, from a plane wave or a current sheet
 - **Inverse design** of mirrors and broadband coatings, using adjoint gradients of
@@ -72,15 +73,18 @@ crates/eigenmenno-core   The solver, with no browser dependencies
   mesh.rs                Geometry
   space.rs               Elements (the Space trait is the 2D extension point)
   assemble.rs            Sparse matrices and boundary constraints
-  banded.rs              Banded LU and RCM reordering
+  banded.rs              Banded LU and RCM reordering, for 1D
+  sparse.rs              Sparse LU through faer, for 2D
   eigen.rs               Shift-invert Lanczos
   problem.rs             The JSON problem description
   solve.rs               The physics: from a request to fields
+  solve2d.rs             The same for 2D problems
 crates/eigenmenno-wasm   The thin browser interface
 web/                     The page
   worker.js              Runs the solver off the main thread
   js/model.js            Geometry, examples, and building solver requests
   js/plot.js             Canvas drawing (the only code that draws)
+  js/design.js           Inverse design: filter, projection and optimizer
   js/solver.js           Worker client; drops stale solves
   js/app.js              Connects the controls
   learn/                 Tutorial pages, generated from docs/
@@ -90,21 +94,23 @@ scripts/build-docs.mjs   Turns docs/ into web/learn, with equations as MathML
 
 ## Why it's built this way
 
-The linear algebra is handwritten because 1D doesn't need more, and a banded LU is
-faster here than a general sparse library. See
+The 1D linear algebra is handwritten because 1D doesn't need more, and a banded LU is
+faster there than a general sparse library. See
 [chapter 5](docs/05-linear-systems.md) for measurements. It also keeps the code short
-enough to read as a tutorial. `faer` is used only as an independent reference in tests,
-and it's the planned solver for 2D, where bandwidth grows and a sparse solver wins.
+enough to read as a tutorial. `faer` solves 2D problems, where bandwidth grows and a sparse
+solver wins by about 30 times at 40,000 unknowns, and it's the independent reference in
+the 1D tests.
 
 | If you need | Use |
 |---|---|
 | A readable solver, or modes and spectra in a browser | This project |
-| Fast sparse linear algebra or eigensolvers in Rust | [`faer`](https://docs.rs/faer) |
+| Fast sparse linear algebra or eigensolvers in Rust | [`faer`](https://docs.rs/faer), which this project uses for 2D |
 | A serious FEM library with Nédélec elements | [MFEM](https://mfem.org), [NGSolve](https://ngsolve.org), or [FEniCSx](https://fenicsproject.org) |
 | Large 3D electromagnetic eigenmode or driven simulations | [Palace](https://github.com/awslabs/palace) |
 
 ## Known limits
 
+- 2D has no open boundaries or driven solves yet, only walls and periodic lattices.
 - Eigenmode analyses support lossless materials only. Use a driven solve for loss or
   metals.
 - Materials have one constant index at all wavelengths, so "gold-like metal" is a rough

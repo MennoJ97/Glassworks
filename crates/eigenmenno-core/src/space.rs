@@ -94,6 +94,93 @@ impl<'a> H1Line<'a> {
     }
 }
 
+/// A degree-4 rule on triangles: barycentric coordinates and a weight, summing to 1.
+const TRIANGLE_RULE: [([f64; 3], f64); 6] = [
+    ([0.108103018168070, 0.445948490915965, 0.445948490915965], 0.223381589678011),
+    ([0.445948490915965, 0.108103018168070, 0.445948490915965], 0.223381589678011),
+    ([0.445948490915965, 0.445948490915965, 0.108103018168070], 0.223381589678011),
+    ([0.816847572980459, 0.091576213509771, 0.091576213509771], 0.109951743655322),
+    ([0.091576213509771, 0.816847572980459, 0.091576213509771], 0.109951743655322),
+    ([0.091576213509771, 0.091576213509771, 0.816847572980459], 0.109951743655322),
+];
+
+/// Continuous second-order triangles, with dofs on vertices and then edge midpoints.
+pub struct H1Triangle<'a> {
+    pub mesh: &'a Mesh,
+    n_vertices: usize,
+    edges: Vec<[usize; 2]>,
+    /// The edge opposite each pair: `(v0, v1)`, `(v1, v2)`, `(v2, v0)`.
+    cell_edges: Vec<[usize; 3]>,
+}
+
+impl<'a> H1Triangle<'a> {
+    pub fn new(mesh: &'a Mesh) -> Self {
+        let edges = mesh.edges();
+        let index: std::collections::HashMap<[usize; 2], usize> = edges.iter().enumerate().map(|(i, e)| (*e, i)).collect();
+        let id = |a: usize, b: usize| index[&[a.min(b), a.max(b)]];
+        let cell_edges = mesh.cells.chunks(3).map(|c| [id(c[0], c[1]), id(c[1], c[2]), id(c[2], c[0])]).collect();
+        Self { mesh, n_vertices: mesh.coords.len() / 2, edges, cell_edges }
+    }
+
+    pub fn dof_positions(&self) -> Vec<(f64, f64)> {
+        let vertices = (0..self.n_vertices).map(|v| self.mesh.vertex(v));
+        let midpoints = self.edges.iter().map(|&[a, b]| {
+            let (p, q) = (self.mesh.vertex(a), self.mesh.vertex(b));
+            ((p.0 + q.0) / 2.0, (p.1 + q.1) / 2.0)
+        });
+        vertices.chain(midpoints).collect()
+    }
+}
+
+impl Space for H1Triangle<'_> {
+    fn n_dofs(&self) -> usize {
+        self.n_vertices + self.edges.len()
+    }
+    fn n_cells(&self) -> usize {
+        self.mesh.n_cells()
+    }
+    fn local_size(&self) -> usize {
+        6
+    }
+    fn cell_dofs(&self, cell: usize, dofs: &mut [usize]) {
+        dofs[..3].copy_from_slice(&self.mesh.cells[3 * cell..3 * cell + 3]);
+        for (d, e) in dofs[3..].iter_mut().zip(self.cell_edges[cell]) {
+            *d = self.n_vertices + e;
+        }
+    }
+    fn local_matrices(&self, cell: usize, stiffness: &mut [f64], mass: &mut [f64]) {
+        let v = &self.mesh.cells[3 * cell..3 * cell + 3];
+        let [p0, p1, p2] = [self.mesh.vertex(v[0]), self.mesh.vertex(v[1]), self.mesh.vertex(v[2])];
+        let det = (p1.0 - p0.0) * (p2.1 - p0.1) - (p2.0 - p0.0) * (p1.1 - p0.1);
+        // Gradients of the barycentric coordinates are constant on a straight triangle.
+        let gx = [(p1.1 - p2.1) / det, (p2.1 - p0.1) / det, (p0.1 - p1.1) / det];
+        let gy = [(p2.0 - p1.0) / det, (p0.0 - p2.0) / det, (p1.0 - p0.0) / det];
+        let area = det.abs() / 2.0;
+        stiffness.fill(0.0);
+        mass.fill(0.0);
+        for ([l0, l1, l2], w) in TRIANGLE_RULE {
+            let val = [l0 * (2.0 * l0 - 1.0), l1 * (2.0 * l1 - 1.0), l2 * (2.0 * l2 - 1.0), 4.0 * l0 * l1, 4.0 * l1 * l2, 4.0 * l2 * l0];
+            let grad = |g: &[f64; 3]| {
+                [
+                    (4.0 * l0 - 1.0) * g[0],
+                    (4.0 * l1 - 1.0) * g[1],
+                    (4.0 * l2 - 1.0) * g[2],
+                    4.0 * (l0 * g[1] + l1 * g[0]),
+                    4.0 * (l1 * g[2] + l2 * g[1]),
+                    4.0 * (l2 * g[0] + l0 * g[2]),
+                ]
+            };
+            let (dx, dy) = (grad(&gx), grad(&gy));
+            for i in 0..6 {
+                for j in 0..6 {
+                    stiffness[i * 6 + j] += w * area * (dx[i] * dx[j] + dy[i] * dy[j]);
+                    mass[i * 6 + j] += w * area * val[i] * val[j];
+                }
+            }
+        }
+    }
+}
+
 impl Space for H1Line<'_> {
     fn n_dofs(&self) -> usize {
         self.n_cells() * self.order + 1

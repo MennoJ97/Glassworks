@@ -4,7 +4,7 @@
 //! null space of the curl-curl operator.
 
 use crate::assemble::Csr;
-use crate::banded::BandedLu;
+use crate::banded::{BandedLu, Factors};
 use crate::{C64, ZERO};
 
 /// Largest Krylov basis, in vectors: the only limit on clustered spectra.
@@ -71,7 +71,7 @@ fn tridiagonal_eigen(d: &[f64], e: &[f64]) -> (Vec<f64>, Vec<f64>) {
 }
 
 /// One Lanczos run, kept orthogonal to `found`. Returns the converged modes.
-fn lanczos(lu: &BandedLu, b: &Csr, found: &[Mode], want: usize, tol: f64, seed: &mut u64) -> Vec<Mode> {
+fn lanczos(lu: &dyn Factors, b: &Csr, found: &[Mode], want: usize, tol: f64, seed: &mut u64) -> Vec<Mode> {
     let n = b.n;
     let max_dim = (n - found.len()).min(MAX_BASIS);
     let (mut v, mut bv): (Vec<Vec<C64>>, Vec<Vec<C64>>) = (vec![], vec![]);
@@ -143,12 +143,16 @@ fn lanczos(lu: &BandedLu, b: &Csr, found: &[Mode], want: usize, tol: f64, seed: 
 /// stays orthogonal to the modes already found, and we stop once a run finds
 /// nothing closer than the current k-th mode.
 pub fn eigs_near(a: &Csr, b: &Csr, sigma: f64, k: usize, tol: f64) -> Result<Vec<(f64, Vec<C64>)>, String> {
-    let lu = BandedLu::factor(&a.sub_scaled(sigma, b))?;
-    let k = k.min(a.n);
+    eigs_with(&BandedLu::factor(&a.sub_scaled(sigma, b))?, b, sigma, k, tol)
+}
+
+/// `eigs_near` for an `lu` that already factors `A - sigma B`.
+pub fn eigs_with(lu: &dyn Factors, b: &Csr, sigma: f64, k: usize, tol: f64) -> Result<Vec<(f64, Vec<C64>)>, String> {
+    let k = k.min(b.n);
     let mut seed = 0x9E3779B97F4A7C15;
     let mut found: Vec<Mode> = vec![];
-    while found.len() < a.n {
-        let new = lanczos(&lu, b, &found, k.saturating_sub(found.len()).max(1), tol, &mut seed);
+    while found.len() < b.n {
+        let new = lanczos(lu, b, &found, k.saturating_sub(found.len()).max(1), tol, &mut seed);
         let kth = found.get(k.wrapping_sub(1)).map_or(0.0, |f| f.theta.abs());
         let finished = new.iter().all(|f| f.theta.abs() < kth * (1.0 - 1e-9));
         found.extend(new);

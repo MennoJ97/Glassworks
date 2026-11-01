@@ -83,7 +83,11 @@ main {
 .settings h2 { margin-bottom: 0; }
 main.design { grid-template-areas: "stage readout" "stage settings"; grid-template-rows: auto 1fr; }
 #design-fields:not([hidden]) { display: grid; gap: 12px; margin-top: 10px; }
+#plane-fields:not([hidden]) { display: grid; gap: 12px; }
+canvas[hidden] { display: none; }
+#field-map { height: clamp(320px, 56vh, 560px); }
 #design-run { margin: 0 0 12px; }
+#design-run[hidden] { display: none; }
 #design-start { font-weight: 500; }
 .settings h2:not(:first-child) { margin-top: 10px; }
 

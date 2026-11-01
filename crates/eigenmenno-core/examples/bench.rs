@@ -17,7 +17,7 @@ fn main() {
     for (order, cells) in [(1, 100_000), (1, 1_000_000), (4, 250_000)] {
         let mesh = Mesh::layered_line(&[1.0], &[1.0 / cells as f64]);
         let space = H1Line::new(&mesh, order);
-        let dofs = DofMap::new(space.n_dofs(), &[0, space.n_dofs() - 1], None);
+        let dofs = DofMap::new(space.n_dofs(), &[0, space.n_dofs() - 1], &[]);
         let k2 = C64::new(1.0e4, 10.0);
         let a = Csr::from_triplets(
             dofs.n_free,

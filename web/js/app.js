@@ -1,7 +1,7 @@
 // Connects the controls, the solver and the plots.
 
-import { MATERIALS, PRESETS, PROBLEMS, buildRequests, decodeState, defaultState, encodeState, layer, problemOf, totalLength } from './model.js';
-import { EvolutionMap, FieldPlot, LineChart, seriesColors } from './plot.js';
+import { MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeState, defaultState, encodeState, layer, problemOf, totalLength } from './model.js';
+import { EvolutionMap, FieldMap, FieldPlot, LineChart, seriesColors } from './plot.js';
 import { Solver } from './solver.js';
 import { STAGES, TOTAL_ITERATIONS, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, references, sharpnessAt } from './design.js';
 
@@ -15,6 +15,8 @@ const VIEW_HELP = {
   cavity: 'The wavelengths at which the structure resonates between its two ends.',
   bands: 'The waves that can travel through an endless repeat of this structure, and the gaps where none can.',
   waveguide: 'The modes that travel along the layers at a fixed wavelength, and how fast each one propagates.',
+  cavity2d: 'The modes of a 2D structure inside walls, uniform along the third direction.',
+  bands2d: 'The waves that can travel through an endless square or rectangular lattice of this cell, along the edge of its symmetry zone.',
   mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
   antireflection: 'Find the coating that reflects the least light, averaged across a band of wavelengths.',
 };
@@ -44,6 +46,8 @@ const design = { rho: null, frames: [], history: [], shown: 0, references: [], f
 let selectedLayer = -1;
 let selectedField = 0;
 let results = null;
+// Results outlive a change of view until the next solve, and fit no other view.
+let resultsView = null;
 let visible = new Set();
 let playing = !matchMedia('(prefers-reduced-motion: reduce)').matches;
 let timer = null;
@@ -67,8 +71,16 @@ const fieldPlot = new FieldPlot($('field-plot'), {
   },
 });
 
+const fieldMap = new FieldMap($('field-map'));
+const planar = () => Boolean(state.plane[state.analysis]);
+
 const chart = new LineChart($('chart'), (hit) => {
   if (problemOf(state.analysis) === 'design') { showFrame(hit.index); return; }
+  if (state.analysis === 'bands2d') {
+    state.plane.bands2d.pick = { s: hit.x, band: hit.seriesIndex };
+    changed();
+    return;
+  }
   if (state.analysis === 'spectrum') {
     state.wavelength = hit.x;
     $('wavelength').value = hit.x.toFixed(3);
@@ -204,17 +216,31 @@ function renderSettings() {
   show('design-fields', designing);
   show('design-band', a === 'antireflection');
   show('design-run', designing);
-  show('left-field', !designing);
-  show('right-field', !designing);
-  show('accuracy', !designing);
-  document.querySelector('.builder').hidden = designing;
+  show('left-field', !designing && !planar());
+  show('right-field', !designing && !planar());
+  show('accuracy', !designing && !planar());
+  const flat = planar();
+  show('layer-builder', !designing && !flat);
+  show('plane-builder', flat);
+  show('plane-fields', flat);
+  show('field-plot', !flat);
+  show('field-map', flat);
+  if (flat) {
+    renderPlane();
+    show('plane-walls-field', a === 'cavity2d');
+    $('field-note').textContent = 'Colour shows the field at this moment, with red and blue as opposite signs. Its overall size is arbitrary.';
+  }
+  // TE and TM keep their meaning for the coefficients, but read differently in a plane.
+  $('polarization').options[0].text = flat ? 'Ez (electric field out of the plane, often called TM)' : 'TE (electric field along the layers)';
+  $('polarization').options[1].text = flat ? 'Hz (magnetic field out of the plane, often called TE)' : 'TM (magnetic field along the layers)';
   document.querySelector('main').classList.toggle('design', designing);
-  $('polarization-title').textContent = designing ? 'Polarization' : 'Polarization and ends';
-  $('field-edit').hidden = designing;
+  $('polarization-title').textContent = designing || flat ? 'Polarization' : 'Polarization and ends';
+  $('field-edit').hidden = designing || flat;
+  $('field-layers').hidden = flat;
   fieldPlot.locked = designing;
   if (designing) renderDesignSettings();
   else fieldPlot.layers = state.layers;
-  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide');
+  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || flat);
   show('source-field', a === 'field');
   show('range-field', a === 'spectrum');
   $('polarization').value = state.polarization;
@@ -261,6 +287,51 @@ function onWall(side) {
 $('left-wall').addEventListener('change', () => onWall('left'));
 $('right-wall').addEventListener('change', () => onWall('right'));
 
+// The 2D domain and its shapes.
+function renderPlane() {
+  const p = state.plane[state.analysis];
+  $('plane-width').value = p.width;
+  $('plane-height').value = p.height;
+  $('plane-cell').value = p.cell;
+  $('plane-background').value = p.background;
+  $('plane-walls').replaceChildren(...['pec', 'pmc', 'periodic'].map((w) => new Option(WALLS[w], w, false, w === p.walls)));
+  const body = $('shapes');
+  const focused = document.activeElement?.closest?.('#shapes') ? document.activeElement.getAttribute('aria-label') : null;
+  body.replaceChildren();
+  p.shapes.forEach((shape, i) => {
+    const row = document.createElement('tr');
+    const kind = document.createElement('select');
+    kind.setAttribute('aria-label', `Shape ${i + 1} type`);
+    kind.add(new Option('Circle', 'circle', false, shape.type === 'circle'));
+    kind.add(new Option('Rectangle', 'rect', false, shape.type === 'rect'));
+    kind.addEventListener('change', () => { shape.type = kind.value; renderPlane(); changed(); });
+    const edit = (key, min, label) => numberInput(shape[key], 0.01, min, (v) => { shape[key] = v; changed(); }, `Shape ${i + 1} ${label}`);
+    const height = edit('h', 0.001, 'height');
+    height.disabled = shape.type === 'circle';
+    const remove = button('Remove', `Remove shape ${i + 1}`, () => { p.shapes.splice(i, 1); renderPlane(); changed(); });
+    for (const c of [kind, edit('x', -100, 'centre x'), edit('y', -100, 'centre y'), edit('w', 0.001, 'width or diameter'), height, edit('n', 0.01, 'index'), remove]) {
+      const td = document.createElement('td');
+      td.append(c);
+      row.append(td);
+    }
+    body.append(row);
+  });
+  if (focused) body.querySelector(`[aria-label="${CSS.escape(focused).replace(/\\ /g, ' ')}"]`)?.focus();
+}
+
+const planeSettings = () => state.plane[state.analysis];
+bindNumber('plane-width', (v) => { planeSettings().width = v; }, 0.05);
+bindNumber('plane-height', (v) => { planeSettings().height = v; }, 0.05);
+bindNumber('plane-cell', (v) => { planeSettings().cell = v; }, 0.001);
+bindNumber('plane-background', (v) => { planeSettings().background = v; }, 0.01);
+$('plane-walls').addEventListener('change', () => { planeSettings().walls = $('plane-walls').value; changed(); });
+$('add-shape').addEventListener('click', () => {
+  const p = planeSettings();
+  p.shapes.push({ type: 'circle', x: p.width / 2, y: p.height / 2, w: Math.min(p.width, p.height) / 4, h: Math.min(p.width, p.height) / 4, n: 2 });
+  renderPlane();
+  changed();
+});
+
 function renderDesignSettings() {
   const d = state.design[state.analysis];
   for (const key of ['thickness', 'radius', 'seed']) $(`design-${key}`).value = d[key];
@@ -296,8 +367,16 @@ for (const key of ['low', 'high', 'left', 'right']) {
 $('polarization').addEventListener('change', () => { state.polarization = $('polarization').value; visible = new Set(); changed(); });
 $('source').addEventListener('change', () => { state.source = $('source').value; renderSettings(); changed(); });
 
+// Nothing on screen fits a new view until its first solve returns.
+function clearForNewView() {
+  clearResults();
+  $('error').hidden = true;
+  setStatus('Solving.');
+}
+
 function selectView(analysis) {
   state.analysis = analysis;
+  clearForNewView();
   selectedField = 0;
   renderSettings();
   changed();
@@ -318,6 +397,7 @@ $('preset').addEventListener('change', () => {
   const preset = PRESETS[$('preset').value];
   if (!preset) return;
   Object.assign(state, structuredClone(preset));
+  clearForNewView();
   selectedLayer = -1;
   selectedField = 0;
   renderLayers();
@@ -382,14 +462,16 @@ function changed() {
 
 async function solveNow() {
   if (problemOf(state.analysis) === 'design') return previewDesign();
+  const view = state.analysis;
   const reply = await solver.run(buildRequests(state));
-  if (!reply) return;
+  if (!reply || view !== state.analysis) return;
   if (reply.error) {
     setError(`${reply.error[0].toUpperCase()}${reply.error.slice(1)}.`);
     clearResults();
     return;
   }
   results = reply.results;
+  resultsView = view;
   $('error').hidden = true;
   $('save-csv').hidden = false;
   const { n_dofs: dofs } = results[results.length - 1].meta;
@@ -421,6 +503,8 @@ function restartEvolution() {
 function showDesign(rho, reply) {
   design.rho = rho;
   results = reply.results;
+  resultsView = state.analysis;
+  $('save-csv').hidden = false;
   $('error').hidden = true;
   fieldPlot.layers = plotLayers(state.design[state.analysis], rho);
   showResults();
@@ -564,6 +648,7 @@ function clearResults() {
   chart.spec = null;
   fieldPlot.field = null;
   fieldPlot.source = null;
+  fieldMap.clear();
   renderComponents(null);
   fieldPlot.draw();
 }
@@ -579,11 +664,27 @@ function fieldFrom(result, i) {
 
 function showResults() {
   const a = state.analysis;
+  if (!results || resultsView !== a) return;
   const fieldResult = results[results.length - 1];
   const count = fieldResult.meta.fields.length;
   if (a === 'bands') selectedField = Math.min(state.bandPick.band, count - 1);
+  if (a === 'bands2d') selectedField = Math.min(state.plane.bands2d.pick.band, count - 1);
   selectedField = Math.max(0, Math.min(selectedField, count - 1));
 
+  if (planar()) {
+    const p = state.plane[a];
+    const { channels } = fieldResult;
+    fieldMap.setMesh({ x: channels.x, y: channels.y, triangles: channels.triangles, width: p.width, height: p.height }, p.shapes);
+    const name = fieldResult.meta.fields[selectedField]?.components[0];
+    if (name) fieldMap.setField(channels[`field${selectedField}/${name}/re`], channels[`field${selectedField}/${name}/im`]);
+    fieldPlot.field = null;
+    $('components').replaceChildren(name ?? '');
+    renderTable(fieldResult);
+    renderChart();
+    fieldMap.phase = fieldPlot.phase;
+    fieldMap.draw();
+    return;
+  }
   const field = fieldFrom(fieldResult, selectedField);
   fieldPlot.field = field;
   fieldPlot.source = a === 'field' && state.source === 'line' ? state.sourceX : null;
@@ -627,6 +728,10 @@ function resultsTitle() {
     case 'field': return `Response at ${+state.wavelength.toFixed(3)} µm`;
     case 'waveguide': return `Guided modes at ${+state.wavelength.toFixed(3)} µm`;
     case 'bands': return `Modes at kL/π = ${state.bandPick.k.toFixed(2)}`;
+    case 'bands2d': {
+      const [x, y] = blochAt(state.plane.bands2d.pick.s).map((v) => (v / Math.PI).toFixed(2));
+      return `Modes at k = (${x}, ${y}) π/a`;
+    }
     case 'mirror': return `Reflection at ${+state.wavelength.toFixed(3)} µm`;
     case 'antireflection': return `Mean reflection, ${designSettings().from} to ${designSettings().to} µm`;
     default: return 'Resonant modes';
@@ -678,6 +783,7 @@ function renderTable(result) {
     const pick = () => {
       selectedField = i;
       if (a === 'bands') state.bandPick.band = i;
+      if (a === 'bands2d') state.plane.bands2d.pick.band = i;
       showResults();
     };
     row.addEventListener('click', pick);
@@ -691,7 +797,7 @@ function renderChart() {
   const a = state.analysis;
   const wrap = $('chart-wrap');
   const designing = problemOf(a) === 'design';
-  wrap.hidden = designing ? design.history.length < 2 : a !== 'spectrum' && a !== 'bands';
+  wrap.hidden = designing ? design.history.length < 2 : a !== 'spectrum' && a !== 'bands' && a !== 'bands2d';
   $('evolution-wrap').hidden = !designing || design.frames.length < 2;
   if (wrap.hidden) { chart.spec = null; return; }
   const channels = results[0].channels;
@@ -733,7 +839,7 @@ function renderChart() {
     };
   } else {
     const L = results[0].meta.length;
-    const x = Array.from(channels.k, (k) => (k * L) / Math.PI);
+    const x = Array.from(a === 'bands2d' ? channels.s : channels.k, (k) => (a === 'bands2d' ? k : (k * L) / Math.PI));
     const scale = L / (2 * Math.PI);
     const bands = Object.keys(channels).filter((n) => n.startsWith('band')).map((n) => channels[n].map((k0) => k0 * scale));
     const gaps = [];
@@ -741,9 +847,13 @@ function renderChart() {
       const [lo, hi] = [Math.max(...bands[i]), Math.min(...bands[i + 1])];
       if (hi - lo > 1e-3) gaps.push([lo, hi]);
     }
-    $('chart-title').textContent = 'Band diagram. Shaded ranges are band gaps, where no wave can travel. Click a point to see its mode.';
+    $('chart-title').textContent = 'Band diagram, with frequency as period over wavelength. Shaded ranges are band gaps, where no wave can travel. Click a point to see its mode.';
+    const flat = a === 'bands2d';
     chart.spec = {
-      xMin: 0, xMax: 1, yMin: 0, yMax: Math.max(...bands.flat()) * 1.05 || 1, xLabel: 'Bloch wavevector kL/π', gaps, marker: state.bandPick.k,
+      xMin: 0, xMax: flat ? 3 : 1, yMin: 0, yMax: Math.max(...bands.flat()) * 1.05 || 1, gaps,
+      xLabel: flat ? 'Bloch wavevector around the zone' : 'Bloch wavevector kL/π',
+      marker: flat ? state.plane.bands2d.pick.s : state.bandPick.k,
+      ...(flat ? { xTicks: [0, 1, 2, 3], xFormat: (v) => ['Γ', 'X', 'M', 'Γ'][v] } : {}),
       series: bands.map((y, i) => ({ name: `Band ${i + 1}`, x, y, color: colors[0] })),
       format: (index, s) => [`Band ${s + 1}`, `kL/π ${x[index].toFixed(3)}`, `L/λ ${bands[s][index].toFixed(4)}`],
     };
@@ -759,10 +869,16 @@ function animate(now) {
   fieldPlot.phase = (fieldPlot.phase + (2 * Math.PI * Math.min(50, now - lastFrame)) / PERIOD_MS) % (2 * Math.PI);
   lastFrame = now;
   if (fieldPlot.field && !document.hidden) fieldPlot.draw();
+  if (planar() && !document.hidden) {
+    fieldMap.phase = fieldPlot.phase;
+    fieldMap.draw();
+  }
   requestAnimationFrame(animate);
 }
 
-new ResizeObserver(() => { fieldPlot.draw(); chart.draw(); evolution.draw(); }).observe($('field-plot'));
+const resized = new ResizeObserver(() => { fieldPlot.draw(); fieldMap.draw(); chart.draw(); evolution.draw(); });
+resized.observe($('field-plot'));
+resized.observe($('field-map'));
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   if (design.frames.length) restartEvolution();
   if (results) showResults();

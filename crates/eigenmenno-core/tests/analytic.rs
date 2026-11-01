@@ -1,6 +1,7 @@
 //! Every test compares against an exact result, not against stored numbers.
 
-use eigenmenno_core::problem::{Analysis, Boundary, Layer, MeshSpec, Polarization, Request, Source};
+use eigenmenno_core::mesh::{Mesh, Outline};
+use eigenmenno_core::problem::{Analysis, Analysis2d, Boundary, Layer, Material, MeshSpec, Polarization, Request, Request2d, Shape, Source};
 use eigenmenno_core::solve::{solve, Output};
 use eigenmenno_core::C64;
 use std::f64::consts::PI;
@@ -359,4 +360,136 @@ fn request_parses_from_json() {
         "mesh":{"order":3,"max_cell":0.1},"analysis":{"type":"cavity","n_modes":2}}"#;
     let r: Request = serde_json::from_str(json).unwrap();
     close(solve(&r).unwrap().meta.fields[0].k0, PI / 2.0, 1e-6);
+}
+
+fn rods(cell: f64, pol: Polarization, analysis: Analysis2d) -> Request2d {
+    Request2d {
+        width: 1.0,
+        height: 1.0,
+        cell,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes: vec![Shape { outline: Outline::Circle { x: 0.5, y: 0.5, r: 0.2 }, material: Material { eps: 12.0, mu: 1.0 } }],
+        polarization: pol,
+        walls: Boundary::Periodic,
+        analysis,
+    }
+}
+
+/// Frequency `a / lambda` of the lowest modes of the rod lattice at one Bloch phase.
+fn rod_bands(cell: f64, pol: Polarization, bloch: [f64; 2]) -> Vec<f64> {
+    let o = eigenmenno_core::solve2d::solve(&rods(cell, pol, Analysis2d::Cavity { n_modes: 3, bloch })).unwrap();
+    o.meta.fields.iter().map(|f| f.k0 / (2.0 * PI)).collect()
+}
+
+#[test]
+fn fitted_mesh_has_no_slivers_and_follows_the_outline() {
+    let circle = Outline::Circle { x: 0.5, y: 0.5, r: 0.2 };
+    let rect = Outline::Rect { x0: 0.13, y0: 0.27, x1: 0.81, y1: 0.42 };
+    let shifted = Outline::Circle { x: 0.47, y: 0.53, r: 0.31 };
+    for (outlines, area) in [(vec![circle], PI * 0.04), (vec![shifted], PI * 0.0961), (vec![rect], 0.68 * 0.15)] {
+        for n in [12, 24, 48, 96, 192] {
+            let m = Mesh::fitted_grid(n, n, 1.0, 1.0, &outlines);
+            let mut inside = 0.0;
+            let mut worst = 180f64;
+            for (c, v) in m.cells.chunks(3).enumerate() {
+                let p: Vec<(f64, f64)> = v.iter().map(|&i| m.vertex(i)).collect();
+                let det = (p[1].0 - p[0].0) * (p[2].1 - p[0].1) - (p[2].0 - p[0].0) * (p[1].1 - p[0].1);
+                assert!(det > 0.0, "cell {c} is inverted on the {n} grid");
+                if m.region[c] == 1 {
+                    inside += det / 2.0;
+                }
+                for k in 0..3 {
+                    let (o, a, b) = (p[k], p[(k + 1) % 3], p[(k + 2) % 3]);
+                    let (ux, uy, vx, vy) = (a.0 - o.0, a.1 - o.1, b.0 - o.0, b.1 - o.1);
+                    worst = worst.min((ux * vy - uy * vx).atan2(ux * vx + uy * vy).to_degrees());
+                }
+            }
+            assert!(worst > 14.0, "smallest angle {worst} on the {n} grid");
+            // A polygon inscribed in a circle loses area like h^2.
+            close(inside, area, 3.0 / (n * n) as f64);
+        }
+    }
+}
+
+#[test]
+fn rectangular_cavity_matches_mode_formula() {
+    let box_of = |pol, walls| Request2d {
+        width: 1.0,
+        height: 1.5,
+        cell: 0.05,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes: vec![],
+        polarization: pol,
+        walls,
+        analysis: Analysis2d::Cavity { n_modes: 6, bloch: [0.0, 0.0] },
+    };
+    let k2 = |m: f64, n: f64| PI * PI * (m * m + n * n / 2.25);
+    // E_z vanishes on a perfect conductor, so the mode numbers start from 1.
+    let ez = eigenmenno_core::solve2d::solve(&box_of(Polarization::Te, Boundary::Pec)).unwrap();
+    let want = [k2(1.0, 1.0), k2(1.0, 2.0), k2(2.0, 1.0), k2(1.0, 3.0), k2(2.0, 2.0), k2(2.0, 3.0)];
+    for (f, w) in ez.meta.fields.iter().zip(want) {
+        close(f.k0 * f.k0, w, 2e-4 * w);
+    }
+    // H_z has zero normal derivative there, so a static mode comes first.
+    let hz = eigenmenno_core::solve2d::solve(&box_of(Polarization::Tm, Boundary::Pec)).unwrap();
+    let want = [0.0, k2(0.0, 1.0), k2(1.0, 0.0), k2(1.0, 1.0), k2(0.0, 2.0), k2(1.0, 2.0)];
+    for (f, w) in hz.meta.fields.iter().zip(want) {
+        close(f.k0 * f.k0, w, 2e-4 * w.max(1.0));
+    }
+}
+
+#[test]
+fn layered_box_matches_the_1d_solver() {
+    // With magnetic walls top and bottom, E_z modes with no y variation are exactly
+    // the 1D problem's. The first few modes of this short box have none.
+    let dielectric = Material { eps: 6.25, mu: 1.0 };
+    let r = Request2d {
+        width: 1.1,
+        height: 0.1,
+        cell: 0.02,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes: vec![Shape { outline: Outline::Rect { x0: 0.7, y0: -1.0, x1: 2.0, y1: 2.0 }, material: dielectric }],
+        polarization: Polarization::Te,
+        walls: Boundary::Pmc,
+        analysis: Analysis2d::Cavity { n_modes: 4, bloch: [0.0, 0.0] },
+    };
+    let o = request(vec![layer(0.7, 1.0), layer(0.4, 2.5)], Polarization::Te, (Boundary::Pmc, Boundary::Pmc), 5, 0.02, cavity(4));
+    let (two, one) = (eigenmenno_core::solve2d::solve(&r).unwrap(), solve(&o).unwrap());
+    for (a, b) in two.meta.fields.iter().zip(&one.meta.fields) {
+        close(a.k0, b.k0, 2e-3 * b.k0.max(1.0));
+    }
+}
+
+#[test]
+fn rod_lattice_matches_a_plane_wave_expansion() {
+    // Square lattice, eps 12, r = 0.2a. Reference: an independent plane-wave expansion
+    // with 2401 waves, using the inverse rule for H_z, whose X value was still rising by
+    // about 4e-5 per step. See plans/2d-solver.md. Straight cells around the curved rod
+    // limit this to second order, and 48 cells per period leave about 3e-4.
+    let cell = 1.0 / 48.0;
+    let (m, x) = ([PI, PI], [PI, 0.0]);
+    close(rod_bands(cell, Polarization::Te, m)[0], 0.28066, 3e-4);
+    close(rod_bands(cell, Polarization::Te, x)[1], 0.41716, 4e-4);
+    close(rod_bands(cell, Polarization::Tm, m)[0], 0.49588, 6e-4);
+    close(rod_bands(cell, Polarization::Tm, x)[1], 0.44109, 6e-4);
+}
+
+#[test]
+fn band_path_visits_the_lattice_symmetry_points() {
+    let bands = eigenmenno_core::solve2d::solve(&rods(0.05, Polarization::Te, Analysis2d::Bands { n_bands: 2, n_k: 2 })).unwrap();
+    let (s, lowest) = (channel(&bands, "s"), channel(&bands, "band0"));
+    assert_eq!(s, [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]);
+    // The lowest band starts and ends at zero at Gamma, and peaks at M.
+    close(lowest[0], 0.0, 1e-6);
+    close(lowest[6], 0.0, 1e-6);
+    close(lowest[4] / (2.0 * PI), rod_bands(0.05, Polarization::Te, [PI, PI])[0], 1e-9);
+}
+
+#[test]
+fn request_2d_parses_from_json() {
+    let json = r#"{"width": 1, "height": 1, "cell": 0.1, "background": {"eps": 1}, "polarization": "te", "walls": "periodic",
+        "shapes": [{"type": "circle", "x": 0.5, "y": 0.5, "r": 0.2, "material": {"eps": 12}}],
+        "analysis": {"type": "bands", "n_bands": 4, "n_k": 3}}"#;
+    let r: Request2d = serde_json::from_str(json).unwrap();
+    assert!(eigenmenno_core::solve2d::solve(&r).is_ok());
 }

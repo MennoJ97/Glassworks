@@ -46,11 +46,11 @@ function drawYAxis(ctx, area, scale, values, format = label) {
   }
 }
 
-function drawXAxis(ctx, area, scale, values, title) {
+function drawXAxis(ctx, area, scale, values, title, format = label) {
   ctx.fillStyle = css('--muted');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  for (const v of values) ctx.fillText(label(v), scale(v), area.bottom + 7);
+  for (const v of values) ctx.fillText(format(v), scale(v), area.bottom + 7);
   ctx.textAlign = 'right';
   ctx.fillText(title, area.right, area.bottom + 22);
 }
@@ -266,6 +266,148 @@ export class FieldPlot {
   }
 }
 
+// A scalar field over a triangle mesh, with shape outlines on top. The mesh is
+// rasterized once per size, so animating only recombines two stored images.
+export class FieldMap {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.mesh = null;
+    this.shapes = [];
+    this.phase = 0;
+    this.raster = null;
+    this.image = document.createElement('canvas');
+  }
+
+  setMesh(mesh, shapes) {
+    this.mesh = mesh;
+    this.shapes = shapes;
+    this.raster = null;
+    this.field = null;
+    this.values = null;
+  }
+
+  setField(re, im) {
+    this.field = { re, im };
+    this.values = null;
+  }
+
+  clear() {
+    this.mesh = null;
+    this.draw();
+  }
+
+  // The domain drawn at one scale in both directions, inside the axes.
+  box(width, height) {
+    const [w, h] = [this.mesh.width, this.mesh.height];
+    const scale = Math.min((width - 58) / w, (height - 48) / h);
+    return { left: 44, right: 44 + w * scale, top: 8, bottom: 8 + h * scale, scale };
+  }
+
+  // For every pixel, the triangle holding it and its weights on the three corners.
+  rasterize(a) {
+    const { x, y, triangles } = this.mesh;
+    const [w, h] = [Math.ceil(a.right - a.left), Math.ceil(a.bottom - a.top)];
+    const owner = new Int32Array(w * h).fill(-1);
+    const weights = new Float32Array(2 * w * h);
+    const px = Array.from(x, (v) => v * a.scale);
+    const py = Array.from(y, (v) => (this.mesh.height - v) * a.scale);
+    for (let t = 0; t < triangles.length; t += 3) {
+      const [i, j, k] = [triangles[t], triangles[t + 1], triangles[t + 2]];
+      const det = (py[j] - py[k]) * (px[i] - px[k]) + (px[k] - px[j]) * (py[i] - py[k]);
+      if (det === 0) continue;
+      const x0 = Math.max(0, Math.floor(Math.min(px[i], px[j], px[k])));
+      const x1 = Math.min(w - 1, Math.ceil(Math.max(px[i], px[j], px[k])));
+      const y0 = Math.max(0, Math.floor(Math.min(py[i], py[j], py[k])));
+      const y1 = Math.min(h - 1, Math.ceil(Math.max(py[i], py[j], py[k])));
+      for (let row = y0; row <= y1; row++) {
+        for (let col = x0; col <= x1; col++) {
+          const [cx, cy] = [col + 0.5 - px[k], row + 0.5 - py[k]];
+          const a0 = ((py[j] - py[k]) * cx + (px[k] - px[j]) * cy) / det;
+          const a1 = ((py[k] - py[i]) * cx + (px[i] - px[k]) * cy) / det;
+          if (a0 >= -1e-6 && a1 >= -1e-6 && a0 + a1 <= 1 + 1e-6) {
+            const at = row * w + col;
+            owner[at] = t;
+            weights[2 * at] = a0;
+            weights[2 * at + 1] = a1;
+          }
+        }
+      }
+    }
+    this.raster = { w, h, owner, weights, width: a.right - a.left };
+    this.image.width = w;
+    this.image.height = h;
+    this.values = null;
+  }
+
+  sample() {
+    const { w, h, owner, weights } = this.raster;
+    const { triangles } = this.mesh;
+    const [re, im] = [new Float32Array(w * h), new Float32Array(w * h)];
+    const { re: fr, im: fi } = this.field;
+    let peak = 0;
+    for (let at = 0; at < w * h; at++) {
+      const t = owner[at];
+      if (t < 0) continue;
+      const [a, b] = [weights[2 * at], weights[2 * at + 1]];
+      const c = 1 - a - b;
+      const [i, j, k] = [triangles[t], triangles[t + 1], triangles[t + 2]];
+      re[at] = a * fr[i] + b * fr[j] + c * fr[k];
+      im[at] = a * fi[i] + b * fi[j] + c * fi[k];
+      peak = Math.max(peak, Math.hypot(re[at], im[at]));
+    }
+    this.values = { re, im, peak: peak || 1 };
+    const rgb = (name) => [1, 3, 5].map((i) => parseInt(css(name).slice(i, i + 2), 16));
+    const [low, mid, high] = [rgb('--series-2'), rgb('--surface'), rgb('--series-1')];
+    this.colors = new Uint8ClampedArray(3 * 511);
+    for (let n = -255; n <= 255; n++) {
+      const [end, f] = n < 0 ? [low, -n / 255] : [high, n / 255];
+      for (let c = 0; c < 3; c++) this.colors[3 * (n + 255) + c] = mid[c] + f * (end[c] - mid[c]);
+    }
+  }
+
+  draw() {
+    const { ctx, width, height } = fit(this.canvas);
+    if (!this.mesh || width < 80) return;
+    const a = this.box(width, height);
+    const sx = (x) => a.left + x * a.scale;
+    const sy = (y) => a.top + (this.mesh.height - y) * a.scale;
+    drawYAxis(ctx, a, sy, ticks(0, this.mesh.height, 4));
+    drawXAxis(ctx, a, sx, ticks(0, this.mesh.width, Math.max(3, Math.floor((a.right - a.left) / 110))), 'Position (µm)');
+    if (this.raster?.width !== a.right - a.left) this.rasterize(a);
+    if (this.field) {
+      if (!this.values) this.sample();
+      this.paint();
+      ctx.drawImage(this.image, a.left, a.top, a.right - a.left, a.bottom - a.top);
+    }
+    ctx.strokeStyle = css('--ink');
+    ctx.lineWidth = 1.5;
+    for (const s of this.shapes) {
+      ctx.beginPath();
+      if (s.type === 'circle') ctx.arc(sx(s.x), sy(s.y), (s.w / 2) * a.scale, 0, 2 * Math.PI);
+      else ctx.rect(sx(s.x - s.w / 2), sy(s.y + s.h / 2), s.w * a.scale, s.h * a.scale);
+      ctx.stroke();
+    }
+    ctx.strokeRect(a.left, a.top, a.right - a.left, a.bottom - a.top);
+  }
+
+  paint() {
+    const { w, h, owner } = this.raster;
+    const { re, im, peak } = this.values;
+    const [c, s] = [Math.cos(this.phase), Math.sin(this.phase)];
+    const image = new ImageData(w, h);
+    const scale = 255 / peak;
+    for (let at = 0; at < w * h; at++) {
+      if (owner[at] < 0) continue;
+      const n = 3 * (Math.round((re[at] * c + im[at] * s) * scale) + 255);
+      image.data[4 * at] = this.colors[n];
+      image.data[4 * at + 1] = this.colors[n + 1];
+      image.data[4 * at + 2] = this.colors[n + 2];
+      image.data[4 * at + 3] = 255;
+    }
+    this.image.getContext('2d').putImageData(image, 0, 0);
+  }
+}
+
 // Every pixel's density at every iteration, with iterations on the same x positions
 // as a LineChart above it. Columns are painted once, so long runs stay cheap to draw.
 export class EvolutionMap {
@@ -393,7 +535,7 @@ export class LineChart {
   draw() {
     const { ctx, width, height } = fit(this.canvas);
     if (!this.spec) return;
-    const { xMin, xMax, yMin, yMax, series, xLabel, gaps, marker, format, endLabels, yTicks, yFormat, levels } = this.spec;
+    const { xMin, xMax, yMin, yMax, series, xLabel, gaps, marker, format, endLabels, yTicks, yFormat, levels, xTicks, xFormat } = this.spec;
     const a = this.area(width, height);
     const sx = (x) => a.left + ((x - xMin) / (xMax - xMin)) * (a.right - a.left);
     const sy = (y) => a.bottom - ((y - yMin) / (yMax - yMin)) * (a.bottom - a.top);
@@ -403,7 +545,7 @@ export class LineChart {
     for (const [lo, hi] of gaps ?? []) ctx.fillRect(a.left, sy(hi), a.right - a.left, sy(lo) - sy(hi));
     ctx.globalAlpha = 1;
     drawYAxis(ctx, a, sy, yTicks ?? ticks(yMin, yMax, 4), yFormat);
-    drawXAxis(ctx, a, sx, ticks(xMin, xMax, Math.max(3, Math.floor(width / 110))), xLabel);
+    drawXAxis(ctx, a, sx, xTicks ?? ticks(xMin, xMax, Math.max(3, Math.floor(width / 110))), xLabel, xFormat);
 
     // Dashed reference values, labelled at the right edge.
     for (const { y, name } of levels ?? []) {
@@ -465,6 +607,8 @@ export class LineChart {
   drawHover(ctx, a, sx, sy, format, width) {
     const { series } = this.spec;
     const { index, seriesIndex } = this.hover;
+    // The chart may have changed under a resting pointer.
+    if (!series[seriesIndex] || index >= series[0].x.length) return;
     const x = sx(series[0].x[index]);
     ctx.globalAlpha = 0.5;
     this.vertical(ctx, x, a, css('--muted'), 1);
