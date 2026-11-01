@@ -224,8 +224,8 @@ port can't launch a photonic-crystal guide's mode: use a line source there, whic
 that mode because nothing else exists in the gap.
 
 On the page: 5a of layer at a/6 cells, 51,529 unknowns and two solves in about 5 s with `faer`,
-within 0.3 percentage points of the test's values. The solver adopted afterwards should take
-about 2.5 s by the ratio in Node, but that hasn't been timed on the page on wall power. The first solve after loading took about 20 s, in a
+within 0.3 percentage points of the test's values. With the solver adopted afterwards and the
+mesh fix, two solves take about 0.85 s in Node, settled, but that hasn't been timed on the page. The first solve after loading took about 20 s, in a
 hidden browser pane, and milestone 3's first solve was also about 4 times its later ones. The
 cause hasn't been measured: WebAssembly compiling its hot loops is the likely one. The slab takes about 3 s. Spectra would need many
 solves, so the page shows one wavelength at a time, and T can't yet be plotted against
@@ -329,10 +329,57 @@ Whole requests in WebAssembly, settled after warming up:
 | Plane-wave scattering, the page's default | 19,321 | 400 ms | 101 ms |
 | Sharp bend a/6, one of its two solves | 51,529 | 3,747 ms | 1,909 ms |
 
-About 1.6 s of that last 1.9 s is outside the factor and solve. Meshing around 420 rods, assembly
-and monitors weren't separated, and they're the next thing to look at for bends. Warm-up is
+That last row is from before the mesh fix below, which takes it to about 420 ms. Warm-up is
 real too: the first factor in a fresh process took 818 ms against 311 ms afterwards, which
 probably explains the slow first solve on the page.
+
+### Where a bend's time went
+
+About 1.6 s of that 1.9 s was outside the factor and solve, and nearly all of it was meshing.
+The sharp bend has 418 rods and 51,529 unknowns (a/6, 5a layer). These are from one run on
+battery, in ms, as medians over three rounds alternating old and new builds:
+
+| Step | Native, before / after | Wasm, before / after |
+|---|---:|---:|
+| `fitted_grid`: snapping | 158 / 0.8 | 425 / 0.9 |
+| `fitted_grid`: choosing diagonals (crossing checks) | 26 / 17 | 476 / 15 |
+| `fitted_grid`: Delaunay flips | 16 / 12 | 159 / 12 |
+| `fitted_grid`: region lookup | 22 / 10 | 511 / 15 |
+| `H1Triangle::new` | 5 / 5 | 5 / 5 |
+| `assemble_split` | 10 / 10 | 10 / 10 |
+| `Csr::from_triplets` | 38 / 38 | 42 / 42 |
+| `Ordering::new` | 25 / 25 | 31 / 31 |
+| Factor | 237 / 237 | 268 / 246 |
+| Solve, with refinement | 27 / 27 | 31 / 31 |
+| `monitor_power` | 1.6 / 1.6 | 4.6 / 4.7 |
+| **Whole request** | **567 / 385** | **1,966 / 416** |
+
+The first request in a fresh instance went from 2,666 to 1,020 ms, 733 ms of it the factor warming
+up. The a/8 bend, with 112,225 unknowns and 504 rods, went from 4,735 to 1,042 ms, and 1,446 to
+984 ms natively. Snapping and `hypot` had the same effect there.
+
+Two things caused it, and neither was the outer loop over rods as such:
+
+- **`f64::hypot`.** WebAssembly has no such instruction, so Rust links a careful software version,
+  which avoids overflow that coordinates can't reach. `Outline::level` took about 47 ns a call
+  with it. Using `sqrt`, a single instruction, made the loops over every rod about 30× faster.
+  That was one line, and it's the difference between this table's columns: native only gained 1.5–2×.
+- **Snapping levelled and sorted the whole grid for every rod.** Nodes not yet placed are still
+  on the grid, so only those within a step of a shape's bounding box can cross it. Looking only
+  there took 15 net lines, and turned 184 ms into 1 ms even after the `sqrt` change.
+
+The same `hypot` was in `SparseLu::factor`, through `Complex::norm` on every entry to find the
+matrix's scale. `norm_sqr` costs no lines and saves 22 ms, or 8%, in WebAssembly.
+
+In all that's 16 lines net. The meshes are bit-for-bit identical to the old ones on 11 grids,
+including rods, overlaps, and shapes cut by the domain or outside it, and monitors match in every
+digit. Factoring is now 59% of a bend, which is about where it should be.
+
+Left alone, since none of them is worth its lines: crossing checks and region lookup still test
+every outline, 42 ms in all, and a grid of buckets would take about 15 lines, as an estimate, for at most 10%.
+`from_triplets` sorts about 900,000 triplets in 42 ms (10%), and is the next thing to try if bends
+need more, since sorting by row and then within rows might save about half, though that's untried. Assembly and
+`monitor_power` are too small to matter, so the search in `monitor_power` over nearby cells stays.
 
 ### The main risk: pivoting only inside each front
 

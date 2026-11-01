@@ -38,10 +38,11 @@ impl Outline {
         }
     }
 
-    /// Negative inside and positive outside. Only its sign and rough size are used.
+    /// Negative inside and positive outside. Only its sign and rough size are used. This is
+    /// the mesh's hottest call, and `hypot` is about 30 times slower than this in WebAssembly.
     pub(crate) fn level(&self, px: f64, py: f64) -> f64 {
         match *self {
-            Outline::Circle { x, y, r } => (px - x).hypot(py - y) - r,
+            Outline::Circle { x, y, r } => ((px - x) * (px - x) + (py - y) * (py - y)).sqrt() - r,
             Outline::Rect { x0, y0, x1, y1 } => (x0 - px).max(px - x1).max(y0 - py).max(py - y1),
         }
     }
@@ -70,6 +71,14 @@ impl Outline {
                     (px, y1)
                 }
             }
+        }
+    }
+
+    /// `[x0, y0, x1, y1]` around the shape.
+    fn bounds(&self) -> [f64; 4] {
+        match *self {
+            Outline::Circle { x, y, r } => [x - r, y - r, x + r, y + r],
+            Outline::Rect { x0, y0, x1, y1 } => [x0, y0, x1, y1],
         }
     }
 
@@ -172,7 +181,10 @@ impl Mesh {
             [(i > 0).then(|| v - 1), (i < nx).then(|| v + 1), (j > 0).then(|| v - nx - 1), (j < ny).then(|| v + nx + 1)]
         };
         let mut placed = vec![false; n];
-        let close = 0.3 * (lx / nx as f64).min(ly / ny as f64);
+        let (hx, hy) = (lx / nx as f64, ly / ny as f64);
+        let close = 0.3 * hx.min(hy);
+        // Grid lines one step past the range, the furthest a crossing or a close node can be.
+        let span = |low: f64, high: f64, h: f64, last: usize| ((low / h).floor() - 1.0).max(0.0) as usize..=(((high / h).ceil() + 1.0).max(0.0) as usize).min(last);
         for o in outlines {
             for (x, y) in o.corners() {
                 let (i, j) = ((x / lx * nx as f64).round() as usize, (y / ly * ny as f64).round() as usize);
@@ -182,12 +194,16 @@ impl Mesh {
                     placed[v] = true;
                 }
             }
-            let level: Vec<f64> = (0..n).map(|v| o.level(self.coords[2 * v], self.coords[2 * v + 1])).collect();
-            let mut order: Vec<usize> = (0..n).filter(|&v| free(v) && !placed[v]).collect();
-            order.sort_by(|&a, &b| level[a].abs().total_cmp(&level[b].abs()));
+            // Nodes not yet placed are still on the grid, so only those near the shape matter.
+            let [x0, y0, x1, y1] = o.bounds();
+            let rows = span(y0, y1, hy, ny).flat_map(|j| span(x0, x1, hx, nx).map(move |i| i + j * (nx + 1)));
+            let mut order: Vec<usize> = rows.filter(|&v| free(v) && !placed[v]).collect();
+            let level = |m: &Mesh, v: usize| o.level(m.coords[2 * v], m.coords[2 * v + 1]);
+            order.sort_by(|&a, &b| level(self, a).abs().total_cmp(&level(self, b).abs()));
             for v in order {
-                let crossing = neighbours(v).into_iter().flatten().any(|w| !placed[w] && level[v] * level[w] < 0.0);
-                if crossing || level[v].abs() < close {
+                let lv = level(self, v);
+                let crossing = neighbours(v).into_iter().flatten().any(|w| !placed[w] && lv * level(self, w) < 0.0);
+                if crossing || lv.abs() < close {
                     (self.coords[2 * v], self.coords[2 * v + 1]) = o.project(self.coords[2 * v], self.coords[2 * v + 1]);
                     placed[v] = true;
                 }

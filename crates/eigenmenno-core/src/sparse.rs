@@ -208,7 +208,7 @@ pub struct SparseLu<'a> {
 
 impl<'a> SparseLu<'a> {
     pub fn factor(a: &'a Csr, ordering: &'a Ordering) -> Self {
-        let scale = a.val.iter().fold(0.0f64, |m, v| m.max(v.norm()));
+        let scale = a.val.iter().fold(0.0f64, |m, v| m.max(v.norm_sqr())).sqrt();
         let mut local = vec![0; a.n];
         // What each finished front leaves for its parent.
         let mut updates: Vec<Vec<C64>> = vec![vec![]; ordering.nodes.len()];
