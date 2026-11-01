@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { defaultState } from '../web/js/model.js';
-import { Mma, coneFilter, coneFilter2d, goalGradient, gradientRequests, meanReflection, optimize, pixelCount, prepareDesign, project, references, totalIterations } from '../web/js/design.js';
+import { Mma, coneFilter, coneFilter2d, findResonance, goalGradient, gradientRequests, meanReflection, optimize, pixelCount, prepareDesign, project, references, totalIterations } from '../web/js/design.js';
 import { initSync, solve as solve1d, solve_2d } from '../web/pkg/eigenmenno_wasm.js';
 
 initSync({ module: readFileSync(new URL('../web/pkg/eigenmenno_wasm_bg.wasm', import.meta.url)) });
@@ -140,4 +140,54 @@ test('the same start makes the same design, which a band at twice the size also 
   const [ga, gb] = [relative(a), relative(big)];
   assert.ok(Math.abs(meanReflection(a.results) - meanReflection(big.results)) < 1e-10);
   ga.forEach((v, i) => assert.ok(Math.abs(v - gb[i]) < 1e-9));
+});
+
+const cavityState = () => ({ ...state('cavityDesign'), wavelength: 1 });
+
+test('a cavity\'s frequency slope predicts how far a density moves its resonance', async () => {
+  // A true resonance: the crystal's rods as pixels, close to their own pole. A grey structure
+  // at a low Q has no single pole for this to describe.
+  const s = cavityState();
+  const [n, h, a] = [64, 1 / 24, 0.3781];
+  const inset = (64 / 24 - 7 * a) / 2;
+  const rho = Float64Array.from({ length: n * n }, (_, k) => {
+    const [x, y] = [(k % n + 0.5) * h - inset, (Math.floor(k / n) + 0.5) * h - inset];
+    const [i, j] = [Math.floor(x / a), Math.floor(y / a)];
+    return i >= 0 && j >= 0 && i < 7 && j < 7 && !(i === 3 && j === 3) && Math.hypot(x - (i + 0.5) * a, y - (j + 0.5) * a) < 0.2 * a ? 1 : 0;
+  });
+  const Q = 2000;
+  let wavelength = 1;
+  for (let i = 0; i < 4; i++) wavelength = (2 * Math.PI) / (await findResonance(s, rho, Q, solve, wavelength)).poleK;
+  const { poleK, moves } = await findResonance(s, rho, Q, solve, wavelength);
+  const strongest = moves.reduce((best, v, k) => (Math.abs(v) > Math.abs(moves[best]) ? k : best), 0);
+  const step = 1e-3;
+  const nudged = rho.slice();
+  nudged[strongest] += rho[strongest] > 0.5 ? -step : step;
+  const after = (await findResonance(s, nudged, Q, solve, wavelength)).poleK;
+  const [measured, predicted] = [after - poleK, moves[strongest] * (nudged[strongest] - rho[strongest])];
+  assert.ok(Math.abs(measured - predicted) < 0.02 * Math.abs(predicted), `${measured} against ${predicted}`);
+});
+
+test('a cavity beats the crystal in its footprint, on target, and as drawn rectangles', async () => {
+  const s = cavityState();
+  let last = null;
+  let early = 0;
+  const failure = await optimize(s, solve, (step) => {
+    last = step;
+    if (step.iteration === 80) early = meanReflection(step.reply.results);
+    return true;
+  });
+  assert.equal(failure?.error, undefined);
+  assert.equal(last.beta, Infinity);
+  // Holding the resonance on target raises the LDOS by itself once pixels sharpen. So the goal's
+  // own effect shows here, at Q 100, where maximizing reaches 36 to 70, and minimizing 0.
+  assert.ok(early > 20, `early ${early}`);
+  last.rho.forEach((v) => assert.ok(v === 0 || v === 1));
+  const ldos = meanReflection(last.reply.results);
+  const [crystal] = await referenceValues(s);
+  // In plans/2d-solver.md, the crystal reads about 300, and nine starts 300 to 1,059.
+  assert.ok(crystal > 250 && crystal < 350, `crystal ${crystal}`);
+  assert.ok(ldos > 1.5 * crystal, `${ldos} against ${crystal}`);
+  assert.ok(Math.abs(last.mode.wavelength - 1) < 2e-3, `mode at ${last.mode.wavelength}`);
+  assert.ok(last.mode.q > 1000, `Q ${last.mode.q}`);
 });

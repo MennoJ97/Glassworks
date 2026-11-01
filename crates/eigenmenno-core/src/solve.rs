@@ -55,6 +55,9 @@ pub struct FieldMeta {
     pub volume: Option<f64>,
     /// `2 Re(-u)` at a 2D line source, which is pi times the LDOS per unit k.
     pub ldos: Option<f64>,
+    /// `-u_0`, whose reciprocal is nearly linear in `k` close to a resonance, as `[re, im]`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response: Option<[f64; 2]>,
 }
 
 fn c(v: [f64; 2]) -> C64 {

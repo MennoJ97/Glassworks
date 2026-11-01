@@ -144,11 +144,21 @@ fn validate(req: &Request2d) -> Result<(), String> {
     }
     if let Some(d) = &req.density {
         let plane_wave = matches!(req.analysis, Analysis2d::Driven { source: Source2d::PlaneWave { .. }, .. });
-        if !matches!(req.analysis, Analysis2d::Driven { .. }) || plane_wave || req.polarization != Polarization::Te || req.monitors.is_empty() {
-            return Err("a density map needs a driven E_z solve from a line source or port, and a monitor".into());
+        let line = matches!(req.analysis, Analysis2d::Driven { source: Source2d::Line { .. }, .. });
+        if !matches!(req.analysis, Analysis2d::Driven { .. }) || plane_wave || req.polarization != Polarization::Te || (req.monitors.is_empty() && !line) {
+            return Err("a density map needs a driven E_z solve from a line source or port, and a monitor unless it's a line source".into());
         }
         if d.rho.len() != d.nx * d.ny || !(d.width > 0.0 && d.height > 0.0 && d.eps_low > 0.0 && d.eps_high > 0.0) {
             return Err("the density map's size or materials are invalid".into());
+        }
+        // A pixel edge through a cell would make its material depend on where the cell's centre
+        // falls, which an optimizer can exploit, and which no drawn structure would reproduce.
+        let Analysis2d::Driven { pml, .. } = req.analysis else { unreachable!("checked above") };
+        let (hx, hy) = ((req.width + 2.0 * pml) / steps_in(req.width + 2.0 * pml, req.cell) as f64, (req.height + 2.0 * pml) / steps_in(req.height + 2.0 * pml, req.cell) as f64);
+        let on_grid = |at: f64, h: f64| (at / h - (at / h).round()).abs() < 1e-6;
+        let aligned = (0..=d.nx).all(|i| on_grid(pml + d.x0 + i as f64 * d.width / d.nx as f64, hx)) && (0..=d.ny).all(|j| on_grid(pml + d.y0 + j as f64 * d.height / d.ny as f64, hy));
+        if !aligned {
+            return Err("the density map's pixels must line up with the mesh: choose a cell that divides each pixel exactly".into());
         }
     }
     let driven = matches!(req.analysis, Analysis2d::Driven { .. } | Analysis2d::Resonance { .. });
@@ -433,11 +443,12 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_
     let ordering = Ordering::reused(&a, &free_positions(&space, &dofs));
     let lu = SparseLu::factor(&a, &ordering);
     let (pb, qb) = coef[0];
-    let mut ldos = None;
+    let (mut ldos, mut measured) = (None, None);
     let u = match source {
         Source2d::Line { x, y } => {
             let (u, response) = line_response(&lu, a.n, &point_load(&space, &dofs, x + pml, y + pml)?, k);
             ldos = Some(2.0 * response.re);
+            measured = Some([response.re, response.im]);
             dofs.expand(&u)
         }
         Source2d::PlaneWave { angle_deg } => {
@@ -486,7 +497,7 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_
             dofs.expand(&rhs)
         }
     };
-    let meta = FieldMeta { k0, ldos, ..Default::default() };
+    let meta = FieldMeta { k0, ldos, response: measured, ..Default::default() };
     let mut out = open_output(req, &space, &dofs, pml, &u, meta);
     let mut bu = vec![ZERO; u.len()];
     out.channels.push(("monitors".into(), monitor_power(&space, &coef, &u, k0, req.cell, pml, &req.monitors, &mut bu)?));
@@ -494,24 +505,34 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_
         // With `dP = 2 Re(u^H B du)` and `A du = -dA u`, an adjoint `A^T w = conj(B u)` gives
         // `dP = -2 Re(w^T dA u)`. The operator is complex symmetric, even in the layer, so
         // `A^T = A` and the same factors solve it. Each pixel's `dA` is `-k^2 deps M`.
-        let mut w = vec![ZERO; dofs.n_free];
-        for (g, v) in dofs.map.iter().zip(&bu) {
-            if let Some((r, _)) = g {
-                w[*r] += v.conj();
+        // With no monitor, the goal is the LDOS `F = -2 Re(e_0^T u)`, for which `A^T w = -e_0`.
+        // Since `A u = i k e_0`, that's `w = -u / (i k)`, with no further solve.
+        let w = if req.monitors.is_empty() {
+            u.iter().map(|v| -v / (I * k)).collect()
+        } else {
+            let mut w = vec![ZERO; dofs.n_free];
+            for (g, v) in dofs.map.iter().zip(&bu) {
+                if let Some((r, _)) = g {
+                    w[*r] += v.conj();
+                }
             }
-        }
-        lu.solve(&mut w);
-        let w = dofs.expand(&w);
-        let mut gradient = vec![0.0; density.rho.len()];
+            lu.solve(&mut w);
+            dofs.expand(&w)
+        };
+        let (mut gradient, mut imaginary) = (vec![0.0; density.rho.len()], vec![0.0; density.rho.len()]);
         let (mut sx, mut sy, mut m, mut d) = (vec![0.0; 36], vec![0.0; 36], vec![0.0; 36], vec![0; 6]);
         for c in 0..space.n_cells() {
             let Some(pixel) = pixel_of(req, &mesh, pml, c) else { continue };
             space.cell_dofs(c, &mut d);
             space.local_matrices(c, &mut sx, &mut sy, &mut m);
             let product: C64 = (0..36).map(|n| w[d[n / 6]] * m[n] * u[d[n % 6]]).sum();
-            gradient[pixel] += 2.0 * k0 * k0 * (density.eps_high - density.eps_low) * product.re;
+            let change = 2.0 * (density.eps_high - density.eps_low) * k * k * product;
+            gradient[pixel] += change.re;
+            imaginary[pixel] += change.im;
         }
         out.channels.push(("gradient".into(), gradient));
+        // For the LDOS, the two together are the slope of `-2 u_0`, and so of a resonance's `k`.
+        out.channels.push(("gradient_im".into(), imaginary));
     }
     Ok(out)
 }

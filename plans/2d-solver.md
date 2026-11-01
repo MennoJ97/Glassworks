@@ -25,7 +25,7 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Open boundaries | PML | Exact local conditions don't exist in 2D (chapter 9) |
 | Leaky modes | No non-Hermitian eigensolver. One driven solve at complex frequency for LDOS, and a secant search on `1/u_0` for Q | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for. It took 6 or 7 solves, and found Q up to 680,000 |
 | Upper size | The page refuses above 400,000 unknowns | Measured below. 638,401 failed with `faer` LU, whose memory use was several times ours |
-| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, about 2,000 after milestone 3, about 2,150 after milestone 4, about 2,400 with our own sparse solver, about 2,460 after milestone 5, and about 2,530 after speeding up design runs and scaling | State the cost before adding more, and keep the tutorial's line count current |
+| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, about 2,000 after milestone 3, about 2,150 after milestone 4, about 2,400 with our own sparse solver, about 2,460 after milestone 5, and about 2,530 after speeding up design runs and scaling, about 2,560 after the optimized cavity | State the cost before adding more, and keep the tutorial's line count current |
 | Own sparse solver | Adopted in `sparse.rs`. `faer` is now only for tests (see below) | It's 2–6× faster than `faer` on driven problems in WebAssembly and within 8% on band diagrams, with 99 KB less to download. Refinement covers its one real risk |
 
 ## Measurements
@@ -239,8 +239,8 @@ frequency there. Download: 283 KB gzipped.
 - [x] **Example 6: topology-optimized bend.** Compared against the hand-designed bend from
       example 5, in chapter 9. [Jensen & Sigmund 2004](https://doi.org/10.1063/1.1688450) is the
       precedent, but this is a slab bend rather than a crystal one, so it isn't a repeat of theirs.
-- [ ] Optionally, optimize the cavity from example 4 by raising the LDOS bandwidth's Q
-      in stages, as in [Liang & Johnson 2013](https://doi.org/10.1364/OE.21.030812).
+- [x] Optimize the cavity from example 4 by raising the LDOS bandwidth's Q in stages, as in
+      [Liang & Johnson 2013](https://doi.org/10.1364/OE.21.030812). See "A cavity, held on its frequency".
 
 The example is a slab of index 3.5 and width 0.125, through a square one wavelength wide of 24 x 24
 pixels. Over wavelengths 0.95, 1 and 1.05, far along the guide with a narrow monitor:
@@ -273,6 +273,58 @@ against 80 and 84%), and over 0.99 to 1.01 slightly worse (99.0 and 97.2% agains
 Measured and left out: a handwritten simd128 kernel for `subtract` gained 6% for 22 lines of unsafe
 code, because the kernel already reaches about 0.5 ns per complex update. Not tried: reusing the
 fronts outside the design region between iterations, which needs a solver that keeps state per wavelength.
+
+### A cavity, held on its frequency
+
+The goal is LDOS relative to vacuum, from a line source at the centre of a square of 64 x 64 pixels,
+2.67 wavelengths wide and with eps 12, as big as the 7 x 7 rods it's compared with. It cost about 25 lines of
+Rust: LDOS gradients with no extra solve, the complex response, and the gradient's imaginary part.
+The optimizer is about 180 lines of JavaScript.
+
+It failed at first, in three separate ways, in the order they were found:
+
+1. **The resonance drifted.** Peaks ended 2 to 5% off target, where a bandwidth of 0.1% can't see them.
+2. **The filter was too wide.** A radius of 3 pixels at 24 per wavelength left 5.4% of a crystal's
+   12.3% fill, so the design space couldn't hold a crystal at all. Now it's 2 pixels.
+3. **Pixels didn't line up with cells.** The optimizer exploited that, and a binary design's mode moved
+   2% when drawn as rectangles. The solver now refuses a misaligned density map.
+
+Following the resonance around helped less than holding it still, which was the idea that worked:
+
+- Near a pole, `1 / u_0` is nearly linear in `k`, so two solves place the pole. The gradient's real and
+  imaginary parts together give each density's effect on it, checked within 2% on a true resonance.
+- Each step has its slope along the frequency removed, and a correction then aims half of what's left
+  of the error back at the target.
+- Sharpening still leaves up to about 2%, because a pixel flip is a big step. Resizing the finished
+  design takes it out exactly, by scale invariance.
+
+| Without | LDOS at Q 1,000, seed 1 |
+|---|---:|
+| Nothing removed | 1,059 |
+| The step's slope along the frequency | 55 |
+| That, and the correction | 66 |
+
+LDOS at Q 1,000, after the same scan and resizing for each:
+
+| Structure | LDOS | Q | V (wavelengths²) |
+|---|---:|---:|---:|
+| 16 random symmetric patterns | 0 to 29 | | |
+| Crystal of 7 x 7 rods | 301 | 1,683 | 0.093 |
+| 9 optimized starts | 300 to 1,059, median 884 | 471 to 928,000 | 0.008 to 0.014 |
+
+Eight of nine beat the crystal by at least 1.5 times, and the page's default start is the best. As
+rectangles, the best design's LDOS and Q hold to under 1% from cells of 1/24 to 1/72 of a wavelength.
+On a mesh of 1/48, its Q is 919,000 at layers of 0.5, 1 and 1.5 wavelengths, and on 1/24, 928,000 with
+0.25 to 1.5 wavelengths of air around it. Its LDOS at Q 3,000 is 3,171, against the crystal's 517.
+Stopping Q at 500 while sharpening was the steadiest schedule: raising it to 2,000 reached 269 on one start.
+
+Two cautions. Q of nearly a million from a footprint this small needs a cause, which we haven't found,
+and no fabrication tolerance has been checked: a mode this sharp would be very sensitive. And the
+goal's sign matters less than it should. With the goal flipped, LDOS at the target falls to 0 through
+the grey stages, as it should, but then reaches 832 to 1,005 on three starts, because the hold itself
+puts a pole at the source once pixels sharpen. So `tests/design.test.mjs` checks the early stages too.
+
+The page took 229 s for its 220 iterations, of which the solver took 166 s, with the pane hidden, on battery.
 
 ### A finer mesh, and the crystal at 1 µm
 

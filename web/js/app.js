@@ -3,7 +3,7 @@
 import { GUIDES, MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeState, defaultState, encodeState, guideCell, guideGeometry, guideResolved, guideScale, layer, problemOf, totalLength } from './model.js';
 import { EvolutionMap, FieldMap, FieldPlot, LineChart, drawDensity, seriesColors } from './plot.js';
 import { Solver } from './solver.js';
-import { STAGES, bendGeometry, bendScale, bendWarning, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, prepareDesign, stageLength, totalIterations, references, sharpnessAt } from './design.js';
+import { CAVITY_Q, STAGES, bendWarning, designGeometry, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, prepareDesign, stageLength, totalIterations, references, sharpnessAt } from './design.js';
 
 const $ = (id) => document.getElementById(id);
 const THZ_MICRONS = 299.792458; // c, in THz times microns.
@@ -21,6 +21,7 @@ const VIEW_HELP = {
   bands2d: 'The waves that can travel through an endless lattice of this cell. Floquet boundaries tie each edge to the opposite one, with a phase set by the wavevector k.',
   mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
   antireflection: 'Find the coating that reflects the least light, averaged across a band of wavelengths.',
+  cavityDesign: 'Find the pattern of material around a line source that holds light for longest in the smallest space, in a square as big as 7 x 7 rods of the crystal it\'s compared with. It measures the local density of states, which a cavity raises in proportion to Q / V, over a bandwidth that narrows as the pixels sharpen. The structure and its mesh scale with the wavelength.',
   bend2d: 'Find the pattern of material that carries light around a corner in a slab waveguide, within a square one wavelength wide. It stays in the slab instead of radiating away at the corner. The structure and its mesh scale with the middle of the band.',
 };
 const PROBLEM_TEXT = {
@@ -78,6 +79,9 @@ const fieldMap = new FieldMap($('field-map'));
 const planar = () => Boolean(state.plane[state.analysis]);
 const guide2d = () => state.analysis === 'guide2d';
 const bend2d = () => state.analysis === 'bend2d';
+const cavityDesign = () => state.analysis === 'cavityDesign';
+// Designs in the plane, as pixels rather than layers.
+const pixelDesign = () => bend2d() || cavityDesign();
 
 const chart = new LineChart($('chart'), (hit) => {
   if (problemOf(state.analysis) === 'design') { showFrame(hit.index); return; }
@@ -216,20 +220,20 @@ function renderSettings() {
   if (!planar()) $('field-note').textContent = text.field;
   const show = (id, on) => { $(id).hidden = !on; };
   const designing = problem === 'design';
-  show('wavelength-field', a === 'waveguide' || a === 'spectrum' || a === 'field' || a === 'mirror' || a === 'scatter2d' || a === 'guide2d');
-  show('angle-field', a === 'spectrum' || ((a === 'field' || a === 'scatter2d') && state.source === 'plane_wave') || (designing && !bend2d()));
-  show('design-fields', designing && !bend2d());
+  show('wavelength-field', a === 'waveguide' || a === 'spectrum' || a === 'field' || a === 'mirror' || a === 'scatter2d' || a === 'guide2d' || a === 'cavityDesign');
+  show('angle-field', a === 'spectrum' || ((a === 'field' || a === 'scatter2d') && state.source === 'plane_wave') || (designing && !pixelDesign()));
+  show('design-fields', designing && !pixelDesign());
   show('design-band', a === 'antireflection' || bend2d());
   show('design-run', designing);
   show('left-field', !designing && !planar());
   show('right-field', !designing && !planar());
   show('accuracy', !designing && !planar());
-  show('polarization-field', !guide2d() && !bend2d());
-  show('polarization-title', !guide2d() && !bend2d());
+  show('polarization-field', !guide2d() && !pixelDesign());
+  show('polarization-title', !guide2d() && !pixelDesign());
   const flat = planar();
   show('layer-builder', !designing && !flat);
-  show('plane-builder', flat && !guide2d() && !bend2d());
-  show('plane-fields', flat && !bend2d());
+  show('plane-builder', flat && !guide2d() && !pixelDesign());
+  show('plane-fields', flat && !pixelDesign());
   show('field-plot', !flat);
   show('field-map', flat);
   if (flat) {
@@ -256,7 +260,7 @@ function renderSettings() {
   fieldPlot.locked = designing;
   if (designing) renderDesignSettings();
   else fieldPlot.layers = state.layers;
-  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || (flat && a !== 'scatter2d' && a !== 'guide2d' && !bend2d() && !(a === 'cavity2d' && state.plane.cavity2d.walls === 'absorbing')));
+  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || (flat && a !== 'scatter2d' && a !== 'guide2d' && !pixelDesign() && !(a === 'cavity2d' && state.plane.cavity2d.walls === 'absorbing')));
   show('source-field', a === 'field' || a === 'scatter2d');
   show('range-field', a === 'spectrum');
   $('polarization').value = state.polarization;
@@ -563,6 +567,7 @@ function resetDesign() {
   design.rho = null;
   // Starting before a new view's preview finishes mustn't show the old view's references.
   design.references = [];
+  design.mode = null;
   $('design-replay').textContent = 'Replay';
   $('design-start').textContent = 'Start';
   $('design-use').hidden = true;
@@ -574,7 +579,7 @@ function resetDesign() {
 function addToFilm(frame) {
   if (frame !== 0 && frame !== totalIterations(state) && (frame + 1) % stageLength(state) !== 0) return;
   const picture = document.createElement('canvas');
-  const g = bendGeometry(false, bendScale(state));
+  const g = designGeometry(state, design.frames[frame]);
   drawDensity(picture, g.region, g.shapes, design.frames[frame], 3);
   const button = document.createElement('button');
   button.type = 'button';
@@ -588,7 +593,7 @@ function addToFilm(frame) {
 // Repaints the map from the stored frames, as when the colour scheme changes.
 function restartEvolution() {
   $('design-film').replaceChildren();
-  if (bend2d()) {
+  if (pixelDesign()) {
     design.frames.forEach((_, frame) => addToFilm(frame));
     return;
   }
@@ -603,7 +608,7 @@ function showDesign(rho, reply) {
   resultsView = state.analysis;
   $('save-csv').hidden = false;
   $('error').hidden = true;
-  if (!bend2d()) fieldPlot.layers = plotLayers(state.design[state.analysis], rho);
+  if (!pixelDesign()) fieldPlot.layers = plotLayers(state.design[state.analysis], rho);
   showResults();
 }
 
@@ -647,14 +652,16 @@ async function startDesign() {
   setStatus('Starting.');
   const started = performance.now();
   let solving = 0;
-  const failure = await optimize(state, (requests) => solver.run(requests), ({ rho, reply, iteration, beta }) => {
+  const failure = await optimize(state, (requests) => solver.run(requests), ({ rho, reply, iteration, beta, mode, bandwidth }) => {
     if (run !== design.run) return false;
+    design.mode = mode ?? null;
+    design.bandwidth = bandwidth;
     solving += reply.ms;
     bar.value = iteration;
     design.history.push(meanReflection(reply.results));
     design.frames.push(rho);
     design.shown = design.frames.length - 1;
-    if (bend2d()) addToFilm(design.shown);
+    if (pixelDesign()) addToFilm(design.shown);
     else evolution.add(rho);
     design.finished = beta === Infinity;
     const elapsed = (performance.now() - started) / 1000;
@@ -669,7 +676,7 @@ async function startDesign() {
   design.running = false;
   bar.hidden = true;
   $('design-start').textContent = 'Start';
-  $('design-use').hidden = !design.finished || bend2d();
+  $('design-use').hidden = !design.finished || pixelDesign();
   if (failure?.error) setError(failure.error);
   renderChart();
 }
@@ -679,6 +686,7 @@ async function solveFrame(frame, run) {
   const rho = design.frames[frame];
   const reply = await solver.run(gradientRequests(state, rho));
   if (!reply || reply.error || run !== design.run) return;
+  design.bandwidth = CAVITY_Q;
   design.shown = frame;
   const sharp = sharpnessAt(state, frame);
   setStatus(`Showing iteration ${frame + 1}, ${sharp === Infinity ? 'fully sharpened' : `sharpness ${sharp}`}.`);
@@ -777,12 +785,17 @@ function renderGuideTable(addRow) {
 
 function renderDesignTable(table, addRow) {
   if (bend2d()) setResultNote(bendWarning(state));
-  addRow(['Structure', bend2d() ? 'Transmitted' : 'Reflected'], 'th');
+  const value = (v) => (cavityDesign() ? v.toFixed(0) : percent(v));
+  addRow(['Structure', cavityDesign() ? 'LDOS, relative to vacuum' : bend2d() ? 'Transmitted' : 'Reflected'], 'th');
   const last = design.finished && design.shown === design.frames.length - 1;
-  const count = last && !bend2d() && finishedLayers(state.design[state.analysis], design.rho).length - 2;
+  const count = last && !pixelDesign() && finishedLayers(state.design[state.analysis], design.rho).length - 2;
   const name = count ? `This design, ${count} layers` : last ? 'Finished design' : design.frames.length ? `Iteration ${design.shown + 1}` : 'This design';
-  addRow([name, percent(meanReflection(results))]);
-  for (const { name, value: reference } of design.references) addRow([name, percent(reference)]);
+  const at = (q) => (cavityDesign() ? `, at Q ${q.toLocaleString()}` : '');
+  addRow([`${name}${at(design.running ? design.bandwidth : CAVITY_Q)}`, value(meanReflection(results))]);
+  for (const { name, value: reference } of design.references) addRow([`${name}${at(CAVITY_Q)}`, value(reference)]);
+  if (last && design.mode) {
+    setResultNote(`Drawn as ordinary rectangles, its mode is at ${design.mode.wavelength.toFixed(4)} µm, with Q ${Math.round(design.mode.q).toLocaleString()} and a volume of ${design.mode.volume.toFixed(4)} λ². Resized by ${(100 * (designGeometry(state, design.rho).size / designGeometry(state).size - 1)).toFixed(2)}% to put it on target.`);
+  }
 }
 
 // Round-off can leave tiny negative powers, which should read as zero.
@@ -828,8 +841,8 @@ function planeMarks(p) {
     return state.source === 'line' ? { open: true, source: [p.sourceX, p.sourceY] } : { open: true, incident: state.angle };
   }
   if (a === 'bands2d') return { bloch: blochAt(p.pick.s) };
-  if (a === 'bend2d') {
-    const g = bendGeometry(false, bendScale(state));
+  if (a === 'bend2d' || a === 'cavityDesign') {
+    const g = designGeometry(state, design.rho);
     return { open: true, source: g.mark, monitor: g.monitor, density: design.rho && { ...g.region, rho: design.rho } };
   }
   if (a === 'guide2d') {
@@ -862,10 +875,10 @@ function showResults() {
     const p = state.plane[a];
     const { channels } = fieldResult;
     const marks = planeMarks(p);
-    const guide = guide2d() ? guideGeometry(p.bend, false, guideScale(state)) : bend2d() ? bendGeometry(false, bendScale(state)) : null;
+    const guide = guide2d() ? guideGeometry(p.bend, false, guideScale(state)) : pixelDesign() ? designGeometry(state, design.rho) : null;
     const [width, height] = guide ? [guide.size, guide.size] : [p.width, p.height];
     fieldMap.setMesh({ x: channels.x, y: channels.y, triangles: channels.triangles, width, height }, guide ? guide.shapes : p.shapes, marks);
-    const size = a === 'scatter2d' ? 'The total field is shown.' : a === 'guide2d' || a === 'bend2d' ? `The source sends light both ways, and the half going left leaves through the layer.${a === 'bend2d' ? ' Shaded pixels are the slab\'s material.' : ''}` : 'Its overall size is arbitrary.';
+    const size = a === 'scatter2d' ? 'The total field is shown.' : a === 'cavityDesign' ? 'Shaded pixels are the high-index material.' : a === 'guide2d' || a === 'bend2d' ? `The source sends light both ways, and the half going left leaves through the layer.${a === 'bend2d' ? ' Shaded pixels are the slab\'s material.' : ''}` : 'Its overall size is arbitrary.';
     $('field-note').textContent = `${planeNote(marks)} Colour shows the field at this moment, with red and blue as opposite signs. ${size}`;
     const name = fieldResult.meta.fields[selectedField]?.components[0];
     if (name) fieldMap.setField(channels[`field${selectedField}/${name}/re`], channels[`field${selectedField}/${name}/im`]);
@@ -929,6 +942,7 @@ function resultsTitle() {
     }
     case 'mirror': return `Reflection at ${+state.wavelength.toFixed(3)} µm`;
     case 'antireflection': return `Mean reflection, ${designSettings().from} to ${designSettings().to} µm`;
+    case 'cavityDesign': return `Field at ${+state.wavelength.toFixed(3)} µm`;
     case 'bend2d': return `Mean transmission, ${designSettings().from} to ${designSettings().to} µm`;
     default: return 'Resonant modes';
   }
@@ -1031,28 +1045,32 @@ function renderChart() {
   const colors = seriesColors();
   if (designing) {
     // Both goals become light lost, on a log scale, where a mirror's last 1% shows.
-    const lost = (r) => Math.log10(Math.max(1e-5, a === 'antireflection' ? r : 1 - r));
+    const lost = (r) => Math.log10(Math.max(1e-5, a === 'cavityDesign' ? r : a === 'antireflection' ? r : 1 - r));
     const x = design.history.map((_, i) => i + 1);
     const y = design.history.map(lost);
     const levels = design.references.map(({ name, value }) => ({ name, y: lost(value) }));
     const yMin = Math.floor(Math.min(...y, ...levels.map((l) => l.y)));
     const yMax = Math.max(Math.ceil(Math.max(...y)), yMin + 1);
-    $('chart-title').textContent = a === 'bend2d'
+    $('chart-title').textContent = a === 'cavityDesign'
+      ? 'LDOS relative to vacuum at each iteration, higher is better, over a bandwidth that narrows as the design goes on. The crystal\'s line is at the finished design\'s bandwidth. Click to see any iteration.'
+      : a === 'bend2d'
       ? 'Light that doesn\'t get around the corner at each iteration, lower is better. It jumps where the pixels get sharper. Click to see any iteration.'
       : a === 'mirror' ? 'Light that gets through the mirror at each iteration, lower is better. It jumps where the pixels get sharper.'
       : 'Light reflected by the coating at each iteration, lower is better. It jumps where the pixels get sharper.';
     chart.spec = {
       xMin: 1, xMax: totalIterations(state) + 1, yMin, yMax, xLabel: 'Iteration', levels, marker: design.shown + 1,
       yTicks: Array.from({ length: yMax - yMin + 1 }, (_, i) => yMin + i),
-      yFormat: (v) => `${+(100 * 10 ** v).toPrecision(1)}%`,
-      series: [{ name: 'Lost', x, y, color: colors[0] }],
-      format: (index) => [`Iteration ${x[index]}`, `${bend2d() ? 'Transmitted' : 'Reflected'} ${percent(design.history[index])}`],
+      yFormat: (v) => (a === 'cavityDesign' ? `${+(10 ** v).toPrecision(1)}` : `${+(100 * 10 ** v).toPrecision(1)}%`),
+      series: [{ name: a === 'cavityDesign' ? 'LDOS' : 'Lost', x, y, color: colors[0] }],
+      format: (index) => [`Iteration ${x[index]}`, (a === 'cavityDesign' ? `LDOS ${design.history[index].toFixed(0)}` : `${bend2d() ? 'Transmitted' : 'Reflected'} ${percent(design.history[index])}`)],
     };
-    $('evolution').hidden = bend2d();
-    $('evolution-title').textContent = bend2d()
+    $('evolution').hidden = pixelDesign();
+    $('evolution-title').textContent = cavityDesign()
+      ? 'How the design changed: one picture each time the pixels get sharper, with strong colour for the high-index material, and the source in the middle. Click a picture, or drag the slider, to see any iteration.'
+      : bend2d()
       ? 'How the design changed: one picture each time the pixels get sharper, with strong colour for the high-index material. Light enters from the left and leaves through the top. Click a picture, or drag the slider, to see any iteration.'
       : 'How the design changed: each column is one iteration, and stronger colour means more of the high-index material. Drag across this map or the chart above to see any iteration.';
-    if (bend2d()) {
+    if (pixelDesign()) {
       for (const button of $('design-film').children) {
         button.setAttribute('aria-current', +button.dataset.frame === design.shown);
         button.disabled = design.running;

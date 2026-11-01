@@ -168,7 +168,8 @@ pub struct Monitor {
 
 /// A rectangle of pixels, each mixing two permittivities by its density in `rho`, by rows
 /// from the corner `(x0, y0)`. It replaces whatever shapes are there. Driven `E_z` solves
-/// then return `gradient`, the derivative of the first monitor's power with each density.
+/// then return `gradient`, the derivative with each density of the first monitor's power, or
+/// with no monitors, of a line source's LDOS.
 #[derive(Deserialize, Clone)]
 pub struct Density {
     pub x0: f64,

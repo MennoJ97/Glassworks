@@ -321,6 +321,27 @@ the finished pattern at twice the resolution, and it holds. Around it, the power
 leaving a closed loop balances to 0.02%. Optimizing for a single wavelength reached only 43% to 82%
 at the band's edges, which is why this asks for three.
 
+### Example: a cavity
+
+The same machinery can design a cavity, by maximizing the LDOS at a line source
+([Liang & Johnson 2013](10-references.md#liang-johnson-2013)). Recall that with $A u = i k e_0$,
+the LDOS is $F = -2\,\mathrm{Re}(e_0^T u)$. The adjoint of that is $u / ik$ up to sign, so the
+gradient needs no extra solve at all. At a complex frequency, this averages over a bandwidth set by
+a chosen $Q$, which starts low, so that a sharp design isn't asked for all at once.
+
+That isn't enough, because a resonance moves when the structure does, and at $Q = 1000$ its peak is
+only 0.1% wide. A step that improves the cavity but moves its peak off the target looks like a
+disaster. Near a pole $k_p$ the response behaves as $1/u_0 \propto k - k_p$, so the same complex
+gradient also says how each density moves $k_p$. That's a direction in the space of all densities.
+Removing it from the step keeps the frequency fixed while the rest of the design improves, which
+raised the result here from an LDOS of 55 to 1,059. Sharpening still shifts it slightly, by up to 2%,
+and scaling the finished structure takes that out exactly.
+
+The result, in the footprint of a crystal of $7 \times 7$ rods, whose LDOS is 301 at $Q = 1000$, is
+300 to 1,059 over nine random starts, against at most 29 for random symmetric patterns.
+These also need pixels lined up with mesh cells. Otherwise the material of a cell depends on where
+its centre falls, which an optimizer will happily exploit, and which no real structure reproduces.
+
 ## When the browser isn't the right tool
 
 For large 3D problems, compute in the browser isn't the right tool. Use

@@ -1014,6 +1014,42 @@ fn a_sharp_bend_in_a_slab_loses_most_of_its_power() {
     assert!(t > 0.1 && t < 0.3, "T {t}");
 }
 
+#[test]
+fn ldos_gradient_matches_finite_differences() {
+    let n = 12 * 12;
+    let rho: Vec<f64> = (0..n).map(|i| 0.5 + 0.4 * ((i * 37 % 101) as f64 / 101.0 - 0.5)).collect();
+    let request = |rho: Vec<f64>| {
+        let mut r = density_bend(rho);
+        r.monitors.clear();
+        r.analysis = Analysis2d::Driven { wavelength: 1.0, source: Source2d::Line { x: 1.25, y: 0.75 }, pml: 0.5, average_q: Some(50.0) };
+        r
+    };
+    let solve = |rho: &[f64]| eigenmenno_core::solve2d::solve(&request(rho.to_vec())).unwrap();
+    let ldos = |rho: &[f64]| solve(rho).meta.fields[0].ldos.unwrap();
+    let exact = channel(&solve(&rho), "gradient").to_vec();
+    for pixel in [0, 40, 77, 78, 143] {
+        let (mut up, mut down, h) = (rho.clone(), rho.clone(), 1e-5);
+        (up[pixel], down[pixel]) = (rho[pixel] + h, rho[pixel] - h);
+        let numeric = (ldos(&up) - ldos(&down)) / (2.0 * h);
+        close(exact[pixel], numeric, 1e-6 * numeric.abs().max(1e-3));
+    }
+}
+
+#[test]
+fn pixels_must_line_up_with_the_mesh() {
+    let solve = |r: &Request2d| eigenmenno_core::solve2d::solve(r).map(|_| ());
+    let mut r = density_bend(vec![0.5; 144]);
+    assert!(solve(&r).is_ok());
+    // Half a pixel's cell is still whole cells per pixel.
+    r.cell /= 2.0;
+    assert!(solve(&r).is_ok());
+    r.cell = 1.0 / 25.0;
+    assert!(solve(&r).unwrap_err().contains("line up"));
+    let mut shifted = density_bend(vec![0.5; 144]);
+    shifted.density.as_mut().unwrap().x0 += 0.01;
+    assert!(solve(&shifted).unwrap_err().contains("line up"));
+}
+
 /// The same structure with every length multiplied by `f`.
 fn scaled_request(mut r: Request2d, f: f64) -> Request2d {
     (r.width, r.height, r.cell) = (r.width * f, r.height * f, r.cell * f);

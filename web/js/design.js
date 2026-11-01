@@ -10,16 +10,17 @@ const SHARPNESS = [1, 2, 4, 8, 16, 32, 64, 128];
 const ITERATIONS_PER_STAGE = 40;
 // A 2D solve costs far more than a 1D one, and these converge sooner: 25 did no better
 // over three starts, while 7 sometimes fell short, and so did skipping every other sharpness.
-export const stageLength = (s) => (s.analysis === 'bend2d' ? 10 : ITERATIONS_PER_STAGE);
-export const totalIterations = (s) => SHARPNESS.length * stageLength(s);
+export const stageLength = (s) => (s.analysis === 'cavityDesign' ? CAVITY.iterations : s.analysis === 'bend2d' ? 10 : ITERATIONS_PER_STAGE);
+const sharpnessOf = (s) => (s.analysis === 'cavityDesign' ? CAVITY.stages.map(([, beta]) => beta) : SHARPNESS);
+export const totalIterations = (s) => sharpnessOf(s).length * stageLength(s);
 export const STAGES = SHARPNESS.map((beta, i) => ({ frame: i * ITERATIONS_PER_STAGE, name: `β ${beta}` }));
-export const sharpnessAt = (s, frame) => SHARPNESS[Math.floor(frame / stageLength(s))] ?? Infinity;
+export const sharpnessAt = (s, frame) => sharpnessOf(s)[Math.floor(frame / stageLength(s))] ?? Infinity;
 
 const material = (name) => MATERIALS.find((m) => m.name === name);
 const eps = (name) => material(name).n ** 2;
 const solverLayer = (thickness, e) => ({ thickness, eps: [e, 0], mu: [1, 0] });
 
-export const pixelCount = (d) => (d.thickness === undefined ? BEND.pixels ** 2 : Math.max(1, Math.round(d.thickness / PIXEL)));
+export const pixelCount = (d) => (d.cavity ? CAVITY.pixels ** 2 : d.thickness === undefined ? BEND.pixels ** 2 : Math.max(1, Math.round(d.thickness / PIXEL)));
 
 // A slab of index 3.5 turning a corner through a square of pixels, in units of the band's
 // centre wavelength, so a band anywhere gets the same design at its own size.
@@ -96,6 +97,161 @@ export async function prepareDesign(s, solve) {
   return reply;
 }
 
+// A square of pixels around a line source, in units of the wavelength, as big as 7 x 7 rods.
+// `stages` raises the bandwidth's Q to a level a sharpening design can follow, then sharpens.
+export const CAVITY_Q = 1000;
+const CAVITY = {
+  pixels: 64, cellsPerPixel: 1, margin: 0.25, pml: 0.5, eps: 12, radius: 2, iterations: 20,
+  stages: [[10, 1], [20, 2], [50, 4], [100, 8], [200, 16], [300, 32], [500, 64], [500, 128], [500, 256], [500, 512], [500, 1024]],
+  // Measured at this Q once finished, and in the table.
+  Q: CAVITY_Q,
+};
+const cavitySide = CAVITY.pixels / 24;
+// How much a finished design was resized to put its resonance on the target, by its densities.
+const tuned = new WeakMap();
+
+export function cavityGeometry(wavelength) {
+  const { margin } = CAVITY;
+  const size = cavitySide + 2 * margin;
+  return scaled({
+    size, shapes: [],
+    source: { type: 'line', x: size / 2, y: size / 2 },
+    mark: [size / 2, size / 2],
+    region: { x0: margin, y0: margin, width: cavitySide, height: cavitySide, nx: CAVITY.pixels, ny: CAVITY.pixels },
+  }, wavelength);
+}
+
+// What the plot needs for a 2D design.
+export const designGeometry = (s, rho) => (s.analysis === 'bend2d'
+  ? bendGeometry(false, bendScale(s))
+  : cavityGeometry(s.wavelength * (tuned.get(rho) ?? 1)));
+
+function cavityRequest(s, rho, Q, wavelength = s.wavelength) {
+  const scale = s.wavelength * (tuned.get(rho) ?? 1);
+  const g = cavityGeometry(scale);
+  return {
+    width: g.size,
+    height: g.size,
+    cell: (cavitySide * scale) / CAVITY.pixels,
+    background: { eps: 1, mu: 1 },
+    shapes: [],
+    polarization: 'te',
+    walls: 'absorbing',
+    monitors: [],
+    analysis: { type: 'driven', wavelength, source: g.source, pml: CAVITY.pml * scale, average_q: Q },
+    density: { ...g.region, eps_low: 1, eps_high: CAVITY.eps, rho: Array.from(rho) },
+  };
+}
+
+const times = (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];
+const over = (a, b) => {
+  const d = b[0] * b[0] + b[1] * b[1];
+  return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d];
+};
+const complexK = (wavelength, Q) => [(2 * Math.PI) / wavelength, Math.PI / (wavelength * Q)];
+
+// Where a design's resonance is, and how each density moves it. Close to a pole, 1 / u_0 is
+// nearly linear in k, so two solves place it. The solver's two gradient channels are the slope
+// of `2 u_0`, which through `1 / u_0` is also the slope of the pole's own k.
+export async function findResonance(s, rho, Q, solve, wavelength = s.wavelength) {
+  const beside = wavelength * (1 + 1 / (4 * Q) + 1e-3);
+  const reply = await solve([cavityRequest(s, rho, Q, wavelength), cavityRequest(s, rho, Q, beside)]);
+  if (!reply || reply.error) return { reply };
+  const [here, there] = reply.results;
+  const response = here.meta.fields[0].response;
+  const [k, kBeside] = [complexK(wavelength, Q), complexK(beside, Q)];
+  const [g, gBeside] = [over([1, 0], response), over([1, 0], there.meta.fields[0].response)];
+  const slope = over([kBeside[0] - k[0], kBeside[1] - k[1]], [gBeside[0] - g[0], gBeside[1] - g[1]]);
+  const factor = times(slope, over([1, 0], times(response, response)));
+  const { gradient, gradient_im: imaginary } = here.channels;
+  return {
+    reply: { ...reply, results: [here] },
+    poleK: k[0] - times(g, slope)[0],
+    moves: Float64Array.from(gradient, (re, i) => (factor[0] * re - factor[1] * imaginary[i]) / 2),
+  };
+}
+
+// Pixels as ordinary rectangles, which need nothing of densities to solve.
+function cavityShapes(rho, scale) {
+  const { pixels, margin } = CAVITY;
+  const h = cavitySide / pixels;
+  const shapes = [];
+  for (let j = 0; j < pixels; j++) {
+    for (let i = 0; i < pixels;) {
+      if (rho[i + j * pixels] <= 0.5) { i++; continue; }
+      let end = i;
+      while (end < pixels && rho[end + j * pixels] > 0.5) end++;
+      shapes.push({ material: { eps: CAVITY.eps, mu: 1 }, type: 'rect', x0: (margin + i * h) * scale, y0: (margin + j * h) * scale, x1: (margin + end * h) * scale, y1: (margin + (j + 1) * h) * scale });
+      i = end;
+    }
+  }
+  return shapes;
+}
+
+// Eight-fold symmetry around the source, which is its own adjoint.
+function mirrored(n) {
+  const images = (i, j) => [[i, j], [n - 1 - i, j], [i, n - 1 - j], [n - 1 - i, n - 1 - j], [j, i], [n - 1 - j, i], [j, n - 1 - i], [n - 1 - j, n - 1 - i]];
+  const lists = Array.from({ length: n * n }, (_, k) => images(k % n, Math.floor(k / n)).map(([x, y]) => x + y * n));
+  return (v) => Float64Array.from(lists, (list) => list.reduce((sum, m) => sum + v[m], 0) / 8);
+}
+
+// A cavity's goal is LDOS, as in Liang & Johnson 2013, with the frequency held on target. A
+// high Q's peak is narrow, and a free step moves it further than its width, so each step here
+// has its slope along the frequency removed. A correction along that slope then keeps the
+// resonance on target, and scaling the finished design takes out what sharpening leaves.
+async function optimizeCavity(s, solve, onStep) {
+  const n = CAVITY.pixels ** 2;
+  const filter = coneFilter2d(CAVITY.pixels, CAVITY.pixels, CAVITY.radius);
+  const symmetric = mirrored(CAVITY.pixels);
+  const through = (g, slope) => symmetric(filter.adjoint(g.map((v, k) => v * slope[k])));
+  const target = (2 * Math.PI) / s.wavelength;
+  let x = randomStart(n, s.design.cavityDesign.seed);
+  let iteration = 0;
+  for (const [Q, beta] of CAVITY.stages) {
+    const reach = Math.min(0.1, 0.2 / beta);
+    const mma = new Mma(reach);
+    for (let i = 0; i < CAVITY.iterations; i++) {
+      const { rho, slope } = project(filter.apply(symmetric(x)), beta);
+      const { reply, poleK, moves } = await findResonance(s, rho, Q, solve);
+      if (!reply || reply.error) return reply;
+      if (!onStep({ rho, reply, iteration: ++iteration, beta, bandwidth: Q })) return null;
+      const goal = through(reply.results[0].channels.gradient.map((v) => (-2 * v) / target), slope);
+      const frequency = through(moves, slope);
+      const square = frequency.reduce((sum, v) => sum + v * v, 0);
+      const along = goal.reduce((sum, v, k) => sum + v * frequency[k], 0) / square;
+      const next = mma.step(x, goal.map((v, k) => v - along * frequency[k]));
+      const moved = next.reduce((sum, v, k) => sum + (v - x[k]) * frequency[k], 0);
+      const largest = frequency.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+      const correction = Math.max(-reach / largest, Math.min(reach / largest, (0.5 * (target - poleK) - moved) / square));
+      x = next.map((v, k) => Math.min(1, Math.max(0, v + correction * frequency[k])));
+    }
+  }
+  const rho = project(filter.apply(symmetric(x)), 1000).rho.map((v) => (v > 0.5 ? 1 : 0));
+  // Find the peak, and place it precisely, then resize so that it's on the target.
+  const scan = Array.from({ length: 21 }, (_, i) => s.wavelength * (0.96 + 0.004 * i));
+  const swept = await solve(scan.map((wavelength) => cavityRequest(s, rho, 100, wavelength)));
+  if (!swept || swept.error) return swept;
+  const strengths = swept.results.map((r, i) => r.meta.fields[0].ldos * scan[i]);
+  let peak = scan[strengths.indexOf(Math.max(...strengths))];
+  for (const Q of [100, 300, 1000, 1000]) {
+    const { reply, poleK } = await findResonance(s, rho, Q, solve, peak);
+    if (!reply || reply.error) return reply;
+    const next = (2 * Math.PI) / poleK;
+    if (Math.abs(next - peak) < 0.02 * peak) peak = next;
+  }
+  tuned.set(rho, s.wavelength / peak);
+  const reply = await solve(gradientRequests(s, rho));
+  if (!reply || reply.error) return reply;
+  // Checks it as a drawn structure, with the search for leaky modes, which shares nothing of this.
+  const scale = tuned.get(rho) * s.wavelength;
+  const g = cavityGeometry(scale);
+  const found = await solve([{ width: g.size, height: g.size, cell: g.region.width / CAVITY.pixels, background: { eps: 1, mu: 1 }, shapes: cavityShapes(rho, scale), polarization: 'te', walls: 'absorbing', monitors: [], analysis: { type: 'resonance', target_k0: target, x: g.source.x, y: g.source.y, pml: CAVITY.pml * scale } }]);
+  const field = found?.results?.[0]?.meta.fields[0];
+  const mode = field && { wavelength: (2 * Math.PI) / field.k0, q: field.q, volume: field.volume / s.wavelength ** 2 };
+  onStep({ rho, reply, iteration, beta: Infinity, mode, bandwidth: CAVITY.Q });
+  return null;
+}
+
 // Goal wavelengths, with the centre last so the plotted field comes from it.
 function goalWavelengths(s) {
   if (s.analysis === 'mirror') return [s.wavelength];
@@ -128,19 +284,40 @@ function pixelLayers(d, rho) {
   ];
 }
 
-export const gradientRequests = (s, rho) => (s.analysis === 'bend2d'
+export const gradientRequests = (s, rho) => (s.analysis === 'cavityDesign' ? [cavityRequest(s, rho, CAVITY.Q)] : s.analysis === 'bend2d'
   ? goalWavelengths(s).map((wavelength) => bendRequest(s, wavelength, false, rho))
   : requests(s, pixelLayers(s.design[s.analysis], rho),
     (wavelength) => ({ type: 'driven_gradient', wavelength, angle_deg: s.angle })));
 
-// What a design is judged by: reflection for layers, and transmission for a bend.
-const measure = ({ meta, channels }) => (channels.monitors
+// What a design is judged by: reflection for layers, transmission for a bend, and for a
+// cavity, LDOS relative to vacuum, where a line source's `F` is k / 2.
+const measure = ({ meta, channels }) => (meta.fields[0].ldos != null
+  ? (2 * meta.fields[0].ldos) / meta.fields[0].k0
+  : channels.monitors
   ? channels.monitors[0] / straightPower.get(meta.fields[0].k0)
   : meta.fields[0].power[0]);
 export const meanReflection = (results) => results.reduce((sum, r) => sum + measure(r), 0) / results.length;
 
 // The structures a designer would try by hand, solved at the same wavelengths.
 export function references(s) {
+  if (s.analysis === 'cavityDesign') {
+    // Rods with one removed. A period of 0.3781 puts this crystal's mode on the wavelength.
+    const a = 0.3781 * s.wavelength;
+    const { margin, pml } = CAVITY;
+    const edge = margin * s.wavelength;
+    const rods = [];
+    for (let i = 0; i < 49; i++) {
+      if (i !== 24) rods.push({ type: 'circle', x: edge + (i % 7 + 0.5) * a, y: edge + (Math.floor(i / 7) + 0.5) * a, w: 0.4 * a, h: 0.4 * a, n: Math.sqrt(CAVITY.eps) });
+    }
+    const size = 7 * a + 2 * edge;
+    return [{
+      name: 'Crystal of 7 x 7 rods',
+      requests: [{
+        width: size, height: size, cell: a / 12, background: { eps: 1, mu: 1 }, shapes: rods.map(toShape), polarization: 'te', walls: 'absorbing', monitors: [],
+        analysis: { type: 'driven', wavelength: s.wavelength, source: { type: 'line', x: size / 2, y: size / 2 }, pml: pml * s.wavelength, average_q: CAVITY.Q },
+      }],
+    }];
+  }
   if (s.analysis === 'bend2d') {
     return [{ name: 'Plain corner', requests: gradientRequests(s, new Float64Array(BEND.pixels ** 2)) }];
   }
@@ -297,6 +474,7 @@ export function goalGradient(s, results, slope) {
 // Runs until the schedule ends or `onStep` returns false. `solve` returns a solver
 // reply, or null if a newer request replaced it. Returns a reply holding any error.
 export async function optimize(s, solve, onStep) {
+  if (s.analysis === 'cavityDesign') return optimizeCavity(s, solve, onStep);
   const d = s.design[s.analysis];
   const bend = s.analysis === 'bend2d';
   const n = pixelCount(d);
