@@ -14,7 +14,7 @@ use crate::banded::Factors;
 use crate::{C64, ZERO};
 
 /// Parts this small are eliminated whole.
-const LEAF: usize = 64;
+const LEAF: usize = 16;
 /// Columns eliminated together before updating the rest of a front, to stay in cache.
 const BLOCK: usize = 32;
 const REFINEMENT_STEPS: usize = 2;
@@ -39,7 +39,7 @@ pub struct Ordering {
 }
 
 /// Splits `ids` in two and recurses, pushing `(pivots, children)` with children first.
-fn dissect(ids: Vec<usize>, a: &Csr, pos: &[(f64, f64)], side: &mut [bool], nodes: &mut Vec<(Vec<usize>, Vec<usize>)>) -> usize {
+fn dissect(ids: Vec<usize>, a: &Csr, pos: &[(f64, f64)], side: &mut [u8], nodes: &mut Vec<(Vec<usize>, Vec<usize>)>) -> usize {
     if ids.len() <= LEAF {
         nodes.push((ids, vec![]));
         return nodes.len() - 1;
@@ -53,12 +53,26 @@ fn dissect(ids: Vec<usize>, a: &Csr, pos: &[(f64, f64)], side: &mut [bool], node
     let mut left = ids;
     let mid = left.len() / 2;
     left.select_nth_unstable_by(mid, |&p, &q| key(p).total_cmp(&key(q)));
-    let right = left.split_off(mid);
-    right.iter().for_each(|&d| side[d] = true);
+    let mut right = left.split_off(mid);
+    right.iter().for_each(|&d| side[d] = 2);
     // The separator comes from the matrix, not the grid: whatever on the left touches the
     // right, whether across the cut, over a flipped edge, or through a periodic tie.
-    let (separator, left): (Vec<_>, Vec<_>) = left.into_iter().partition(|&d| a.col[a.ptr[d]..a.ptr[d + 1]].iter().any(|&c| side[c]));
-    right.iter().for_each(|&d| side[d] = false);
+    let touches = |d: usize, s: &[u8], v: u8| a.col[a.ptr[d]..a.ptr[d + 1]].iter().any(|&c| s[c] == v);
+    let (mut separator, left): (Vec<_>, Vec<_>) = left.into_iter().partition(|&d| touches(d, side, 2));
+    left.iter().for_each(|&d| side[d] = 1);
+    // Elements couple nodes two columns apart, which can make that two columns thick. A node
+    // touching nothing further left can join the right, unless there's no left at all: that
+    // would only rebuild the same set, and never finish.
+    if !left.is_empty() {
+        separator.retain(|&d| {
+            let needed = touches(d, side, 1);
+            if !needed {
+                right.push(d);
+            }
+            needed
+        });
+    }
+    left.iter().chain(&right).for_each(|&d| side[d] = 0);
     let children = [left, right].into_iter().filter(|p| !p.is_empty()).map(|p| dissect(p, a, pos, side, nodes)).collect();
     nodes.push((separator, children));
     nodes.len() - 1
@@ -69,7 +83,7 @@ impl Ordering {
     pub fn new(a: &Csr, pos: &[(f64, f64)]) -> Self {
         let n = a.n;
         let mut raw = vec![];
-        dissect((0..n).collect(), a, pos, &mut vec![false; n], &mut raw);
+        dissect((0..n).collect(), a, pos, &mut vec![0; n], &mut raw);
         // Children come before parents, so numbering in this order eliminates them first.
         let (mut new, mut owner, mut next) = (vec![0; n], vec![0; n], 0);
         let mut nodes: Vec<Node> = vec![];

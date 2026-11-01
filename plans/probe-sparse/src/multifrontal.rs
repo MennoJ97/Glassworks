@@ -10,7 +10,7 @@ use eigenmenno_core::assemble::Csr;
 use eigenmenno_core::C64;
 
 const ZERO: C64 = C64::new(0.0, 0.0);
-const LEAF: usize = 64;
+const LEAF: usize = 16;
 const BLOCK: usize = 32;
 const TINY: f64 = 1e-14;
 
@@ -46,12 +46,23 @@ fn dissect(ids: Vec<usize>, a: &Csr, pos: &[(f64, f64)], side: &mut [u8], nodes:
     let mut sorted = ids;
     let mid = sorted.len() / 2;
     sorted.select_nth_unstable_by(mid, |&p, &q| key(p).total_cmp(&key(q)));
-    let right = sorted.split_off(mid);
+    let mut right = sorted.split_off(mid);
     let left = sorted;
     right.iter().for_each(|&d| side[d] = 2);
     // The separator: whatever on the left touches the right, across the cut or a periodic tie.
-    let (sep, left): (Vec<_>, Vec<_>) = left.into_iter().partition(|&d| a.col[a.ptr[d]..a.ptr[d + 1]].iter().any(|&c| side[c] == 2));
-    right.iter().for_each(|&d| side[d] = 0);
+    let touches = |d: usize, s: &[u8], v: u8| a.col[a.ptr[d]..a.ptr[d + 1]].iter().any(|&c| s[c] == v);
+    let (mut sep, left): (Vec<_>, Vec<_>) = left.into_iter().partition(|&d| touches(d, side, 2));
+    left.iter().for_each(|&d| side[d] = 1);
+    if !left.is_empty() {
+        sep.retain(|&d| {
+            let needed = touches(d, side, 1);
+            if !needed {
+                right.push(d);
+            }
+            needed
+        });
+    }
+    left.iter().chain(&right).for_each(|&d| side[d] = 0);
     let children = [left, right].into_iter().filter(|p| !p.is_empty()).map(|p| dissect(p, a, pos, side, nodes)).collect();
     nodes.push((sep, children));
     nodes.len() - 1

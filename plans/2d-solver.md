@@ -25,7 +25,7 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Leaky modes | No non-Hermitian eigensolver. One driven solve at complex frequency for LDOS, and a secant search on `1/u_0` for Q | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for. It took 6 or 7 solves, and found Q up to 680,000 |
 | Upper size | The page refuses above about 160,000 unknowns | 638,401 failed in WebAssembly, probably out of memory |
 | Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, about 2,000 after milestone 3, and about 2,150 after milestone 4 | State the cost before adding more, and keep the tutorial's line count current |
-| Own sparse solver | Adopted in `sparse.rs`. `faer` is now only for tests (see below) | It beat `faer`'s LU in WebAssembly, with 99 KB less to download. Refinement covers its one real risk |
+| Own sparse solver | Adopted in `sparse.rs`. `faer` is now only for tests (see below) | It's 2–6× faster than `faer` on driven problems in WebAssembly and within 8% on band diagrams, with 99 KB less to download. Refinement covers its one real risk |
 
 ## Measurements
 
@@ -108,9 +108,8 @@ high-index material will need refining, which the probe didn't test.
    [MPB tutorial](https://mpb.readthedocs.io/en/latest/Python_Tutorial/)'s 0.28262 to
    0.41933 is 0.5–0.7% higher. The likely cause is its coarse resolution of 32, but no
    MPB run has confirmed that, so it isn't used as a reference.
-3. **Band diagrams are slower than they were.** Eigenproblems now use the LU with a reused
-   ordering, about 1.4× slower than `faer`'s Cholesky. A Hermitian path, or warm-starting
-   Lanczos from the previous k-point, are the next speed-ups to try.
+3. **Band diagram speed.** Eigenproblems use the LU with a reused ordering, within 8% of `faer`'s
+   Cholesky. Warm-starting Lanczos from the previous k-point is the next speed-up to try.
 4. **Transposed solves.** Bloch-periodic driven problems lose `Aᵀ = A`,
    so their adjoints need `Aᵀ` solves. Not needed before periodic gratings.
 
@@ -226,7 +225,7 @@ that mode because nothing else exists in the gap.
 
 On the page: 5a of layer at a/6 cells, 51,529 unknowns and two solves in about 5 s with `faer`,
 within 0.3 percentage points of the test's values. The solver adopted afterwards should take
-about 3 s by the ratio in Node, but that hasn't been timed on the page on wall power. The first solve after loading took about 20 s, in a
+about 2.5 s by the ratio in Node, but that hasn't been timed on the page on wall power. The first solve after loading took about 20 s, in a
 hidden browser pane, and milestone 3's first solve was also about 4 times its later ones. The
 cause hasn't been measured: WebAssembly compiling its hot loops is the likely one. The slab takes about 3 s. Spectra would need many
 solves, so the page shows one wavelength at a time, and T can't yet be plotted against
@@ -249,76 +248,90 @@ waveguide cross-sections, which are the first real need for Nédélec elements.
 
 ## Own sparse solver
 
-**Adopted 2026-11-01, in `sparse.rs`.** The prototype and its benchmarks are in
-[`probe-sparse/`](probe-sparse/). It's a multifrontal LU with geometric nested dissection, 289
-lines against the 250–400 estimated. It takes separators from the matrix's graph, not the
-grid, so Delaunay flips and periodic ties need no special care.
+**Adopted 2026-11-01, in `sparse.rs`, and `faer` is now only a test reference.** It's a
+multifrontal LU with geometric nested dissection, 303 lines against the 250–400 estimated, and the
+benchmarks are in [`probe-sparse/`](probe-sparse/). It takes separators from the matrix's graph,
+not the grid, so Delaunay flips and periodic ties need no special care.
 
 This was to be adopted "if it's within a few times of `faer` in WebAssembly and stays reliable
-on hard matrices". It's faster than that asked for, and reliable with refinement:
+on hard matrices". It does better than that:
 
-- **Speed:** factoring is 2–11× faster than `faer`'s LU in WebAssembly. Band diagrams are the
-  exception, about 1.4–1.5× slower as whole requests, since `faer`'s Cholesky is far quicker there.
-- **Reliability:** all 38 physics tests pass unchanged on it, including the Mekis bends and the
-  Mie series. Q and T agree with `faer` to about 1e-13, including Q = 740,000.
+- **Speed:** factoring is 5–29× faster than `faer`'s LU in WebAssembly, and whole driven and leaky
+  requests are 2–6× faster. Band diagrams, which had `faer`'s Cholesky, are 2–8% slower.
+- **Reliability:** all 38 physics tests pass unchanged, including the Mekis bends and the Mie
+  series. Q and T agree with `faer` to about 1e-13, including Q = 740,000.
 - **Download:** 283 KB to 184 KB gzipped, 99 KB less. `faer` itself is 114 KB, not the 88 KB
   estimated, measured by building with a stub in its place.
-- **Memory:** peak use during factoring is 30–60% of `faer` LU's, which could raise the
-  160,000 limit. That hasn't been tried.
-- **Cost:** about 230 lines of Rust net, to 2,372. Readers can now read everything.
+- **Memory:** peak use during factoring is 15–30% of `faer` LU's, which could raise the 160,000
+  limit. That hasn't been tried.
+- **Cost:** about 240 lines of Rust net. Readers can now read everything.
 
-What went with it:
+Iterative refinement runs only when a front reports a weak pivot, and it's needed: see the risk
+below. On real matrices it's rare, with the a/6 bend the only benchmark case that needed it. Open
+problem 4 should also be simple now, since transposed solves are in our own code.
 
-1. **Iterative refinement**, only when a front reports a weak pivot. The stress test below shows
-   why it's required, and that flag was set in every case needing it.
-2. **`faer` as a dev-dependency**, as an independent test reference.
+### No Hermitian path
 
-**Still open:** a Hermitian path, about 40 lines, no pivoting and half the storage, to win back
-band diagrams. The saving hasn't been measured. Open problem 4 should also be simple now, since
-transposed solves are in our own code, though nothing needs them yet.
+Band diagrams factor a Hermitian positive definite matrix, so a Cholesky path, with no pivoting and
+half the storage, looked like the way to win them back. It was built and measured, and **left out**:
+
+| Band diagram, WebAssembly | `faer` | LU, first version | LU, thin separators | Thin, with Cholesky |
+|---:|---:|---:|---:|---:|
+| 2,500 unknowns | 761 ms | 1,049 ms | 840 ms | 802 ms |
+| 10,000 unknowns | 3,809 ms | 5,467 ms | 3,891 ms | 3,600 ms |
+
+Cholesky halved factoring, but solves don't get faster, since `L` and `U` have the same number of
+entries. It saved 4–7% for 68 lines and 1.6 KB, and changes nothing else. `bands.rs` showed the
+real gap: the first version's solves took 1.6× as long as `faer`'s, which meant too many entries.
+
+A second-order element couples nodes two columns apart, so a cut through an element's middle made a
+separator two columns thick. Fronts cost the cube of their size. Moving any separator node with
+nothing further left into the right part, about 10 lines, and shrinking leaves from 64 to 16,
+did far more than Cholesky could, for every problem: it halved peak memory, and sped up the leaky
+13 x 13 by another 2×. Leaf sizes from 8 to 24 made little difference.
+
+If band diagrams ever need more, Lanczos itself costs about as much as the solves, so
+warm-starting it from the previous k-point is the next thing to try.
 
 ### Measurements
 
-Each case is a real matrix from the solver. "Ours" includes its analysis. Native times
-are on an Apple Silicon Mac, single-threaded. WebAssembly is in Node, and includes one solve
-and a residual check. Peak memory counts allocations during factoring.
+These are all from one run on battery, which reads about 1.5× slower than wall power. Each case is
+a real matrix from the solver, on an Apple Silicon Mac, single-threaded. "Ours" includes its
+ordering. WebAssembly is in Node, and includes one solve and a residual check. Peak memory counts
+allocations during factoring.
 
 | Matrix | Unknowns | Factor, native: `faer` LU / ours | Peak MB: `faer` LU / ours | Wasm: `faer` LU / ours |
 |---|---:|---:|---:|---:|
-| Sharp bend, a/6, 5a layer | 51,529 | 588 / 347 ms | 620 / 199 | 1,453 / 405 ms |
-| Sharp bend, a/8, 6a layer | 112,225 | 1,725 / 1,272 ms | 1,339 / 494 | 4,484 / 1,385 ms |
-| 7 x 7 cavity, real k at its peak | 27,889 | 165 / 182 ms | 181 / 108 | 406 / 202 ms |
-| 13 x 13 cavity, on its pole | 82,369 | 1,056 / 787 ms | 785 / 357 | 2,844 / 885 ms |
-| 5 x 5 supercell, shift inside the gap | 25,600 | 761 / 236 ms | 376 / 114 | 2,144 / 258 ms |
-| 5 x 5 supercell, shift on the mode | 25,600 | 761 / 237 ms | 376 / 114 | 2,141 / 258 ms |
-| Empty periodic box near a mode | 40,000 | 1,946 / 464 ms | 678 / 200 | 5,622 / 502 ms |
-| Rod lattice at M, definite | 10,000 | 146 / 59 ms | 103 / 42 | 394 / 66 ms |
-| Rod lattice at M, definite | 40,000 | 1,251 / 467 ms | 636 / 200 | 3,500 / 501 ms |
+| Sharp bend, a/6, 5a layer | 51,529 | 921 / 262 ms | 620 / 116 | 2,239 / 311 ms |
+| Sharp bend, a/8, 6a layer | 112,225 | 2,693 / 746 ms | 1,339 / 262 | 6,866 / 851 ms |
+| 7 x 7 cavity, real k at its peak | 27,889 | 271 / 103 ms | 181 / 55 | 621 / 114 ms |
+| 13 x 13 cavity, on its pole | 82,369 | 1,693 / 455 ms | 785 / 186 | 4,364 / 529 ms |
+| 5 x 5 supercell, shift inside the gap | 25,600 | 1,178 / 148 ms | 376 / 65 | 3,308 / 156 ms |
+| 5 x 5 supercell, shift on the mode | 25,600 | 1,173 / 147 ms | 376 / 65 | 3,280 / 157 ms |
+| Empty periodic box near a mode | 40,000 | 3,001 / 277 ms | 678 / 103 | 8,577 / 297 ms |
+| Rod lattice at M, definite | 10,000 | 226 / 43 ms | 103 / 23 | 605 / 45 ms |
+| Rod lattice at M, definite | 40,000 | 1,918 / 277 ms | 636 / 103 | 5,406 / 303 ms |
 
-The one native loss is the 7 x 7 cavity, by 10%. On the two definite cases, `faer`'s Cholesky
-took 11 and 63 ms, and 18 and 73 MB, far ahead of both LUs. Solves were 1.2–2× faster than `faer`
-LU's, but 1.7–2.2× slower than its Cholesky's, which is what costs band diagrams. Backward errors
-were 7e-17 to 2.5e-15 for both, with no pivot replaced, and one weak pivot, in two cases.
+On the two definite cases, `faer`'s Cholesky took 16 and 96 ms, and 18 and 73 MB, still ahead.
+Backward errors were 7e-17 to 2e-15 for both, apart from 4e-14 on the a/6 bend before refinement,
+which brought it to 1e-16. No pivot was replaced.
 
-Whole requests in WebAssembly, with the core's own code on each, settled after warming up. A
-rerun of all builds side by side, on battery, read about 1.5× slower throughout, with the same
-ratios, and the adopted solver matched the prototype within about 4%, so refinement costs nothing
-measurable on these:
+Whole requests in WebAssembly, settled after warming up:
 
 | Request | Unknowns | `faer` | Ours |
 |---|---:|---:|---:|
-| Band diagram, the page's default | 2,500 | 497 ms | 684 ms |
-| Band diagram | 10,000 | 2,479 ms | 3,654 ms |
-| Box, 6 lowest modes | 2,401 | 36 ms | 48 ms |
-| Supercell near a target | 10,000 | 980 ms | 432 ms |
-| Leaky 5 x 5, the page's default | 16,129 | 999 ms | 611 ms |
-| Leaky 13 x 13 | 82,369 | 20,424 ms | 7,108 ms |
-| Plane-wave scattering, the page's default | 19,321 | 257 ms | 117 ms |
-| Sharp bend a/6, one of its two solves | 51,529 | 2,433 ms | 1,407 ms |
+| Band diagram, the page's default | 2,500 | 778 ms | 830 ms |
+| Band diagram | 10,000 | 3,794 ms | 3,860 ms |
+| Box, 6 lowest modes | 2,401 | 55 ms | 60 ms |
+| Supercell near a target | 10,000 | 1,438 ms | 520 ms |
+| Leaky 5 x 5, the page's default | 16,129 | 1,531 ms | 476 ms |
+| Leaky 13 x 13 | 82,369 | 31,646 ms | 5,122 ms |
+| Plane-wave scattering, the page's default | 19,321 | 400 ms | 101 ms |
+| Sharp bend a/6, one of its two solves | 51,529 | 3,747 ms | 1,909 ms |
 
-About 1 s of that last 1.4 s is outside the factor and solve. Meshing around 420 rods, assembly
+About 1.6 s of that last 1.9 s is outside the factor and solve. Meshing around 420 rods, assembly
 and monitors weren't separated, and they're the next thing to look at for bends. Warm-up is
-real too: the first factor in a fresh process took 1,161 ms against 405 ms afterwards, which
+real too: the first factor in a fresh process took 818 ms against 311 ms afterwards, which
 probably explains the slow first solve on the page.
 
 ### The main risk: pivoting only inside each front
@@ -330,15 +343,15 @@ a subdomain's eigenvalue. The nearest global mode is 0.1–6% away:
 
 | `delta` | `faer` residual | Ours | Refined once | Refined twice |
 |---:|---:|---:|---:|---:|
-| 1e-2 | 3e-16 | 3e-16 to 1e-15 | 2e-16 | 2e-16 |
-| 1e-6 | 3e-16 | 3e-13 to 1e-12 | 2e-16 | 1e-16 |
-| 1e-10 | 3e-16 | 8e-9 to 2e-8 | 2e-16 to 2e-15 | 1e-16 |
-| 1e-12 | 3e-16 | 6e-7 to 9e-7 | 3e-13 to 7e-12 | 2e-16 to 1e-15 |
-| 1e-14 | 3e-16 | 2e-5 to 9e-5 | 4e-10 to 4e-7 | 2e-14 to 8e-9 |
-| 0 | 3e-16 | 1e-5 to 8e-5 | 5e-10 to 2e-7 | 2e-14 to 2e-10 |
+| 1e-2 | 3e-16 | 2e-16 to 6e-16 | 2e-16 | 1e-16 to 2e-16 |
+| 1e-6 | 3e-16 | 5e-13 to 6e-13 | 1e-16 to 2e-16 | 1e-16 |
+| 1e-10 | 3e-16 | 4e-9 to 1e-8 | 2e-16 to 6e-16 | 1e-16 to 2e-16 |
+| 1e-12 | 3e-16 | 2e-7 to 9e-7 | 5e-13 to 1e-11 | 2e-16 to 5e-16 |
+| 1e-14 | 3e-16 | 1e-5 to 3e-5 | 7e-10 to 8e-8 | 1e-14 to 4e-11 |
+| 0 | 3e-16 | 8e-6 to 9e-5 | 6e-10 to 6e-8 | 2e-14 to 9e-11 |
 
-So error grows as about `1e-18 / delta` without refinement, and two steps recover it, except
-when tuned to within about 1e-14. Reaching that takes deliberately setting a shift from a
+So error grows as about `1e-18 / delta` without refinement, and two steps recover it, to about
+1e-10 at worst when tuned within 1e-14. Reaching that takes deliberately setting a shift from a
 subdomain's own eigenvalue, and a real structure would need that coincidence on one of its many
 blocks. Delayed pivots would remove the risk altogether, at a real cost in complexity, and
 this doesn't justify them. The stress test covers `E_z` on one mesh, so `H_z` and meshes
@@ -366,10 +379,16 @@ cd plans/probe-2d && CARGO_TARGET_DIR=/tmp/eigenmenno-probe RUSTFLAGS="-C target
 ```
 
 For the sparse solver comparison, from `plans/probe-sparse`. Give an output directory outside
-the repository. `bench` covers the native table, and `stress` the risk above:
+the repository. `bench` covers the native table, `bands` splits a band diagram's time into its
+parts, and `stress` covers the risk above. The probe has its own copy of the solver, and reaches
+`faer` through its own `faer_reference.rs`:
 
 ```bash
 CARGO_TARGET_DIR=/tmp/eigenmenno-sparse cargo run --release --bin bench
+```
+
+```bash
+CARGO_TARGET_DIR=/tmp/eigenmenno-sparse cargo run --release --bin bands
 ```
 
 ```bash
@@ -380,5 +399,5 @@ CARGO_TARGET_DIR=/tmp/eigenmenno-sparse cargo run --release --bin stress
 CARGO_TARGET_DIR=/tmp/eigenmenno-sparse RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown --lib && node run.mjs /tmp/eigenmenno-sparse/wasm32-unknown-unknown/release/probe_sparse.wasm
 ```
 
-The whole-request table came from swapping the prototype in for `sparse.rs` in a scratch copy of
-the core, before it was adopted. The prototype's tiny-pivot and stress hooks aren't in the core.
+The whole-request table compares a build from before the swap, commit `7a0706a` plus milestone 4,
+against the core as it is.

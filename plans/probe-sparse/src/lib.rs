@@ -1,5 +1,6 @@
 //! Throwaway benchmark of `multifrontal` against `faer`, on the solver's real 2D matrices.
 //! The matrix builders repeat `solve2d.rs`, whose own are private.
+pub mod faer_reference;
 pub mod multifrontal;
 
 use eigenmenno_core::assemble::{assemble, assemble_split, Csr, DofMap};
@@ -210,7 +211,7 @@ pub mod wasm {
     use super::*;
     use crate::multifrontal::{Analysis, Multifrontal};
     use eigenmenno_core::banded::Factors;
-    use eigenmenno_core::sparse::SparseLu;
+    use crate::faer_reference::SparseLu;
     static mut CASE: Option<Case> = None;
     static mut ANALYSIS: Option<Analysis> = None;
     #[allow(static_mut_refs)]

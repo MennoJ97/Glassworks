@@ -101,9 +101,8 @@ scripts/build-docs.mjs   Turns docs/ into web/learn, with equations as MathML
 All the linear algebra is handwritten, so you can read the whole solver. In 1D a banded LU
 is faster than a general sparse library, as [chapter 5](docs/05-linear-systems.md) measures.
 In 2D, where bandwidth grows, `sparse.rs` uses the mesh's geometry to cut the fill. In
-WebAssembly it beat `faer`'s general sparse LU on these matrices, though `faer`'s Cholesky is
-still faster for band diagrams. `faer` is a dependency of the tests only, as an independent
-reference.
+WebAssembly it beat `faer`'s general sparse LU on these matrices, and came within 8% of its
+Cholesky on band diagrams. `faer` is a dependency of the tests only, as an independent reference.
 
 | If you need | Use |
 |---|---|

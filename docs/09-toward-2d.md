@@ -37,25 +37,29 @@ needed 12 GB, more than a browser tab can address.
 
 Sparse solvers do better using **nested dissection**, cutting the mesh recursively so
 elimination creates far less fill ([George 1973](10-references.md#george-1973)).
-[`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) does this in about 290 lines:
+[`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) does this in about 300 lines:
 
 1. Split the unknowns in two by position, along the longer side. Whatever on the left touches
    the right becomes a **separator**. The two parts then don't interact, so each can be
    eliminated without touching the other. Reading separators from the matrix, not the grid,
    means flipped edges and periodic ties need no special care. A tie just makes the separator
-   two lines long.
+   two lines long. Second-order elements couple nodes two columns apart, so a cut can leave a
+   separator two columns thick, but a node touching nothing further left can join the right.
 2. Number each part first and its separator last, recursively. This **ordering** depends only
    on where the nonzeros are, so a band diagram computes it once for all its wavevectors.
 3. Eliminate each separator in a dense **front**, which holds its own matrix entries, plus
    whatever its two parts left behind. Eliminating it leaves a smaller dense block for
    its parent. This is the **multifrontal** method.
 
-Fronts stay small until near the end, and dense loops run fast. Around 40,000 unknowns, this
-factored in about 0.5 s in WebAssembly, against about 3.5 to 5.6 s for
-[`faer`](https://docs.rs/faer)'s general sparse LU, which has to find its ordering with no
-knowledge of the geometry. `faer`'s Cholesky is still the faster on band diagrams, where the
-matrix is positive definite, and needs no pivoting and half the storage. This solver doesn't
-use that yet, which makes band diagrams about 1.4 times slower than with `faer`.
+Fronts stay small until near the end, and dense loops run fast. At 40,000 unknowns, this factored
+in about 0.3 s in WebAssembly, against 5 to 9 s for [`faer`](https://docs.rs/faer)'s general sparse
+LU, which has to find its ordering with no knowledge of the geometry.
+
+Band diagrams have a positive definite matrix, which allows Cholesky, with no pivoting and half the
+storage. We tried it and left it out: it halved factoring, but saved only 4–7% overall, since a
+band diagram spends most of its time in solves and Lanczos, and $L$ has as many entries as $U$.
+Thinning the separators did far more, for every problem, because a front's cost grows as
+the cube of its size. Measure before you add.
 
 The cost is in the pivoting. A pivot can only come from a front's own unknowns, because using
 one from elsewhere would change the fronts that follow. A part walled in by its separator can
@@ -63,7 +67,7 @@ sit on a resonance of its own, and then its front has only a poor pivot, even th
 matrix is fine. `sparse.rs` notes any weak pivot, and then corrects each solve with two steps of
 **iterative refinement**: find what the answer gets wrong, solve for that, and add it.
 `sparse_lu_recovers_when_a_part_sits_on_its_own_resonance` builds this case on purpose: the
-error is 0.12 without refinement and 9e-13 with it.
+error is 0.008 without refinement and 1e-12 with it.
 
 ## Why vector fields are different
 

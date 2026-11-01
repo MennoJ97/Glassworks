@@ -1,5 +1,5 @@
 use eigenmenno_core::banded::Factors;
-use eigenmenno_core::sparse::{SparseCholesky, SparseLu};
+use probe_sparse::faer_reference::{SparseCholesky, SparseLu};
 use eigenmenno_core::C64;
 use probe_sparse::multifrontal::{Analysis, Multifrontal};
 use probe_sparse::*;

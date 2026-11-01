@@ -6,6 +6,7 @@ edition = "2021"
 crate-type = ["rlib", "cdylib"]
 [dependencies]
 eigenmenno-core = { path = "../../crates/eigenmenno-core" }
+faer = { version = "0.24", default-features = false, features = ["std", "linalg", "sparse", "sparse-linalg"] }
 [profile.release]
 opt-level = 3
 lto = "fat"

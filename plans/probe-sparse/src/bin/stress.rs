@@ -6,7 +6,7 @@ use eigenmenno_core::banded::Factors;
 use eigenmenno_core::eigen::eigs_near;
 use eigenmenno_core::mesh::{Mesh, Outline};
 use eigenmenno_core::space::H1Triangle;
-use eigenmenno_core::sparse::SparseLu;
+use probe_sparse::faer_reference::SparseLu;
 use eigenmenno_core::{C64, ONE, ZERO};
 use probe_sparse::multifrontal::{Analysis, Multifrontal};
 use probe_sparse::{load, residual};
