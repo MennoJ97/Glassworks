@@ -126,6 +126,18 @@ pub enum Analysis2d {
     },
     /// Band diagram of a rectangular lattice, along Gamma, X, M and back.
     Bands { n_bands: usize, n_k: usize },
+    /// The field at one wavelength in open space. An absorbing layer of thickness `pml`
+    /// surrounds the domain, so walls must be `absorbing`.
+    Driven { wavelength: f64, source: Source2d, pml: f64 },
+}
+
+/// `Line` is a current filament at a point. `PlaneWave` travels at `angle_deg` from the
+/// x-axis through the background, with amplitude 1, and the field returned is the total.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Source2d {
+    Line { x: f64, y: f64 },
+    PlaneWave { angle_deg: f64 },
 }
 
 /// A 2D problem on `[0, width] x [0, height]`. `cell` is the largest grid spacing.

@@ -273,17 +273,18 @@ export class FieldMap {
     this.canvas = canvas;
     this.mesh = null;
     this.shapes = [];
-    this.bloch = null;
+    this.marks = {};
     this.phase = 0;
     this.raster = null;
     this.image = document.createElement('canvas');
   }
 
-  // `bloch` is the phase per period across x and y, or null for solid walls.
-  setMesh(mesh, shapes, bloch) {
+  // `marks` may hold `bloch`, the phase per period across x and y; `open` for edges that
+  // absorb; `source`, a point; and `incident`, a direction of travel in degrees.
+  setMesh(mesh, shapes, marks) {
     this.mesh = mesh;
     this.shapes = shapes;
-    this.bloch = bloch;
+    this.marks = marks;
     this.raster = null;
     this.field = null;
     this.values = null;
@@ -358,6 +359,11 @@ export class FieldMap {
       im[at] = a * fi[i] + b * fi[j] + c * fi[k];
       peak = Math.max(peak, Math.hypot(re[at], im[at]));
     }
+    // A line source's field diverges at the point, which would wash out everything else.
+    if (this.marks.source) {
+      const sizes = Float32Array.from(re, (v, at) => Math.hypot(v, im[at])).sort();
+      peak = sizes[Math.floor(0.99 * (sizes.length - 1))];
+    }
     this.values = { re, im, peak: peak || 1 };
     const rgb = (name) => [1, 3, 5].map((i) => parseInt(css(name).slice(i, i + 2), 16));
     const [low, mid, high] = [rgb('--series-2'), rgb('--surface'), rgb('--series-1')];
@@ -390,14 +396,77 @@ export class FieldMap {
       else ctx.rect(sx(s.x - s.w / 2), sy(s.y + s.h / 2), s.w * a.scale, s.h * a.scale);
       ctx.stroke();
     }
-    if (this.bloch) this.drawBloch(ctx, a);
+    const { bloch, open, source, incident } = this.marks;
+    if (bloch) this.drawBloch(ctx, a);
+    else if (open) this.drawOpen(ctx, a);
     else ctx.strokeRect(a.left, a.top, a.right - a.left, a.bottom - a.top);
+    if (source) this.drawSource(ctx, sx(source[0]), sy(source[1]));
+    if (incident !== undefined) {
+      const angle = (incident * Math.PI) / 180;
+      const size = 0.16 * Math.min(a.right - a.left, a.bottom - a.top);
+      // Beside the corner the wave enters from, clear of shapes in the middle.
+      const [cx, cy] = [a.left + 0.5 * size + 12 + (Math.cos(angle) < 0 ? a.right - a.left - size - 24 : 0), a.top + 0.5 * size + 12];
+      this.drawArrow(ctx, cx, cy, Math.cos(angle), -Math.sin(angle), size, 'k');
+    }
+  }
+
+  // Waves leave through these edges, into an absorbing layer outside the plot.
+  drawOpen(ctx, a) {
+    ctx.strokeStyle = css('--muted');
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([2, 4]);
+    ctx.strokeRect(a.left, a.top, a.right - a.left, a.bottom - a.top);
+    ctx.setLineDash([]);
+  }
+
+  drawSource(ctx, x, y) {
+    ctx.fillStyle = css('--ink');
+    ctx.strokeStyle = css('--surface');
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    this.drawLabel(ctx, 'Source', x, y - 15);
+  }
+
+  drawLabel(ctx, text, x, y) {
+    ctx.font = '600 13px ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = css('--surface');
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = css('--ink');
+    ctx.fillText(text, x, y);
+  }
+
+  // An arrow centred on (cx, cy), with its direction in screen coordinates.
+  drawArrow(ctx, cx, cy, ux, uy, length, name) {
+    const [tipX, tipY] = [cx + (ux * length) / 2, cy + (uy * length) / 2];
+    const shape = () => {
+      ctx.beginPath();
+      ctx.moveTo(cx - (ux * length) / 2, cy - (uy * length) / 2);
+      ctx.lineTo(tipX, tipY);
+      ctx.moveTo(tipX - 10 * ux - 6 * uy, tipY - 10 * uy + 6 * ux);
+      ctx.lineTo(tipX, tipY);
+      ctx.lineTo(tipX - 10 * ux + 6 * uy, tipY - 10 * uy - 6 * ux);
+      ctx.stroke();
+    };
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = css('--surface');
+    shape();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = css('--ink');
+    shape();
+    ctx.lineCap = 'butt';
+    this.drawLabel(ctx, name, tipX + ux * 12, tipY + uy * 12);
   }
 
   // Matched chevrons mark each pair of tied edges, and the arrow shows the wavevector.
   drawBloch(ctx, a) {
     const ink = css('--ink');
-    const halo = css('--surface');
     ctx.strokeStyle = ink;
     ctx.fillStyle = ink;
     ctx.lineWidth = 2;
@@ -422,45 +491,17 @@ export class FieldMap {
     chevrons(markX, a.bottom, 0, -1, 2);
     chevrons(markX, a.top, 0, -1, 2);
 
-    const [kx, ky] = [this.bloch[0] / this.mesh.width, this.bloch[1] / this.mesh.height];
+    const { bloch } = this.marks;
+    const [kx, ky] = [bloch[0] / this.mesh.width, bloch[1] / this.mesh.height];
     const size = Math.hypot(kx, ky);
-    const label = (text, x, y) => {
-      ctx.font = '600 13px ui-sans-serif, system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = halo;
-      ctx.strokeText(text, x, y);
-      ctx.fillStyle = ink;
-      ctx.fillText(text, x, y);
-    };
     if (size < 1e-9) {
-      label('k = 0', cx, cy);
+      this.drawLabel(ctx, 'k = 0', cx, cy);
       return;
     }
     // Screen y points down. The longest k on the zone edge gets the longest arrow.
     const longest = Math.hypot(Math.PI / this.mesh.width, Math.PI / this.mesh.height);
     const length = (0.14 + 0.2 * (size / longest)) * Math.min(a.right - a.left, a.bottom - a.top);
-    const [ux, uy] = [kx / size, -ky / size];
-    const [tipX, tipY] = [cx + (ux * length) / 2, cy + (uy * length) / 2];
-    const shape = () => {
-      ctx.beginPath();
-      ctx.moveTo(cx - (ux * length) / 2, cy - (uy * length) / 2);
-      ctx.lineTo(tipX, tipY);
-      ctx.moveTo(tipX - 10 * ux - 6 * uy, tipY - 10 * uy + 6 * ux);
-      ctx.lineTo(tipX, tipY);
-      ctx.lineTo(tipX - 10 * ux + 6 * uy, tipY - 10 * uy - 6 * ux);
-      ctx.stroke();
-    };
-    ctx.lineCap = 'round';
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = halo;
-    shape();
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = ink;
-    shape();
-    ctx.lineCap = 'butt';
-    label('k', tipX + ux * 12, tipY + uy * 12);
+    this.drawArrow(ctx, cx, cy, kx / size, -ky / size, length, 'k');
   }
 
   paint() {
@@ -471,7 +512,7 @@ export class FieldMap {
     const scale = 255 / peak;
     for (let at = 0; at < w * h; at++) {
       if (owner[at] < 0) continue;
-      const n = 3 * (Math.round((re[at] * c + im[at] * s) * scale) + 255);
+      const n = 3 * (Math.max(-255, Math.min(255, Math.round((re[at] * c + im[at] * s) * scale))) + 255);
       image.data[4 * at] = this.colors[n];
       image.data[4 * at + 1] = this.colors[n + 1];
       image.data[4 * at + 2] = this.colors[n + 2];

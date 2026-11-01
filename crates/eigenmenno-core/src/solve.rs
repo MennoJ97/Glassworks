@@ -381,11 +381,11 @@ fn power_gradients(s: &Setup, k0: f64, d: &Driven, out: &mut Output) {
 /// TE has `q = ε` in `b = kt^2 p - k0^2 q`, and TM has `p = 1/ε` in both `a` and `b`.
 fn layer_sensitivity(s: &Setup, k0: f64, d: &Driven, lambda: &[C64]) -> Vec<C64> {
     let n = s.space.local_size();
-    let (mut stiff, mut mass, mut dofs) = (vec![0.0; n * n], vec![0.0; n * n], vec![0; n]);
+    let (mut stiff, mut unused, mut mass, mut dofs) = (vec![0.0; n * n], vec![0.0; n * n], vec![0.0; n * n], vec![0; n]);
     let mut w = vec![ZERO; s.req.layers.len()];
     for cell in 0..s.space.n_cells() {
         s.space.cell_dofs(cell, &mut dofs);
-        s.space.local_matrices(cell, &mut stiff, &mut mass);
+        s.space.local_matrices(cell, &mut stiff, &mut unused, &mut mass);
         let (p, _) = s.coef(cell);
         let (a, b) = match s.req.polarization {
             Polarization::Te => (ZERO, C64::new(-k0 * k0, 0.0)),

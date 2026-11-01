@@ -10,8 +10,9 @@ pub trait Space {
     /// Number of dofs on each cell.
     fn local_size(&self) -> usize;
     fn cell_dofs(&self, cell: usize, dofs: &mut [usize]);
-    /// Unit-coefficient stiffness and mass matrices of a cell, row-major.
-    fn local_matrices(&self, cell: usize, stiffness: &mut [f64], mass: &mut [f64]);
+    /// Unit-coefficient stiffness and mass matrices of a cell, row-major. Stiffness comes
+    /// in x and y parts, because an absorbing layer weights them differently.
+    fn local_matrices(&self, cell: usize, stiff_x: &mut [f64], stiff_y: &mut [f64], mass: &mut [f64]);
 }
 
 /// Gauss-Legendre points and weights on [-1, 1]: Newton's method on `P_n`.
@@ -122,6 +123,22 @@ impl<'a> H1Triangle<'a> {
         Self { mesh, n_vertices: mesh.coords.len() / 2, edges, cell_edges }
     }
 
+    /// The six basis values at a point in a cell.
+    pub fn basis_at(&self, cell: usize, x: f64, y: f64) -> [f64; 6] {
+        let [l0, l1, l2] = self.barycentric(cell, x, y);
+        [l0 * (2.0 * l0 - 1.0), l1 * (2.0 * l1 - 1.0), l2 * (2.0 * l2 - 1.0), 4.0 * l0 * l1, 4.0 * l1 * l2, 4.0 * l2 * l0]
+    }
+
+    /// Barycentric coordinates of a point, all in `[0, 1]` if it's inside the cell.
+    pub fn barycentric(&self, cell: usize, x: f64, y: f64) -> [f64; 3] {
+        let v = &self.mesh.cells[3 * cell..3 * cell + 3];
+        let [p0, p1, p2] = [self.mesh.vertex(v[0]), self.mesh.vertex(v[1]), self.mesh.vertex(v[2])];
+        let det = (p1.0 - p0.0) * (p2.1 - p0.1) - (p2.0 - p0.0) * (p1.1 - p0.1);
+        let l1 = ((x - p0.0) * (p2.1 - p0.1) - (p2.0 - p0.0) * (y - p0.1)) / det;
+        let l2 = ((p1.0 - p0.0) * (y - p0.1) - (x - p0.0) * (p1.1 - p0.1)) / det;
+        [1.0 - l1 - l2, l1, l2]
+    }
+
     pub fn dof_positions(&self) -> Vec<(f64, f64)> {
         let vertices = (0..self.n_vertices).map(|v| self.mesh.vertex(v));
         let midpoints = self.edges.iter().map(|&[a, b]| {
@@ -148,7 +165,7 @@ impl Space for H1Triangle<'_> {
             *d = self.n_vertices + e;
         }
     }
-    fn local_matrices(&self, cell: usize, stiffness: &mut [f64], mass: &mut [f64]) {
+    fn local_matrices(&self, cell: usize, stiff_x: &mut [f64], stiff_y: &mut [f64], mass: &mut [f64]) {
         let v = &self.mesh.cells[3 * cell..3 * cell + 3];
         let [p0, p1, p2] = [self.mesh.vertex(v[0]), self.mesh.vertex(v[1]), self.mesh.vertex(v[2])];
         let det = (p1.0 - p0.0) * (p2.1 - p0.1) - (p2.0 - p0.0) * (p1.1 - p0.1);
@@ -156,7 +173,8 @@ impl Space for H1Triangle<'_> {
         let gx = [(p1.1 - p2.1) / det, (p2.1 - p0.1) / det, (p0.1 - p1.1) / det];
         let gy = [(p2.0 - p1.0) / det, (p0.0 - p2.0) / det, (p1.0 - p0.0) / det];
         let area = det.abs() / 2.0;
-        stiffness.fill(0.0);
+        stiff_x.fill(0.0);
+        stiff_y.fill(0.0);
         mass.fill(0.0);
         for ([l0, l1, l2], w) in TRIANGLE_RULE {
             let val = [l0 * (2.0 * l0 - 1.0), l1 * (2.0 * l1 - 1.0), l2 * (2.0 * l2 - 1.0), 4.0 * l0 * l1, 4.0 * l1 * l2, 4.0 * l2 * l0];
@@ -173,7 +191,8 @@ impl Space for H1Triangle<'_> {
             let (dx, dy) = (grad(&gx), grad(&gy));
             for i in 0..6 {
                 for j in 0..6 {
-                    stiffness[i * 6 + j] += w * area * (dx[i] * dx[j] + dy[i] * dy[j]);
+                    stiff_x[i * 6 + j] += w * area * dx[i] * dx[j];
+                    stiff_y[i * 6 + j] += w * area * dy[i] * dy[j];
                     mass[i * 6 + j] += w * area * val[i] * val[j];
                 }
             }
@@ -196,10 +215,11 @@ impl Space for H1Line<'_> {
             *d = cell * self.order + i;
         }
     }
-    fn local_matrices(&self, cell: usize, stiffness: &mut [f64], mass: &mut [f64]) {
+    fn local_matrices(&self, cell: usize, stiff_x: &mut [f64], stiff_y: &mut [f64], mass: &mut [f64]) {
         // Mapping [-1, 1] onto a cell of length h scales d/dx by 2/h and dx by h/2.
         let h = self.cell_length(cell);
-        for (s, r) in stiffness.iter_mut().zip(&self.ref_stiffness) {
+        stiff_y.fill(0.0);
+        for (s, r) in stiff_x.iter_mut().zip(&self.ref_stiffness) {
             *s = r * 2.0 / h;
         }
         for (m, r) in mass.iter_mut().zip(&self.ref_mass) {

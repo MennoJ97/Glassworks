@@ -84,20 +84,29 @@ impl DofMap {
 }
 
 /// Assembles `sum_c (a_c S_c + b_c M_c)`, where `coef` gives `(a_c, b_c)` per
-/// cell. Every operator in this solver has this form.
+/// cell. Almost every operator in this solver has this form.
 pub fn assemble(space: &dyn Space, dofs: &DofMap, coef: impl Fn(usize) -> (C64, C64)) -> Triplets {
+    assemble_split(space, dofs, |c| {
+        let (a, b) = coef(c);
+        (a, a, b)
+    })
+}
+
+/// `assemble` with separate x and y stiffness weights: `(a_x, a_y, b)`.
+pub fn assemble_split(space: &dyn Space, dofs: &DofMap, coef: impl Fn(usize) -> (C64, C64, C64)) -> Triplets {
     let n = space.local_size();
-    let (mut s, mut m, mut d) = (vec![0.0; n * n], vec![0.0; n * n], vec![0; n]);
+    let (mut sx, mut sy, mut m, mut d) = (vec![0.0; n * n], vec![0.0; n * n], vec![0.0; n * n], vec![0; n]);
     let mut t = Vec::with_capacity(space.n_cells() * n * n);
     for c in 0..space.n_cells() {
         space.cell_dofs(c, &mut d);
-        space.local_matrices(c, &mut s, &mut m);
-        let (a, b) = coef(c);
+        space.local_matrices(c, &mut sx, &mut sy, &mut m);
+        let (ax, ay, b) = coef(c);
         for i in 0..n {
             let Some((ri, fi)) = dofs.map[d[i]] else { continue };
             for j in 0..n {
                 let Some((rj, fj)) = dofs.map[d[j]] else { continue };
-                t.push((ri, rj, fi.conj() * (a * s[i * n + j] + b * m[i * n + j]) * fj));
+                let k = i * n + j;
+                t.push((ri, rj, fi.conj() * (ax * sx[k] + ay * sy[k] + b * m[k]) * fj));
             }
         }
     }

@@ -1,9 +1,9 @@
 # 9. Toward 2D
 
-The solver was written with 2D in mind. Scalar eigenmodes on triangles now exist, in
-[`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs). Open boundaries and vector
-fields don't yet, so those parts of this chapter describe what would change, and why
-vector fields need new ideas.
+The solver was written with 2D in mind. Scalar modes and open scattering on triangles now
+exist, in [`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs). Vector fields don't
+yet, so that part of this chapter describes what would change, and why they need new
+ideas.
 
 ## Step one: scalar fields on triangles
 
@@ -109,12 +109,20 @@ Chapter 7's open end was exact because in 1D a wave has only one direction to go
 2D, a local boundary condition can't be reflectionless for all angles at once
 ([Engquist & Majda 1977](10-references.md#engquist-majda-1977); [Johnson 2021](10-references.md#johnson-2021)).
 
-This isn't implemented yet. The standard solution is a **perfectly matched layer** (PML): an artificial absorbing
+The standard solution is a **perfectly matched layer** (PML): an artificial absorbing
 region around the domain, equivalent to a complex stretch of the coordinates
 ([Bérenger 1994](10-references.md#berenger-1994); [Chew & Weedon 1994](10-references.md#chew-weedon-1994)). PML looks like a complex, anisotropic *material*
-([Sacks et al. 1995](10-references.md#sacks-1995); [Johnson 2021](10-references.md#johnson-2021)). That nearly fits the existing assembly, but the anisotropy means
-the stiffness has to split into separate $x$ and $y$ parts. It also makes the eigenproblem
-non-Hermitian. Leaky modes could use a general eigensolver such as Krylov-Schur
+([Sacks et al. 1995](10-references.md#sacks-1995); [Johnson 2021](10-references.md#johnson-2021)). With a stretch $s_x$, $s_y$ along each axis, the weights become
+
+$$a_x = p\,\frac{s_y}{s_x}, \qquad a_y = p\,\frac{s_x}{s_y}, \qquad b = -k_0^2\,q\,s_x s_y.$$
+
+So the stiffness had to split into separate $x$ and $y$ parts, in `assemble_split`. A plane
+wave then enters through the **scattered-field** form: the incident wave already solves the
+background problem, so only the difference between each shape and the background remains
+as a source. The test `dielectric_cylinder_matches_the_mie_series` checks this against the
+analytic solution.
+
+PML also makes the eigenproblem non-Hermitian. Leaky modes could use a general eigensolver such as Krylov-Schur
 ([Stewart 2002](10-references.md#stewart-2002)), but a driven solve at complex frequency
 gets the local density of states directly, with no eigensolver at all.
 

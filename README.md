@@ -4,12 +4,13 @@ A small finite element solver for Maxwell eigenmode and driven problems. It runs
 entirely in the visitor's browser, so a website hosting it only serves static files
 and does no computing.
 
-It handles 1D layered structures, and 2D eigenmodes, with [more of 2D planned](plans/2d-solver.md):
+It handles 1D layered structures, and 2D eigenmodes and scattering, with [more of 2D planned](plans/2d-solver.md):
 
 - **Resonances** of closed structures
 - **Photonic band diagrams** of periodic structures
 - **Guided modes** of slab waveguides
 - **2D resonances and band diagrams** of shapes in a box or lattice, for either polarization
+- **2D scattering** of a plane wave or line source by shapes in open space
 - **Reflection and transmission spectra**, including lossy layers and oblique incidence
 - **Fields at a single wavelength**, from a plane wave or a current sheet
 - **Inverse design** of mirrors and broadband coatings, using adjoint gradients of
@@ -74,7 +75,7 @@ crates/eigenmenno-core   The solver, with no browser dependencies
   space.rs               Elements (the Space trait is the 2D extension point)
   assemble.rs            Sparse matrices and boundary constraints
   banded.rs              Banded LU and RCM reordering, for 1D
-  sparse.rs              Sparse Cholesky through faer, for 2D
+  sparse.rs              Sparse Cholesky and LU through faer, for 2D
   eigen.rs               Shift-invert Lanczos
   problem.rs             The JSON problem description
   solve.rs               The physics: from a request to fields
@@ -110,7 +111,7 @@ the 1D tests.
 
 ## Known limits
 
-- 2D has no open boundaries or driven solves yet, only walls and periodic lattices.
+- 2D materials are real and positive, so there are no metals or loss in 2D yet.
 - Eigenmode analyses support lossless materials only. Use a driven solve for loss or
   metals.
 - Materials have one constant index at all wavelengths, so "gold-like metal" is a rough

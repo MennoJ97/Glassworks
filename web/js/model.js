@@ -49,6 +49,7 @@ export const PRESETS = {
     analysis: 'waveguide', wavelength: 1,
     layers: [layer('Silica glass', 3), layer('Silicon nitride', 0.8), layer('Silica glass', 3)],
   },
+  'Scattering by a rod': { analysis: 'scatter2d', source: 'plane_wave', wavelength: 1, angle: 0 },
   'Empty square cavity': { analysis: 'cavity2d' },
   'Lattice of rods': { analysis: 'bands2d' },
   'Design a mirror': { analysis: 'mirror', wavelength: 1 },
@@ -59,7 +60,7 @@ export const PRESETS = {
 // picks; eigenmode views have no source and solve for the modes themselves; design
 // views repeat driven solves, using their gradients to change the structure.
 export const PROBLEMS = {
-  driven: { name: 'Driven response', views: ['spectrum', 'field'] },
+  driven: { name: 'Driven response', views: ['spectrum', 'field', 'scatter2d'] },
   eigen: { name: 'Eigenmodes', views: ['cavity', 'bands', 'waveguide', 'cavity2d', 'bands2d'] },
   design: { name: 'Inverse design', views: ['mirror', 'antireflection'] },
 };
@@ -86,6 +87,10 @@ export function defaultState() {
     sourceX: 0.5,
     bandPick: { k: 0.5, band: 0 },
     plane: {
+      scatter2d: {
+        width: 3, height: 3, cell: 0.06, background: 1, walls: 'absorbing', sourceX: 0.75, sourceY: 1.5,
+        shapes: [{ type: 'circle', x: 1.5, y: 1.5, w: 1, h: 1, n: 2 }],
+      },
       cavity2d: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', shapes: [] },
       bands2d: {
         width: 1, height: 1, cell: 0.04, background: 1, walls: 'periodic', pick: { s: 1, band: 0 },
@@ -133,6 +138,11 @@ function planeRequests(s) {
   };
   const modes = (bloch) => ({ ...base, analysis: { type: 'cavity', n_modes: s.nModes, bloch } });
   if (s.analysis === 'cavity2d') return [modes([0, 0])];
+  if (s.analysis === 'scatter2d') {
+    const source = s.source === 'line' ? { type: 'line', x: p.sourceX, y: p.sourceY } : { type: 'plane_wave', angle_deg: s.angle };
+    // In tests, this much layer on the mesh's cells left errors well under 1%.
+    return [{ ...base, analysis: { type: 'driven', wavelength: s.wavelength, source, pml: 0.6 * s.wavelength } }];
+  }
   return [{ ...base, analysis: { type: 'bands', n_bands: s.nModes, n_k: 5 } }, modes(blochAt(p.pick.s))];
 }
 

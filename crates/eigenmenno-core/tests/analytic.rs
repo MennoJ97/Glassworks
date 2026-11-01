@@ -1,7 +1,7 @@
 //! Every test compares against an exact result, not against stored numbers.
 
 use eigenmenno_core::mesh::{Mesh, Outline};
-use eigenmenno_core::problem::{Analysis, Analysis2d, Boundary, Layer, Material, MeshSpec, Polarization, Request, Request2d, Shape, Source};
+use eigenmenno_core::problem::{Analysis, Analysis2d, Boundary, Layer, Material, MeshSpec, Polarization, Request, Request2d, Shape, Source, Source2d};
 use eigenmenno_core::solve::{solve, Output};
 use eigenmenno_core::C64;
 use std::f64::consts::PI;
@@ -521,3 +521,139 @@ fn request_2d_parses_from_json() {
     let r: Request2d = serde_json::from_str(json).unwrap();
     assert!(eigenmenno_core::solve2d::solve(&r).is_ok());
 }
+
+/// `J_n(x)` and `Y_n(x)` for x > 0, from their integral representations.
+fn bessel(n: i32, x: f64) -> (f64, f64) {
+    let m = 2000;
+    let (mut j, mut y) = (0.0, 0.0);
+    for i in 0..m {
+        let t = PI * (i as f64 + 0.5) / m as f64;
+        j += (n as f64 * t - x * t.sin()).cos() / m as f64;
+        y += (x * t.sin() - n as f64 * t).sin() / m as f64;
+    }
+    // The remaining part of Y_n, by Simpson's rule.
+    let (top, steps) = ((80.0 / x).asinh(), 4000);
+    let h = top / steps as f64;
+    let sign = if n % 2 == 0 { 1.0 } else { -1.0 };
+    let f = |t: f64| ((n as f64 * t).exp() + sign * (-n as f64 * t).exp()) * (-x * t.sinh()).exp();
+    let tail: f64 = (0..=steps).map(|i| f(i as f64 * h) * if i == 0 || i == steps { 1.0 } else if i % 2 == 1 { 4.0 } else { 2.0 }).sum();
+    (j, y - tail * h / (3.0 * PI))
+}
+
+fn hankel(n: i32, x: f64) -> C64 {
+    let (j, y) = bessel(n, x);
+    C64::new(j, y)
+}
+
+fn open_box(shapes: Vec<Shape>, pol: Polarization, cell: f64, pml: f64, source: Source2d) -> Request2d {
+    Request2d {
+        width: 3.0,
+        height: 3.0,
+        cell,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes,
+        polarization: pol,
+        walls: Boundary::Absorbing,
+        analysis: Analysis2d::Driven { wavelength: 1.0, source, pml },
+    }
+}
+
+fn field_of(o: &Output, name: &str) -> Vec<(f64, f64, C64)> {
+    let (x, y) = (channel(o, "x"), channel(o, "y"));
+    let (re, im) = (channel(o, &format!("field0/{name}/re")), channel(o, &format!("field0/{name}/im")));
+    (0..x.len()).map(|i| (x[i], y[i], C64::new(re[i], im[i]))).collect()
+}
+
+#[test]
+fn line_source_radiates_the_2d_green_function() {
+    let k = 2.0 * PI;
+    for (cell, pml, tol) in [(1.0 / 12.0, 0.5, 0.01), (1.0 / 24.0, 1.0, 0.002)] {
+        let r = open_box(vec![], Polarization::Te, cell, pml, Source2d::Line { x: 1.5, y: 1.5 });
+        let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+        let mut worst = 0f64;
+        for (x, y, u) in field_of(&o, "Ez") {
+            let d = (x - 1.5).hypot(y - 1.5);
+            // The corners are the hardest part of the layer, so go right out to them.
+            if d >= 0.6 && (0.0..=3.0).contains(&x) && (0.0..=3.0).contains(&y) {
+                // -(u'' ) - k^2 u = i k delta gives u = i k (i/4) H0(k r).
+                let want = C64::new(0.0, k) * C64::new(0.0, 0.25) * hankel(0, k * d);
+                worst = worst.max((u - want).norm() / want.norm());
+            }
+        }
+        eprintln!("line source cell {cell:.3} pml {pml}: worst relative error {worst:.2e}");
+        assert!(worst < tol, "error {worst}");
+    }
+}
+
+/// The analytic field of a plane wave along +x on a cylinder at the origin.
+fn mie(r: f64, theta: f64, k: f64, radius: f64, n1: f64, pol: Polarization) -> C64 {
+    let k1 = k * n1;
+    // Field and p du/dr are continuous, with p = 1 for E_z and 1/eps for H_z.
+    let (pb, p1) = match pol {
+        Polarization::Te => (1.0, 1.0),
+        Polarization::Tm => (1.0, 1.0 / (n1 * n1)),
+    };
+    let diff = |n: i32, x: f64, z: &dyn Fn(i32, f64) -> C64| z(n - 1, x) - z(n, x) * (n as f64 / x);
+    let (j, h) = (|n: i32, x: f64| C64::new(bessel(n, x).0, 0.0), |n: i32, x: f64| hankel(n, x));
+    let (x, x1) = (k * radius, k1 * radius);
+    // Outside, the incident wave is exact. Its series would need order past k r, while
+    // the scattered part falls off quickly with order.
+    let mut u = if r >= radius { C64::from_polar(1.0, k * r * theta.cos()) } else { C64::new(0.0, 0.0) };
+    for n in -14..=14i32 {
+        let m = n.abs();
+        // Symmetry: order -n matches order n in these coefficients with this phase.
+        let (jb, djb, hb, dhb) = (j(m, x), diff(m, x, &j), h(m, x), diff(m, x, &h));
+        let (ja, dja) = (j(m, x1), diff(m, x1, &j));
+        let num = dja * jb * (p1 * k1) - djb * ja * (pb * k);
+        let den = dja * hb * (p1 * k1) - dhb * ja * (pb * k);
+        let a = -num / den;
+        let spin = C64::from_polar(1.0, m as f64 * PI / 2.0 + n as f64 * theta);
+        if r >= radius {
+            u += spin * a * h(m, k * r);
+        } else {
+            let c = (jb + a * hb) / ja;
+            u += spin * c * j(m, k1 * r);
+        }
+    }
+    u
+}
+
+#[test]
+fn dielectric_cylinder_matches_the_mie_series() {
+    let (k, radius, n1) = (2.0 * PI, 0.5, 2.0);
+    let rod = || vec![Shape { outline: Outline::Circle { x: 1.5, y: 1.5, r: radius }, material: Material { eps: n1 * n1, mu: 1.0 } }];
+    for (pol, name, angle) in [(Polarization::Te, "Ez", 0.0), (Polarization::Tm, "Hz", 0.0), (Polarization::Te, "Ez", 30.0f64)] {
+        let r = open_box(rod(), pol, 1.0 / 32.0, 1.0, Source2d::PlaneWave { angle_deg: angle });
+        let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+        let a = angle.to_radians();
+        // The incident phase at the cylinder's centre, relative to the domain's origin.
+        let centre = C64::from_polar(1.0, k * (1.5 * a.cos() + 1.5 * a.sin()));
+        let mut worst = 0f64;
+        for (x, y, u) in field_of(&o, name).into_iter().step_by(307) {
+            let (dx, dy) = (x - 1.5, y - 1.5);
+            let d = dx.hypot(dy);
+            let inside = (0.0..=3.0).contains(&x) && (0.0..=3.0).contains(&y);
+            // Skip the interface, where straight cells cut the curve.
+            if !inside || d < 1e-3 || (d - radius).abs() < 0.04 {
+                continue;
+            }
+            let want = centre * mie(d, dy.atan2(dx) - a, k, radius, n1, pol);
+            worst = worst.max((u - want).norm());
+        }
+        eprintln!("mie {name} angle {angle}: worst absolute error {worst:.2e}");
+        assert!(worst < 0.02, "error {worst}");
+    }
+}
+
+#[test]
+fn absorbing_requests_are_checked() {
+    let rod = |x: f64| vec![Shape { outline: Outline::Circle { x, y: 1.5, r: 0.5 }, material: Material { eps: 4.0, mu: 1.0 } }];
+    let wave = Source2d::PlaneWave { angle_deg: 0.0 };
+    assert!(eigenmenno_core::solve2d::solve(&open_box(rod(0.2), Polarization::Te, 0.2, 0.5, wave)).is_err());
+    assert!(eigenmenno_core::solve2d::solve(&open_box(vec![], Polarization::Te, 0.2, 0.5, Source2d::Line { x: 9.0, y: 1.0 })).is_err());
+    assert!(eigenmenno_core::solve2d::solve(&open_box(vec![], Polarization::Te, 0.2, 0.0, wave)).is_err());
+    let mut walled = open_box(vec![], Polarization::Te, 0.2, 0.5, wave);
+    walled.walls = Boundary::Pec;
+    assert!(eigenmenno_core::solve2d::solve(&walled).is_err());
+}
+

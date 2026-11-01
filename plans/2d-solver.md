@@ -4,10 +4,11 @@ The agreed plan for adding 2D. Pick up at the first milestone that isn't marked 
 and update this file as things land. Delete it, and `plans/probe-2d/`, once the last
 milestone is finished and the tutorial covers what's here.
 
-**Status (2026-11-01):** milestone 1 is built, apart from the own-solver decision. Band
-diagrams and cavities run on the page, tested against exact and independent results.
-**Next up: decide on the own solver (end of milestone 1), then milestone 2.** The
-solver numbers below come from the throwaway probe in [`probe-2d/`](probe-2d/).
+**Status (2026-11-01):** milestones 1 and 2 are built, apart from the own-solver decision,
+which was moved until driven matrices existed. Cavities, band diagrams and open scattering
+run on the page, tested against exact and independent results. **Next up: decide on the
+own solver, then milestone 3.** The solver numbers below come from the throwaway probe in
+[`probe-2d/`](probe-2d/).
 
 ## Decisions
 
@@ -24,7 +25,7 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Open boundaries | PML | Exact local conditions don't exist in 2D (chapter 9) |
 | Leaky modes | No non-Hermitian eigensolver. Use one driven solve at complex frequency | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for |
 | Upper size | The page refuses above about 160,000 unknowns | 638,401 failed in WebAssembly, probably out of memory |
-| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 in total | State the cost before adding more, and keep the tutorial's line count current |
+| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, and about 1,900 after milestone 2 | State the cost before adding more, and keep the tutorial's line count current |
 | Own sparse solver | Not now. Decide after milestone 1 (see below) | `faer` first, behind the trait |
 
 ## Measurements
@@ -46,7 +47,7 @@ WebAssembly times include assembly:
 | 800 × 800 | 2,556,801 | Needs 784 GB | 345 s | Failed | Failed |
 
 Download size, gzipped: the page's solver went from about 110 KB to 222 KB with milestone
-1, more than the 88 KB the probe's own build suggested (33 KB without `faer`, 121 KB with).
+1, and to 270 KB with sparse LU in milestone 2, more than the 88 KB the probe's own build suggested (33 KB without `faer`, 121 KB with).
 
 Eigensolves: three modes at one k-point took about 200 ms at 2,304 unknowns and 2.7 s at
 9,216 on banded LU. A full band diagram (16 k-points, 6 bands) took, natively:
@@ -119,16 +120,16 @@ high-index material will need refining, which the probe didn't test.
 
 | Module | Change |
 |---|---|
-| `space.rs`, milestone 2 | `local_matrices` returns `S_xx`, `S_yy` and `M` separately, with `S_yy = 0` in 1D |
-| `assemble.rs`, milestone 2 | `coef` returns `(a_x, a_y, b)` for `a_x S_xx + a_y S_yy + b M`, which PML needs |
-| `solve2d.rs`, later | Sources, monitors and gradients. `driven` should move onto the `Factors` trait too |
+| `solve2d.rs`, later | Monitors and gradients |
 | Website, later | Dragging shapes, and the `design.js` optimizer with a 2D filter |
 | Tutorial | Add 2D chapters as each milestone lands. Chapter 9 is current |
 
 Milestone 1 added `Mesh::fitted_grid`, `H1Triangle`, many-tie `DofMap`, the `Factors` trait
 with `SparseLu`, and `solve2d.rs`. 2D requests are a separate `Request2d`, sent to
 `solve_2d`, rather than a tagged geometry. On the page, `FieldMap` sits alongside
-`FieldPlot`. The probe's `helmholtz_pml` is the starting point for milestone 2.
+`FieldPlot`. Milestone 2 added `assemble_split` for `a_x S_xx + a_y S_yy + b M`, `SparseLu`
+and `Analysis2d::Driven`. The absorbing layer sits outside the caller's domain, and fields
+there are returned at negative or beyond-the-domain coordinates, which the plot clips.
 
 PML, as used in the probe, with `s = 1 + i sigma(d) / k` and a quadratic `sigma`:
 
@@ -162,10 +163,17 @@ rule for Hz.
 
 ### Milestone 2: open structures
 
-- [ ] Add the split-stiffness PML, and a line source.
-- [ ] Add a plane wave through a scattered-field formulation.
-- [ ] **Example 3: dielectric cylinder scattering.** Check against the analytic Mie
-      series, and the line source against `(i/4) H0(kr)`.
+- [x] Add the split-stiffness PML, and a line source.
+- [x] Add a plane wave through a scattered-field formulation.
+- [x] **Example 3: dielectric cylinder scattering.** Checked against the analytic Mie
+      series, within 1% at 32 cells per wavelength for both polarizations and at an oblique
+      angle. The line source matches `(i/4) H0(kr)` to 0.02% with 1 λ of PML at 24 cells
+      per wavelength, including at the corners.
+- [x] Add a scattering view to the page, with the source and travel direction marked.
+
+Materials are still real and positive, so metals and loss aren't available in 2D yet. A
+plane wave needs its shapes inside the domain, because the incident wave is only defined
+in the background. Waveguides that run into the layer will need the ports in milestone 4.
 
 ### Milestone 3: cavities
 
@@ -204,8 +212,8 @@ waveguide cross-sections, which are the first real need for Nédélec elements.
 
 ## Own sparse solver
 
-Decide this at the end of milestone 1, by benchmarking a prototype against `faer` on
-real 2D matrices. Keep `faer` as a test reference either way.
+Decide this next, by benchmarking a prototype against `faer` on real 2D matrices, now that
+indefinite driven matrices exist. Keep `faer` as a test reference either way.
 
 **Recommended candidate:** a multifrontal LU with geometric nested dissection, estimated
 at 250–400 lines. On our structured grid the separators are just rows and columns of

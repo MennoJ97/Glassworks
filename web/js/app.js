@@ -15,6 +15,7 @@ const VIEW_HELP = {
   cavity: 'The wavelengths at which the structure resonates between its two ends.',
   bands: 'The waves that can travel through an endless repeat of this structure, and the gaps where none can.',
   waveguide: 'The modes that travel along the layers at a fixed wavelength, and how fast each one propagates.',
+  scatter2d: 'The field around 2D shapes in open space, from a plane wave or a line source. An absorbing layer outside the plot takes what leaves.',
   cavity2d: 'The modes of a 2D structure inside walls, uniform along the third direction.',
   bands2d: 'The waves that can travel through an endless lattice of this cell. Floquet boundaries tie each edge to the opposite one, with a phase set by the wavevector k.',
   mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
@@ -208,11 +209,11 @@ function renderSettings() {
   $('view-learn').hidden = !text.learn;
   if (text.learn) [$('view-learn').href, $('view-learn').textContent] = text.learn;
   $('settings-title').textContent = text.settings;
-  $('field-note').textContent = text.field;
+  if (!planar()) $('field-note').textContent = text.field;
   const show = (id, on) => { $(id).hidden = !on; };
   const designing = problem === 'design';
-  show('wavelength-field', a === 'waveguide' || a === 'spectrum' || a === 'field' || a === 'mirror');
-  show('angle-field', a === 'spectrum' || (a === 'field' && state.source === 'plane_wave') || designing);
+  show('wavelength-field', a === 'waveguide' || a === 'spectrum' || a === 'field' || a === 'mirror' || a === 'scatter2d');
+  show('angle-field', a === 'spectrum' || ((a === 'field' || a === 'scatter2d') && state.source === 'plane_wave') || designing);
   show('design-fields', designing);
   show('design-band', a === 'antireflection');
   show('design-run', designing);
@@ -228,9 +229,12 @@ function renderSettings() {
   if (flat) {
     renderPlane();
     show('plane-walls-field', a === 'cavity2d');
+    show('plane-source-fields', a === 'scatter2d' && state.source === 'line');
   }
   // TE and TM keep their meaning for the coefficients, but read differently in a plane.
   $('polarization').options[0].text = flat ? 'Ez (electric field out of the plane, often called TM)' : 'TE (electric field along the layers)';
+  $('source').options[0].text = flat ? 'Plane wave' : 'Plane wave from the left';
+  $('source').options[1].text = flat ? 'Line source at a point' : 'Current sheet inside the structure';
   $('polarization').options[1].text = flat ? 'Hz (magnetic field out of the plane, often called TE)' : 'TM (magnetic field along the layers)';
   document.querySelector('main').classList.toggle('design', designing);
   $('polarization-title').textContent = designing || flat ? 'Polarization' : 'Polarization and ends';
@@ -239,8 +243,8 @@ function renderSettings() {
   fieldPlot.locked = designing;
   if (designing) renderDesignSettings();
   else fieldPlot.layers = state.layers;
-  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || flat);
-  show('source-field', a === 'field');
+  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || (flat && a !== 'scatter2d'));
+  show('source-field', a === 'field' || a === 'scatter2d');
   show('range-field', a === 'spectrum');
   $('polarization').value = state.polarization;
   $('wavelength').value = state.wavelength;
@@ -293,6 +297,7 @@ function renderPlane() {
   $('plane-height').value = p.height;
   $('plane-cell').value = p.cell;
   $('plane-background').value = p.background;
+  if (p.sourceX !== undefined) [$('plane-source-x').value, $('plane-source-y').value] = [p.sourceX, p.sourceY];
   $('plane-walls').replaceChildren(...['pec', 'pmc', 'periodic'].map((w) => new Option(WALLS[w], w, false, w === p.walls)));
   const body = $('shapes');
   const focused = document.activeElement?.closest?.('#shapes') ? document.activeElement.getAttribute('aria-label') : null;
@@ -323,6 +328,8 @@ bindNumber('plane-width', (v) => { planeSettings().width = v; }, 0.05);
 bindNumber('plane-height', (v) => { planeSettings().height = v; }, 0.05);
 bindNumber('plane-cell', (v) => { planeSettings().cell = v; }, 0.001);
 bindNumber('plane-background', (v) => { planeSettings().background = v; }, 0.01);
+bindNumber('plane-source-x', (v) => { planeSettings().sourceX = v; }, -1e9);
+bindNumber('plane-source-y', (v) => { planeSettings().sourceY = v; }, -1e9);
 $('plane-walls').addEventListener('change', () => { planeSettings().walls = $('plane-walls').value; changed(); });
 $('add-shape').addEventListener('click', () => {
   const p = planeSettings();
@@ -661,8 +668,19 @@ function fieldFrom(result, i) {
   return { x: channel('x'), components, names: meta.components, meta };
 }
 
-// In words, what the dashed edges and arrow on the field map mean.
-function planeNote(bloch) {
+// What the field map should mark, for the current view.
+function planeMarks(p) {
+  const a = state.analysis;
+  if (a === 'scatter2d') {
+    return state.source === 'line' ? { open: true, source: [p.sourceX, p.sourceY] } : { open: true, incident: state.angle };
+  }
+  if (a === 'bands2d') return { bloch: blochAt(p.pick.s) };
+  return p.walls === 'periodic' ? { bloch: [0, 0] } : {};
+}
+
+// In words, what the edges and arrows on the field map mean.
+function planeNote({ bloch, open }) {
+  if (open) return 'Waves leave through the dotted edges, into an absorbing layer outside the plot.';
   if (!bloch) return 'The solid edges are walls.';
   const [x, y] = bloch.map((v) => Math.round((v * 180) / Math.PI));
   if (x === 0 && y === 0) return 'The dashed edges are Floquet boundaries: each repeats the opposite edge exactly, so k = 0.';
@@ -681,9 +699,10 @@ function showResults() {
   if (planar()) {
     const p = state.plane[a];
     const { channels } = fieldResult;
-    const bloch = a === 'bands2d' ? blochAt(p.pick.s) : p.walls === 'periodic' ? [0, 0] : null;
-    fieldMap.setMesh({ x: channels.x, y: channels.y, triangles: channels.triangles, width: p.width, height: p.height }, p.shapes, bloch);
-    $('field-note').textContent = `${planeNote(bloch)} Colour shows the field at this moment, with red and blue as opposite signs. Its overall size is arbitrary.`;
+    const marks = planeMarks(p);
+    fieldMap.setMesh({ x: channels.x, y: channels.y, triangles: channels.triangles, width: p.width, height: p.height }, p.shapes, marks);
+    const size = a === 'scatter2d' ? 'The total field is shown.' : 'Its overall size is arbitrary.';
+    $('field-note').textContent = `${planeNote(marks)} Colour shows the field at this moment, with red and blue as opposite signs. ${size}`;
     const name = fieldResult.meta.fields[selectedField]?.components[0];
     if (name) fieldMap.setField(channels[`field${selectedField}/${name}/re`], channels[`field${selectedField}/${name}/im`]);
     fieldPlot.field = null;
@@ -737,6 +756,7 @@ function resultsTitle() {
     case 'field': return `Response at ${+state.wavelength.toFixed(3)} µm`;
     case 'waveguide': return `Guided modes at ${+state.wavelength.toFixed(3)} µm`;
     case 'bands': return `Modes at kL/π = ${state.bandPick.k.toFixed(2)}`;
+    case 'scatter2d': return `Field at ${+state.wavelength.toFixed(3)} µm`;
     case 'bands2d': {
       const [x, y] = blochAt(state.plane.bands2d.pick.s).map((v) => (v / Math.PI).toFixed(2));
       return `Modes at k = (${x}, ${y}) π/a`;
@@ -745,6 +765,26 @@ function resultsTitle() {
     case 'antireflection': return `Mean reflection, ${designSettings().from} to ${designSettings().to} µm`;
     default: return 'Resonant modes';
   }
+}
+
+// A plane wave has amplitude 1, so its largest field is how much the shapes concentrate it.
+// A line source has no such scale, and the field grows without limit right beside it.
+function renderScatterTable(result, addRow) {
+  if (state.source === 'line') {
+    $('empty').hidden = false;
+    $('empty').textContent = 'The source radiates in every direction. Move it with the settings below.';
+    return;
+  }
+  const p = state.plane.scatter2d;
+  const { x, y } = result.channels;
+  const name = result.meta.fields[0].components[0];
+  const [re, im] = [result.channels[`field0/${name}/re`], result.channels[`field0/${name}/im`]];
+  let peak = 0;
+  for (let i = 0; i < x.length; i++) {
+    if (x[i] >= 0 && x[i] <= p.width && y[i] >= 0 && y[i] <= p.height) peak = Math.max(peak, Math.hypot(re[i], im[i]));
+  }
+  addRow(['Largest field, relative to the incident wave'], 'th');
+  addRow([peak.toFixed(2)]);
 }
 
 function renderTable(result) {
@@ -761,6 +801,7 @@ function renderTable(result) {
   };
   $('empty').hidden = fields.length > 0;
   if (problemOf(a) === 'design') return renderDesignTable(table, addRow);
+  if (a === 'scatter2d') return renderScatterTable(result, addRow);
   if (fields.length === 0) {
     $('empty').textContent = a === 'waveguide'
       ? 'No guided modes at this wavelength. Give an inner layer a higher index than both outer layers, or make it thicker.'

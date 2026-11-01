@@ -22,6 +22,22 @@ pub enum Outline {
 }
 
 impl Outline {
+    /// The same shape, moved.
+    pub fn shifted(self, dx: f64, dy: f64) -> Self {
+        match self {
+            Outline::Circle { x, y, r } => Outline::Circle { x: x + dx, y: y + dy, r },
+            Outline::Rect { x0, y0, x1, y1 } => Outline::Rect { x0: x0 + dx, y0: y0 + dy, x1: x1 + dx, y1: y1 + dy },
+        }
+    }
+
+    /// Whether the shape stays within `[0, lx] x [0, ly]`.
+    pub fn inside(&self, lx: f64, ly: f64) -> bool {
+        match *self {
+            Outline::Circle { x, y, r } => x - r >= 0.0 && x + r <= lx && y - r >= 0.0 && y + r <= ly,
+            Outline::Rect { x0, y0, x1, y1 } => x0 >= 0.0 && x1 <= lx && y0 >= 0.0 && y1 <= ly,
+        }
+    }
+
     /// Negative inside and positive outside. Only its sign and rough size are used.
     fn level(&self, px: f64, py: f64) -> f64 {
         match *self {
