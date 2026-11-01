@@ -19,7 +19,15 @@ const H = () => layer('Titanium dioxide', 0.104);
 const L = () => layer('Silica glass', 0.172);
 const air = (t = 0.5) => layer('Air', t);
 
-// Each preset starts on the view that shows it best.
+// A square lattice of rods with the middle one missing, in open space. Periodic walls
+// turn the same shapes into a supercell. The target sits inside the lattice's band gap.
+function defectCavity(n) {
+  const rods = Array.from({ length: n * n }, (_, i) => ({ type: 'circle', x: i % n + 0.5, y: Math.floor(i / n) + 0.5, w: 0.4, h: 0.4, n: 3.4641 }));
+  rods.splice((n * n - 1) / 2, 1);
+  return { width: n, height: n, cell: 0.1, background: 1, walls: 'absorbing', target: 2.65, sourceX: n / 2, sourceY: n / 2, shapes: rods };
+}
+
+// Each preset starts on the view that shows it best. A `planeSetup` replaces that view's domain.
 export const PRESETS = {
   'Mirror with a resonant gap': {
     analysis: 'spectrum', wavelength: 1,
@@ -50,7 +58,8 @@ export const PRESETS = {
     layers: [layer('Silica glass', 3), layer('Silicon nitride', 0.8), layer('Silica glass', 3)],
   },
   'Scattering by a rod': { analysis: 'scatter2d', source: 'plane_wave', wavelength: 1, angle: 0 },
-  'Empty square cavity': { analysis: 'cavity2d' },
+  'Empty square cavity': { analysis: 'cavity2d', planeSetup: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', target: null, sourceX: 0.5, sourceY: 0.5, shapes: [] } },
+  'Point-defect cavity': { analysis: 'cavity2d', planeSetup: defectCavity(5) },
   'Lattice of rods': { analysis: 'bands2d' },
   'Design a mirror': { analysis: 'mirror', wavelength: 1 },
   'Design a broadband coating': { analysis: 'antireflection' },
@@ -88,10 +97,10 @@ export function defaultState() {
     bandPick: { k: 0.5, band: 0 },
     plane: {
       scatter2d: {
-        width: 3, height: 3, cell: 0.06, background: 1, walls: 'absorbing', sourceX: 0.75, sourceY: 1.5,
+        width: 3, height: 3, cell: 0.06, background: 1, walls: 'absorbing', sourceX: 0.75, sourceY: 1.5, averageQ: null,
         shapes: [{ type: 'circle', x: 1.5, y: 1.5, w: 1, h: 1, n: 2 }],
       },
-      cavity2d: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', shapes: [] },
+      cavity2d: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', target: null, sourceX: 0.5, sourceY: 0.5, shapes: [] },
       bands2d: {
         width: 1, height: 1, cell: 0.04, background: 1, walls: 'periodic', pick: { s: 1, band: 0 },
         shapes: [{ type: 'circle', x: 0.5, y: 0.5, w: 0.4, h: 0.4, n: 3.4641 }],
@@ -136,12 +145,20 @@ function planeRequests(s) {
         : { type: 'rect', x0: c.x - c.w / 2, y0: c.y - c.h / 2, x1: c.x + c.w / 2, y1: c.y + c.h / 2 }),
     })),
   };
-  const modes = (bloch) => ({ ...base, analysis: { type: 'cavity', n_modes: s.nModes, bloch } });
-  if (s.analysis === 'cavity2d') return [modes([0, 0])];
+  const targetK0 = p.target ? (2 * Math.PI) / p.target : null;
+  const modes = (bloch) => ({ ...base, analysis: { type: 'cavity', n_modes: s.nModes, bloch, target_k0: targetK0 } });
+  if (s.analysis === 'cavity2d') {
+    if (p.walls !== 'absorbing') return [modes([0, 0])];
+    // A leaky mode needs somewhere to look, so start from the domain's fundamental. A quarter
+    // wavelength of layer changed the rod crystal's Q by under 0.2% against a whole one.
+    const wavelength = p.target || 2 * Math.max(p.width, p.height);
+    return [{ ...base, analysis: { type: 'resonance', target_k0: (2 * Math.PI) / wavelength, x: p.sourceX, y: p.sourceY, pml: wavelength / 4 } }];
+  }
   if (s.analysis === 'scatter2d') {
     const source = s.source === 'line' ? { type: 'line', x: p.sourceX, y: p.sourceY } : { type: 'plane_wave', angle_deg: s.angle };
     // In tests, this much layer on the mesh's cells left errors well under 1%.
-    return [{ ...base, analysis: { type: 'driven', wavelength: s.wavelength, source, pml: 0.6 * s.wavelength } }];
+    const averageQ = s.source === 'line' && p.averageQ ? p.averageQ : null;
+    return [{ ...base, analysis: { type: 'driven', wavelength: s.wavelength, source, pml: 0.6 * s.wavelength, average_q: averageQ } }];
   }
   return [{ ...base, analysis: { type: 'bands', n_bands: s.nModes, n_k: 5 } }, modes(blochAt(p.pick.s))];
 }

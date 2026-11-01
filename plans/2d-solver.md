@@ -4,9 +4,9 @@ The agreed plan for adding 2D. Pick up at the first milestone that isn't marked 
 and update this file as things land. Delete it, and `plans/probe-2d/`, once the last
 milestone is finished and the tutorial covers what's here.
 
-**Status (2026-11-01):** milestones 1 and 2 are built. Cavities, band diagrams and open
-scattering run on the page, tested against exact and independent results. **Next up:
-milestone 3.** The own-solver decision waits until after milestone 4. The solver numbers below come from the throwaway probe in
+**Status (2026-11-01):** milestones 1 to 3 are built. Cavities, band diagrams, open
+scattering and leaky modes run on the page, tested against exact and independent results.
+**Next up: milestone 4.** The own-solver decision waits until after milestone 4. The solver numbers below come from the throwaway probe in
 [`probe-2d/`](probe-2d/).
 
 ## Decisions
@@ -22,9 +22,9 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Mesh fallback | An unstructured mesher, such as [`spade`](https://github.com/Stoeoef/spade) (MIT/Apache) | Only if snapping can't be fixed. It makes periodic edges and own-solver separators harder |
 | Linear solver | Add a small factorization trait. 1D keeps `banded.rs`, 2D uses `faer` | See the measurements. Banded LU can't scale in 2D |
 | Open boundaries | PML | Exact local conditions don't exist in 2D (chapter 9) |
-| Leaky modes | No non-Hermitian eigensolver. Use one driven solve at complex frequency | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for |
+| Leaky modes | No non-Hermitian eigensolver. One driven solve at complex frequency for LDOS, and a secant search on `1/u_0` for Q | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for. It took 6 or 7 solves, and found Q up to 680,000 |
 | Upper size | The page refuses above about 160,000 unknowns | 638,401 failed in WebAssembly, probably out of memory |
-| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, and about 1,900 after milestone 2 | State the cost before adding more, and keep the tutorial's line count current |
+| Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, and about 2,000 after milestone 3 | State the cost before adding more, and keep the tutorial's line count current |
 | Own sparse solver | Keep `faer`. Revisit after milestone 4 (see below) | Speed no longer argues for it, and milestone 4 brings the hard near-resonance matrices to test on |
 
 ## Measurements
@@ -176,14 +176,27 @@ in the background. Waveguides that run into the layer will need the ports in mil
 
 ### Milestone 3: cavities
 
-- [ ] **Example 4: point-defect cavity.** One rod removed from a supercell. First check
-      that the mode falls inside the gap.
-- [ ] Add a driven solve at complex frequency, for frequency-averaged LDOS. With
-      `A u = i k e_0` and `F = 2 Re(-u_0)` in 1D units, the adjoint needs no extra solve,
-      because `lambda = u / (i k)`. Check that LDOS against a Lorentzian average of
-      real-frequency solves.
-- [ ] Add Q and V for a finite crystal. This is where Q/V becomes meaningful, because
-      in 1D V barely changes and Q/V is nearly just Q.
+- [x] **Example 4: point-defect cavity.** One rod removed from a supercell. The mode falls
+      inside the gap, at a/lambda 0.3746 by an independent plane-wave expansion (4489 waves,
+      using the same 30 lines of numpy as milestone 1). The solver gives 0.37593, 0.37503 and
+      0.37485 at 16, 24 and 32 cells per period, for the 5 x 5 supercell.
+- [x] Add a driven solve at complex frequency, for frequency-averaged LDOS, with
+      `A u = i k e_0` and `F = 2 Re(-u_0)`. For milestone 5, the adjoint needs no extra solve,
+      because `lambda = u / (i k)`. Checked against real-frequency solves to 2.4e-4, using
+      `2 F(gamma) - F(2 gamma)`, whose kernel falls off as 1 / k^4. One Lorentzian alone
+      missed by 2%, which went away with that faster tail, so the cause was the sharp modes
+      above the mesh's cutoff, which quadrature can't resolve.
+- [x] Add Q and V for a finite crystal. Q is checked against the half-height of the
+      real-frequency LDOS, for 3 x 3 and 5 x 5 crystals.
+
+Q was within 5% across meshes from 10 to 24 cells per period, and changed by under 0.2%
+between 0.25 and 1 wavelength of layer. Mesh alignment moves a/lambda by about 0.0005. V
+stays at about 0.65 a^2 from 3 x 3 rods on, so adding rods changes Q/V only through Q. V
+should matter when comparing different cavities, as milestone 5 would. No published Q has
+been compared yet, so Q rests on the internal LDOS check.
+
+On the page, 5 x 5 rods at 16,129 unknowns take 1 to 4 s, for 6 or 7 factorizations, slowest just after loading. Reusing
+the analysis across them is the obvious speed-up. Download: 277 KB gzipped.
 
 ### Milestone 4: waveguides
 

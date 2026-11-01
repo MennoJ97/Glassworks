@@ -41,7 +41,7 @@ pub struct Meta {
     pub fields: Vec<FieldMeta>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct FieldMeta {
     pub components: Vec<&'static str>,
     pub k0: f64,
@@ -49,6 +49,12 @@ pub struct FieldMeta {
     pub n_eff: Option<f64>,
     /// Reflected, transmitted and absorbed power of a plane wave.
     pub power: Option<[f64; 3]>,
+    /// Quality factor of a leaky 2D mode.
+    pub q: Option<f64>,
+    /// Effective area of a 2D mode: energy over its peak density.
+    pub volume: Option<f64>,
+    /// `2 Re(-u)` at a 2D line source, which is pi times the LDOS per unit k.
+    pub ldos: Option<f64>,
 }
 
 fn c(v: [f64; 2]) -> C64 {
@@ -137,7 +143,7 @@ impl<'a> Setup<'a> {
         for (k, d) in data.into_iter().enumerate() {
             out.channels.push((format!("field{i}/{}/{}", components[k / 2], ["re", "im"][k % 2]), d));
         }
-        out.meta.fields.push(FieldMeta { components: components.to_vec(), k0, n_eff, power });
+        out.meta.fields.push(FieldMeta { components: components.to_vec(), k0, n_eff, power, ..Default::default() });
     }
 }
 

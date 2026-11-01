@@ -377,7 +377,7 @@ fn rods(cell: f64, pol: Polarization, analysis: Analysis2d) -> Request2d {
 
 /// Frequency `a / lambda` of the lowest modes of the rod lattice at one Bloch phase.
 fn rod_bands(cell: f64, pol: Polarization, bloch: [f64; 2]) -> Vec<f64> {
-    let o = eigenmenno_core::solve2d::solve(&rods(cell, pol, Analysis2d::Cavity { n_modes: 3, bloch })).unwrap();
+    let o = eigenmenno_core::solve2d::solve(&rods(cell, pol, Analysis2d::Cavity { n_modes: 3, bloch, target_k0: None })).unwrap();
     o.meta.fields.iter().map(|f| f.k0 / (2.0 * PI)).collect()
 }
 
@@ -421,7 +421,7 @@ fn rectangular_cavity_matches_mode_formula() {
         shapes: vec![],
         polarization: pol,
         walls,
-        analysis: Analysis2d::Cavity { n_modes: 6, bloch: [0.0, 0.0] },
+        analysis: Analysis2d::Cavity { n_modes: 6, bloch: [0.0, 0.0], target_k0: None },
     };
     let k2 = |m: f64, n: f64| PI * PI * (m * m + n * n / 2.25);
     // E_z vanishes on a perfect conductor, so the mode numbers start from 1.
@@ -451,7 +451,7 @@ fn layered_box_matches_the_1d_solver() {
         shapes: vec![Shape { outline: Outline::Rect { x0: 0.7, y0: -1.0, x1: 2.0, y1: 2.0 }, material: dielectric }],
         polarization: Polarization::Te,
         walls: Boundary::Pmc,
-        analysis: Analysis2d::Cavity { n_modes: 4, bloch: [0.0, 0.0] },
+        analysis: Analysis2d::Cavity { n_modes: 4, bloch: [0.0, 0.0], target_k0: None },
     };
     let o = request(vec![layer(0.7, 1.0), layer(0.4, 2.5)], Polarization::Te, (Boundary::Pmc, Boundary::Pmc), 5, 0.02, cavity(4));
     let (two, one) = (eigenmenno_core::solve2d::solve(&r).unwrap(), solve(&o).unwrap());
@@ -488,7 +488,7 @@ fn bloch_phase_gives_a_wave_travelling_along_k() {
         shapes: vec![],
         polarization: Polarization::Te,
         walls: Boundary::Periodic,
-        analysis: Analysis2d::Cavity { n_modes: 1, bloch },
+        analysis: Analysis2d::Cavity { n_modes: 1, bloch, target_k0: None },
     };
     let o = eigenmenno_core::solve2d::solve(&r).unwrap();
     let (kx, ky) = (bloch[0] / width, bloch[1] / height);
@@ -554,7 +554,7 @@ fn open_box(shapes: Vec<Shape>, pol: Polarization, cell: f64, pml: f64, source: 
         shapes,
         polarization: pol,
         walls: Boundary::Absorbing,
-        analysis: Analysis2d::Driven { wavelength: 1.0, source, pml },
+        analysis: Analysis2d::Driven { wavelength: 1.0, source, pml, average_q: None },
     }
 }
 
@@ -657,3 +657,140 @@ fn absorbing_requests_are_checked() {
     assert!(eigenmenno_core::solve2d::solve(&walled).is_err());
 }
 
+/// A square lattice of rods (eps 12, r = 0.2a), `n` by `n`, with the middle one missing.
+fn defect_crystal(n: usize, cell: f64, walls: Boundary, analysis: Analysis2d) -> Request2d {
+    let middle = n / 2;
+    let shapes = (0..n * n)
+        .filter(|&i| i != middle * n + middle)
+        .map(|i| {
+            let (x, y) = ((i % n) as f64 + 0.5, (i / n) as f64 + 0.5);
+            Shape { outline: Outline::Circle { x, y, r: 0.2 }, material: Material { eps: 12.0, mu: 1.0 } }
+        })
+        .collect();
+    Request2d {
+        width: n as f64,
+        height: n as f64,
+        cell,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes,
+        polarization: Polarization::Te,
+        walls,
+        analysis,
+    }
+}
+
+#[test]
+fn removing_a_rod_puts_one_mode_in_the_gap() {
+    let target = 2.0 * PI * 0.35;
+    let r = defect_crystal(5, 1.0 / 16.0, Boundary::Periodic, Analysis2d::Cavity { n_modes: 3, bloch: [0.0, 0.0], target_k0: Some(target) });
+    let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+    let f: Vec<f64> = o.meta.fields.iter().map(|m| m.k0 / (2.0 * PI)).collect();
+    eprintln!("defect supercell a/lambda {f:?}, areas {:?}", o.meta.fields.iter().map(|m| m.volume).collect::<Vec<_>>());
+    assert_eq!(f.iter().filter(|&&v| v > 0.28066 && v < 0.41716).count(), 1, "{f:?}");
+    // Reference: an independent plane-wave expansion of this supercell, with 4489 waves.
+    // See plans/2d-solver.md. Straight cells around the rods keep this mesh above it.
+    close(f[2], 0.3746, 1.5e-3);
+}
+
+#[test]
+fn mode_area_of_a_box_is_a_quarter_of_it() {
+    let r = Request2d {
+        width: 1.0,
+        height: 1.5,
+        cell: 0.05,
+        background: Material { eps: 2.0, mu: 1.0 },
+        shapes: vec![],
+        polarization: Polarization::Te,
+        walls: Boundary::Pec,
+        analysis: Analysis2d::Cavity { n_modes: 1, bloch: [0.0, 0.0], target_k0: None },
+    };
+    // sin^2 sin^2 averages to 1/4 and peaks at 1, whatever eps is.
+    let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+    close(o.meta.fields[0].volume.unwrap(), 1.5 / 4.0, 1e-4);
+}
+
+fn ldos(r: &Request2d) -> f64 {
+    eigenmenno_core::solve2d::solve(r).unwrap().meta.fields[0].ldos.unwrap()
+}
+
+fn ldos_request(shapes: Vec<Shape>, k: f64, average_q: Option<f64>) -> Request2d {
+    Request2d {
+        width: 2.0,
+        height: 2.0,
+        cell: 0.1,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes,
+        polarization: Polarization::Te,
+        walls: Boundary::Absorbing,
+        analysis: Analysis2d::Driven { wavelength: 2.0 * PI / k, source: Source2d::Line { x: 1.0, y: 1.0 }, pml: 0.5, average_q },
+    }
+}
+
+#[test]
+fn vacuum_ldos_is_half_of_k() {
+    let r = Request2d { cell: 1.0 / 24.0, ..ldos_request(vec![], 2.0 * PI, None) };
+    close(ldos(&r), PI, 2e-2 * PI);
+}
+
+#[test]
+fn complex_frequency_is_a_lorentzian_average_of_real_ones() {
+    let rod = vec![Shape { outline: Outline::Circle { x: 1.0, y: 1.25, r: 0.25 }, material: Material { eps: 12.0, mu: 1.0 } }];
+    let (k, q) = (4.0, 20.0);
+    let gamma = k / (2.0 * q);
+    let averaged = 2.0 * ldos(&ldos_request(rod.clone(), k, Some(q))) - ldos(&ldos_request(rod.clone(), k, Some(q / 2.0)));
+    // One Lorentzian falls off as 1 / k^2. That weights the sharp modes far above the mesh's
+    // cutoff, which no quadrature can resolve. Two Lorentzians, of half-widths gamma and
+    // 2 gamma, combine to fall off as 1 / k^4. With k' = k + gamma tan(t), their kernel has
+    // the weight below in t, on the whole real axis. Negative k' has the same F.
+    let n = 300;
+    let dt = PI / n as f64;
+    let direct: f64 = (0..n)
+        .map(|i| {
+            let t = (i as f64 + 0.5) * dt - PI / 2.0;
+            let weight = 6.0 / PI / (t.tan().powi(2) + 4.0);
+            weight * ldos(&ldos_request(rod.clone(), (k + gamma * t.tan()).abs(), None)) * dt
+        })
+        .sum();
+    eprintln!("LDOS averaged {averaged:.6}, by quadrature {direct:.6}");
+    close(averaged, direct, 1e-3 * direct.abs());
+}
+
+#[test]
+fn leaky_mode_matches_the_ldos_peak_and_q_grows_with_the_crystal() {
+    let mode = |n: usize| {
+        let c = n as f64 / 2.0;
+        let analysis = Analysis2d::Resonance { target_k0: 2.0 * PI * 0.38, x: c, y: c, pml: 1.3 };
+        let o = eigenmenno_core::solve2d::solve(&defect_crystal(n, 1.0 / 12.0, Boundary::Absorbing, analysis)).unwrap();
+        let f = &o.meta.fields[0];
+        eprintln!("{n} x {n} crystal: a/lambda {:.5}, Q {:.1}, V {:.3}", f.k0 / (2.0 * PI), f.q.unwrap(), f.volume.unwrap());
+        (f.k0, f.q.unwrap(), f.volume.unwrap())
+    };
+    let (k3, q3, _) = mode(3);
+    let (k5, q5, v5) = mode(5);
+    let (_, q7, v7) = mode(7);
+    assert!(q5 > 5.0 * q3 && q7 > 5.0 * q5, "Q {q3} {q5} {q7}");
+    // Past a few rods, more crystal only stops leakage, and the mode's shape settles.
+    close(v7, v5, 0.03 * v5);
+    assert!(v7 < 2.0, "area {v7}");
+    // A Lorentzian at real frequencies falls to half height at k (1 +- 1 / 2Q).
+    for (n, k, q) in [(3, k3, q3), (5, k5, q5)] {
+        let driven = |k: f64| {
+            let source = Source2d::Line { x: n as f64 / 2.0, y: n as f64 / 2.0 };
+            ldos(&defect_crystal(n, 1.0 / 12.0, Boundary::Absorbing, Analysis2d::Driven { wavelength: 2.0 * PI / k, source, pml: 1.3, average_q: None }))
+        };
+        let half = k / (2.0 * q);
+        let (peak, low, high) = (driven(k), driven(k - half), driven(k + half));
+        eprintln!("{n} x {n} LDOS: {low:.4} {peak:.4} {high:.4}");
+        assert!(peak > low && peak > high);
+        close(0.5 * (low + high) / peak, 0.5, 0.05);
+    }
+}
+
+#[test]
+fn an_empty_domain_has_no_leaky_mode() {
+    let r = Request2d {
+        analysis: Analysis2d::Resonance { target_k0: 4.0, x: 1.0, y: 1.0, pml: 0.5 },
+        ..ldos_request(vec![], 4.0, None)
+    };
+    assert!(eigenmenno_core::solve2d::solve(&r).is_err());
+}

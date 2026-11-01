@@ -25,6 +25,8 @@ use std::f64::consts::PI;
 const EIG_TOL: f64 = 1e-10;
 /// Refuses meshes likely to exhaust a browser tab's memory: 638,401 unknowns did.
 const MAX_DOFS: usize = 160_000;
+/// A pole search that needs more driven solves than this has lost its way.
+const MAX_POLE_STEPS: usize = 30;
 
 /// `(p, q)` of a region.
 fn coefficients(req: &Request2d) -> Vec<(C64, C64)> {
@@ -69,20 +71,43 @@ fn constraints(req: &Request2d, space: &H1Triangle, nx: usize, ny: usize, phase:
 }
 
 /// The `n` lowest `(k0^2, x)` for one set of constraints. Bloch phases change only the
-/// matrix values, so a band diagram shares one `analysis` across its k-points.
+/// matrix values, so a band diagram shares one `analysis` across its k-points. A `target`
+/// inside the spectrum makes the shifted matrix indefinite, which needs LU.
 fn modes(
     space: &H1Triangle,
     dofs: &DofMap,
     coef: &[(C64, C64)],
     n: usize,
-    sigma: f64,
+    (sigma, target): (f64, Option<f64>),
     analysis: &mut Option<SymbolicLlt<usize>>,
 ) -> Result<Vec<(f64, Vec<C64>)>, String> {
     let region = &space.mesh.region;
     let a = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (coef[region[c]].0, ZERO)));
     let b = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (ZERO, coef[region[c]].1)));
+    if let Some(k) = target {
+        let shift = k * k;
+        return eigs_with(&SparseLu::factor(&a.sub_scaled(shift, &b))? as &dyn Factors, &b, shift, n, EIG_TOL);
+    }
     let factors = SparseCholesky::factor(&a.sub_scaled(sigma, &b), analysis)?;
     eigs_with(&factors as &dyn Factors, &b, sigma, n, EIG_TOL)
+}
+
+/// `V = integral(q |u|^2) / max(q |u|^2)` over the cells `keep` selects, an area here since
+/// nothing varies along z. For `E_z` this is the usual mode volume per unit length. For
+/// `H_z` it measures magnetic energy rather than the electric energy usually quoted.
+fn mode_volume(space: &H1Triangle, coef: &[(C64, C64)], u: &[C64], keep: impl Fn(usize) -> bool) -> f64 {
+    let (mut sx, mut sy, mut m, mut d) = (vec![0.0; 36], vec![0.0; 36], vec![0.0; 36], vec![0; 6]);
+    let (mut energy, mut peak) = (0.0, 0f64);
+    for c in (0..space.n_cells()).filter(|&c| keep(c)) {
+        let q = coef[space.mesh.region[c]].1.re;
+        space.cell_dofs(c, &mut d);
+        space.local_matrices(c, &mut sx, &mut sy, &mut m);
+        for i in 0..6 {
+            peak = peak.max(q * u[d[i]].norm_sqr());
+            energy += q * (0..6).map(|j| (u[d[i]].conj() * u[d[j]]).re * m[i * 6 + j]).sum::<f64>();
+        }
+    }
+    energy / peak
 }
 
 fn grid_size(req: &Request2d, width: f64, height: f64) -> Result<(usize, usize), String> {
@@ -101,13 +126,24 @@ fn validate(req: &Request2d) -> Result<(), String> {
     if !positive(req.background) || !req.shapes.iter().all(|s| positive(s.material)) {
         return Err("eigenmode analyses support lossless materials with positive eps and mu".into());
     }
-    let driven = matches!(req.analysis, Analysis2d::Driven { .. });
+    let driven = matches!(req.analysis, Analysis2d::Driven { .. } | Analysis2d::Resonance { .. });
     if !driven && matches!(req.walls, Boundary::Absorbing | Boundary::Port) {
         return Err("2D eigenmode analyses need PEC, PMC or periodic walls".into());
     }
-    if let Analysis2d::Driven { wavelength, pml, source } = req.analysis {
+    if let Analysis2d::Resonance { target_k0, x, y, pml } = req.analysis {
+        if req.walls != Boundary::Absorbing || !(target_k0 > 0.0 && pml > 0.0) {
+            return Err("2D leaky modes need absorbing walls, a positive target and a positive PML".into());
+        }
+        if !(0.0..=req.width).contains(&x) || !(0.0..=req.height).contains(&y) {
+            return Err("the source lies outside the domain".into());
+        }
+    }
+    if let Analysis2d::Driven { wavelength, pml, source, average_q } = req.analysis {
         if req.walls != Boundary::Absorbing || !(wavelength > 0.0 && pml > 0.0) {
             return Err("2D driven solves need absorbing walls, a positive wavelength and a positive PML".into());
+        }
+        if average_q.is_some_and(|q| !(q > 0.0)) || (average_q.is_some() && matches!(source, Source2d::PlaneWave { .. })) {
+            return Err("averaging over frequency needs a line source and a positive Q".into());
         }
         match source {
             Source2d::Line { x, y } if !(0.0..=req.width).contains(&x) || !(0.0..=req.height).contains(&y) => {
@@ -128,8 +164,11 @@ fn validate(req: &Request2d) -> Result<(), String> {
 
 pub fn solve(req: &Request2d) -> Result<Output, String> {
     validate(req)?;
-    if let Analysis2d::Driven { wavelength, source, pml } = req.analysis {
-        return driven(req, wavelength, source, pml);
+    if let Analysis2d::Driven { wavelength, source, pml, average_q } = req.analysis {
+        return driven(req, wavelength, source, pml, average_q);
+    }
+    if let Analysis2d::Resonance { target_k0, x, y, pml } = req.analysis {
+        return resonance(req, target_k0, (x, y), pml);
     }
     let (nx, ny) = grid_size(req, req.width, req.height)?;
     let outlines: Vec<_> = req.shapes.iter().map(|s| s.outline).collect();
@@ -141,20 +180,21 @@ pub fn solve(req: &Request2d) -> Result<Output, String> {
     let sigma = -(PI / length).powi(2);
     let mut out = Output { meta: Meta { length: req.width, ..Default::default() }, channels: vec![] };
     match &req.analysis {
-        Analysis2d::Cavity { n_modes, bloch } => {
+        Analysis2d::Cavity { n_modes, bloch, target_k0 } => {
             let dofs = constraints(req, &space, nx, ny, *bloch);
             out.meta.n_dofs = dofs.n_free;
             push_mesh(&space, &mut out);
             let field = if req.polarization == Polarization::Te { "Ez" } else { "Hz" };
-            for (lambda, x) in modes(&space, &dofs, &coef, *n_modes, sigma, &mut None)? {
+            for (lambda, x) in modes(&space, &dofs, &coef, *n_modes, (sigma, *target_k0), &mut None)? {
                 let i = out.meta.fields.len();
                 let u = normalized(dofs.expand(&x));
                 out.channels.push((format!("field{i}/{field}/re"), u.iter().map(|v| v.re).collect()));
                 out.channels.push((format!("field{i}/{field}/im"), u.iter().map(|v| v.im).collect()));
-                out.meta.fields.push(FieldMeta { components: vec![field], k0: lambda.max(0.0).sqrt(), n_eff: None, power: None });
+                let volume = Some(mode_volume(&space, &coef, &u, |_| true));
+                out.meta.fields.push(FieldMeta { components: vec![field], k0: lambda.max(0.0).sqrt(), volume, ..Default::default() });
             }
         }
-        Analysis2d::Driven { .. } => unreachable!("handled above"),
+        Analysis2d::Driven { .. } | Analysis2d::Resonance { .. } => unreachable!("handled above"),
         Analysis2d::Bands { n_bands, n_k } => {
             // Gamma to X to M to Gamma, with `s` running from 0 to 3 along the path.
             let points = 3 * n_k + 1;
@@ -169,7 +209,7 @@ pub fn solve(req: &Request2d) -> Result<Output, String> {
             for &s in &path {
                 let dofs = constraints(req, &space, nx, ny, phases(s));
                 out.meta.n_dofs = dofs.n_free;
-                for (band, (lambda, _)) in table.iter_mut().zip(modes(&space, &dofs, &coef, *n_bands, sigma, &mut analysis)?) {
+                for (band, (lambda, _)) in table.iter_mut().zip(modes(&space, &dofs, &coef, *n_bands, (sigma, None), &mut analysis)?) {
                     band.push(lambda.max(0.0).sqrt());
                 }
             }
@@ -180,66 +220,100 @@ pub fn solve(req: &Request2d) -> Result<Output, String> {
     Ok(out)
 }
 
-/// Solves in a domain surrounded by a perfectly matched layer, on a mesh extended by
-/// `pml` on every side. Coordinates in the layer stretch by `s = 1 + i sigma / k`, which
-/// makes outgoing waves decay. With `sigma` growing quadratically into the layer, a wave
-/// crossing it and back loses a factor of about 1e-6. That stretch is equivalent to
-/// weighting the x and y stiffness differently, with the mass scaled by both stretches.
-fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64) -> Result<Output, String> {
+/// A mesh extended by `pml` on every side, whose outer edge is a wall.
+fn open_mesh(req: &Request2d, pml: f64) -> Result<Mesh, String> {
     let (width, height) = (req.width + 2.0 * pml, req.height + 2.0 * pml);
     let (nx, ny) = grid_size(req, width, height)?;
     let outlines: Vec<_> = req.shapes.iter().map(|s| s.outline.shifted(pml, pml)).collect();
-    let mesh = Mesh::fitted_grid(nx, ny, width, height, &outlines);
-    let space = H1Triangle::new(&mesh);
-    let coef = coefficients(req);
-    let k0 = 2.0 * PI / wavelength;
-    let k2 = C64::new(k0 * k0, 0.0);
+    Ok(Mesh::fitted_grid(nx, ny, width, height, &outlines))
+}
+
+fn open_dofs(req: &Request2d, space: &H1Triangle, pml: f64) -> DofMap {
+    let (width, height) = (req.width + 2.0 * pml, req.height + 2.0 * pml);
+    let pos = space.dof_positions();
+    let edge = |p: (f64, f64)| p.0 < 1e-9 || p.1 < 1e-9 || p.0 > width - 1e-9 || p.1 > height - 1e-9;
+    let zero: Vec<usize> = (0..pos.len()).filter(|&d| edge(pos[d])).collect();
+    DofMap::new(pos.len(), &zero, &[])
+}
+
+fn cell_center(mesh: &Mesh, c: usize) -> (f64, f64) {
+    let v = &mesh.cells[3 * c..3 * c + 3];
+    let (x, y) = v.iter().fold((0.0, 0.0), |s, &i| (s.0 + mesh.vertex(i).0, s.1 + mesh.vertex(i).1));
+    (x / 3.0, y / 3.0)
+}
+
+/// The operator at any `k0`, real or complex. Coordinates in the layer stretch by
+/// `s = 1 + i sigma / k`, which makes outgoing waves decay. With `sigma` growing
+/// quadratically into the layer, a wave crossing it and back loses a factor of about 1e-6.
+/// That stretch is equivalent to weighting the x and y stiffness differently, with the
+/// mass scaled by both stretches. It's analytic in `k0` above the real axis, as causality
+/// requires, and it still absorbs a mode decaying slowly in time, just below that axis.
+fn open_matrix(req: &Request2d, space: &H1Triangle, dofs: &DofMap, coef: &[(C64, C64)], pml: f64, k0: C64) -> Csr {
     let (pb, qb) = coef[0];
     // The background's wavenumber, from eps mu = q / p whichever polarization this is.
     let k = k0 * (qb.re / pb.re).sqrt();
     let sigma_max = -3.0 * (1e-6f64).ln() / (2.0 * pml);
     let stretch = |d: f64, size: f64| {
         let depth = (pml - d).max(d - pml - size).max(0.0) / pml;
-        C64::new(1.0, sigma_max * depth * depth / k)
+        C64::new(1.0, 0.0) + I * (sigma_max * depth * depth) / k
     };
-    let pos = space.dof_positions();
-    let edge = |p: (f64, f64)| p.0 < 1e-9 || p.1 < 1e-9 || p.0 > width - 1e-9 || p.1 > height - 1e-9;
-    let zero: Vec<usize> = (0..pos.len()).filter(|&d| edge(pos[d])).collect();
-    let dofs = DofMap::new(pos.len(), &zero, &[]);
-    let cell_center = |c: usize| {
-        let v = &mesh.cells[3 * c..3 * c + 3];
-        let (x, y) = v.iter().fold((0.0, 0.0), |s, &i| (s.0 + mesh.vertex(i).0, s.1 + mesh.vertex(i).1));
-        (x / 3.0, y / 3.0)
-    };
-    let t = assemble_split(&space, &dofs, |c| {
-        let (p, q) = coef[mesh.region[c]];
-        let (x, y) = cell_center(c);
+    let t = assemble_split(space, dofs, |c| {
+        let (p, q) = coef[space.mesh.region[c]];
+        let (x, y) = cell_center(space.mesh, c);
         let (sx, sy) = (stretch(x, req.width), stretch(y, req.height));
-        (p * sy / sx, p * sx / sy, -k2 * q * sx * sy)
+        (p * sy / sx, p * sx / sy, -k0 * k0 * q * sx * sy)
     });
-    let mut rhs = vec![ZERO; dofs.n_free];
+    Csr::from_triplets(dofs.n_free, t)
+}
+
+/// `e_0`, which reads the field at a point as `sum(e_0 u)`, and loads it there as a source.
+fn point_load(space: &H1Triangle, dofs: &DofMap, x: f64, y: f64) -> Result<Vec<(usize, f64)>, String> {
+    let cell = (0..space.n_cells())
+        .find(|&c| space.barycentric(c, x, y).iter().all(|&l| l >= -1e-9))
+        .ok_or("the source lies outside the mesh")?;
     let mut d = vec![0; 6];
-    let mut incident_wave: Option<Vec<C64>> = None;
-    match source {
+    space.cell_dofs(cell, &mut d);
+    Ok(d.iter().zip(space.basis_at(cell, x, y)).filter_map(|(&g, v)| dofs.map[g].map(|(r, _)| (r, v))).collect())
+}
+
+/// `u` for `A(k) u = i k e_0`, and `-sum(e_0 u)`. Dividing by `i k` turns this into the
+/// Green's function. So `2 Re(-u_0)` is `pi` times the LDOS per unit k, or `k / 2` in vacuum.
+fn line_response(a: &Csr, load: &[(usize, f64)], k: C64) -> Result<(Vec<C64>, C64), String> {
+    let mut u = vec![ZERO; a.n];
+    load.iter().for_each(|&(r, v)| u[r] += I * k * v);
+    SparseLu::factor(a)?.solve(&mut u);
+    let response = -load.iter().map(|&(r, v)| u[r] * v).sum::<C64>();
+    Ok((u, response))
+}
+
+/// Solves in a domain surrounded by a perfectly matched layer. At `k = k0 (1 + i / 2Q)`,
+/// analyticity makes `F(k)` exactly the average of `F` at real frequencies over a Lorentzian
+/// of half-width `Im k`, and a resonance's `F` stays finite and smooth at any `Q`.
+fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_q: Option<f64>) -> Result<Output, String> {
+    let mesh = open_mesh(req, pml)?;
+    let space = H1Triangle::new(&mesh);
+    let coef = coefficients(req);
+    let k0 = 2.0 * PI / wavelength;
+    let k = C64::new(k0, average_q.map_or(0.0, |q| k0 / (2.0 * q)));
+    let dofs = open_dofs(req, &space, pml);
+    let a = open_matrix(req, &space, &dofs, &coef, pml, k);
+    let (pb, qb) = coef[0];
+    let mut ldos = None;
+    let u = match source {
         Source2d::Line { x, y } => {
-            let (x, y) = (x + pml, y + pml);
-            let cell = (0..space.n_cells())
-                .find(|&c| space.barycentric(c, x, y).iter().all(|&l| l >= -1e-9))
-                .ok_or("the source lies outside the mesh")?;
-            space.cell_dofs(cell, &mut d);
-            for (&g, v) in d.iter().zip(space.basis_at(cell, x, y)) {
-                if let Some((r, f)) = dofs.map[g] {
-                    rhs[r] += f.conj() * I * k0 * v;
-                }
-            }
+            let (u, response) = line_response(&a, &point_load(&space, &dofs, x + pml, y + pml)?, k)?;
+            ldos = Some(2.0 * response.re);
+            dofs.expand(&u)
         }
         Source2d::PlaneWave { angle_deg } => {
             // Scattered-field form. The total field u = u_inc + u_s solves L u = 0, and the
             // incident wave solves the background's L_b u_inc = 0, so
             // L u_s = -(L - L_b) u_inc, which is nonzero only inside the shapes.
-            let (kx, ky) = (k * angle_deg.to_radians().cos(), k * angle_deg.to_radians().sin());
-            let inc: Vec<C64> = pos.iter().map(|p| C64::from_polar(1.0, kx * (p.0 - pml) + ky * (p.1 - pml))).collect();
-            let (mut sx, mut sy, mut m) = (vec![0.0; 36], vec![0.0; 36], vec![0.0; 36]);
+            let kb = k0 * (qb.re / pb.re).sqrt();
+            let (kx, ky) = (kb * angle_deg.to_radians().cos(), kb * angle_deg.to_radians().sin());
+            let inc: Vec<C64> = space.dof_positions().iter().map(|p| C64::from_polar(1.0, kx * (p.0 - pml) + ky * (p.1 - pml))).collect();
+            let mut rhs = vec![ZERO; dofs.n_free];
+            let (mut sx, mut sy, mut m, mut d) = (vec![0.0; 36], vec![0.0; 36], vec![0.0; 36], vec![0; 6]);
             for c in (0..space.n_cells()).filter(|&c| mesh.region[c] != 0) {
                 let (p, q) = coef[mesh.region[c]];
                 let (dp, dq) = (p - pb, q - qb);
@@ -248,22 +322,68 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64) -> Resul
                 for i in 0..6 {
                     let Some((r, f)) = dofs.map[d[i]] else { continue };
                     for j in 0..6 {
-                        let k = i * 6 + j;
-                        rhs[r] -= f.conj() * (dp * (sx[k] + sy[k]) - k2 * dq * m[k]) * inc[d[j]];
+                        let n = i * 6 + j;
+                        rhs[r] -= f.conj() * (dp * (sx[n] + sy[n]) - k * k * dq * m[n]) * inc[d[j]];
                     }
                 }
             }
-            incident_wave = Some(inc);
+            SparseLu::factor(&a)?.solve(&mut rhs);
+            let mut u = dofs.expand(&rhs);
+            u.iter_mut().zip(inc).for_each(|(v, i)| *v += i);
+            u
+        }
+    };
+    let meta = FieldMeta { k0, ldos, ..Default::default() };
+    Ok(open_output(req, &space, &dofs, pml, &u, meta))
+}
+
+/// Finds a leaky mode with no eigensolver. The line source's response has a pole at the
+/// mode's complex `k`, so its reciprocal has a zero there, which a secant iteration finds
+/// in a few driven solves. Close to the pole, the field is the mode.
+fn resonance(req: &Request2d, target_k0: f64, (x, y): (f64, f64), pml: f64) -> Result<Output, String> {
+    let mesh = open_mesh(req, pml)?;
+    let space = H1Triangle::new(&mesh);
+    let coef = coefficients(req);
+    let dofs = open_dofs(req, &space, pml);
+    let load = point_load(&space, &dofs, x + pml, y + pml)?;
+    let at = |k: C64| line_response(&open_matrix(req, &space, &dofs, &coef, pml, k), &load, k);
+    let mut prev = C64::new(target_k0, 0.0);
+    let mut k = prev * C64::new(1.0, -2e-3);
+    let (mut g_prev, mut g) = (at(prev)?.1.inv(), at(k)?.1.inv());
+    for _ in 0..MAX_POLE_STEPS {
+        let next = k - g * (k - prev) / (g - g_prev);
+        if !next.is_finite() {
+            break;
+        }
+        (prev, g_prev) = (k, g);
+        k = next;
+        let (u, response) = at(k)?;
+        g = response.inv();
+        if (k - prev).norm() <= 1e-4 * k.im.abs() {
+            // A search can wander off to a pole of the mesh, far above anything physical.
+            if !(k.im < 0.0 && (k.re - target_k0).abs() < 0.25 * target_k0) {
+                break;
+            }
+            let u = normalized(dofs.expand(&u));
+            let inside = |c: usize| {
+                let p = cell_center(&mesh, c);
+                p.0 > pml && p.1 > pml && p.0 < pml + req.width && p.1 < pml + req.height
+            };
+            let meta = FieldMeta {
+                k0: k.re,
+                q: Some(k.re / (2.0 * -k.im)),
+                volume: Some(mode_volume(&space, &coef, &u, inside)),
+                ..Default::default()
+            };
+            return Ok(open_output(req, &space, &dofs, pml, &u, meta));
         }
     }
-    let a = Csr::from_triplets(dofs.n_free, t);
-    SparseLu::factor(&a)?.solve(&mut rhs);
-    let mut u = dofs.expand(&rhs);
-    if let Some(inc) = incident_wave {
-        u.iter_mut().zip(inc).for_each(|(v, i)| *v += i);
-    }
+    Err("no leaky mode found near this wavelength: try a different target, or a source where the mode is strong".into())
+}
+
+fn open_output(req: &Request2d, space: &H1Triangle, dofs: &DofMap, pml: f64, u: &[C64], meta: FieldMeta) -> Output {
     let mut out = Output { meta: Meta { length: req.width, n_dofs: dofs.n_free, ..Default::default() }, channels: vec![] };
-    push_mesh(&space, &mut out);
+    push_mesh(space, &mut out);
     // Back to the caller's coordinates, so the layer sits outside `[0, width]`.
     for name in ["x", "y"] {
         out.channels.iter_mut().find(|c| c.0 == name).unwrap().1.iter_mut().for_each(|v| *v -= pml);
@@ -271,8 +391,8 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64) -> Resul
     let field = if req.polarization == Polarization::Te { "Ez" } else { "Hz" };
     out.channels.push((format!("field0/{field}/re"), u.iter().map(|v| v.re).collect()));
     out.channels.push((format!("field0/{field}/im"), u.iter().map(|v| v.im).collect()));
-    out.meta.fields.push(FieldMeta { components: vec![field], k0, n_eff: None, power: None });
-    Ok(out)
+    out.meta.fields.push(FieldMeta { components: vec![field], ..meta });
+    out
 }
 
 /// Dof positions, and four straight triangles per cell for linear plotting.

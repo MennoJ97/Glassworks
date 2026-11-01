@@ -4,13 +4,15 @@ A small finite element solver for Maxwell eigenmode and driven problems. It runs
 entirely in the visitor's browser, so a website hosting it only serves static files
 and does no computing.
 
-It handles 1D layered structures, and 2D eigenmodes and scattering, with [more of 2D planned](plans/2d-solver.md):
+It handles 1D layered structures, and 2D eigenmodes, scattering and leaky cavities, with [more of 2D planned](plans/2d-solver.md):
 
 - **Resonances** of closed structures
 - **Photonic band diagrams** of periodic structures
 - **Guided modes** of slab waveguides
 - **2D resonances and band diagrams** of shapes in a box or lattice, for either polarization
-- **2D scattering** of a plane wave or line source by shapes in open space
+- **2D scattering** of a plane wave or line source by shapes in open space, with the local
+  density of states at a source, optionally averaged over a bandwidth
+- **2D leaky modes**, with their quality factor Q and mode area V
 - **Reflection and transmission spectra**, including lossy layers and oblique incidence
 - **Fields at a single wavelength**, from a plane wave or a current sheet
 - **Inverse design** of mirrors and broadband coatings, using adjoint gradients of

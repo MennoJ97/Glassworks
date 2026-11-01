@@ -1,7 +1,7 @@
 # 9. Toward 2D
 
-The solver was written with 2D in mind. Scalar modes and open scattering on triangles now
-exist, in [`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs). Vector fields don't
+The solver was written with 2D in mind. Scalar modes, open scattering and leaky cavities on
+triangles now exist, in [`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs). Vector fields don't
 yet, so that part of this chapter describes what would change, and why they need new
 ideas.
 
@@ -122,9 +122,69 @@ background problem, so only the difference between each shape and the background
 as a source. The test `dielectric_cylinder_matches_the_mie_series` checks this against the
 analytic solution.
 
-PML also makes the eigenproblem non-Hermitian. Leaky modes could use a general eigensolver such as Krylov-Schur
-([Stewart 2002](10-references.md#stewart-2002)), but a driven solve at complex frequency
-gets the local density of states directly, with no eigensolver at all.
+## Leaky modes, with no eigensolver
+
+PML also makes the eigenproblem non-Hermitian, and its coefficients depend on $k$. Leaky
+modes could use a general eigensolver such as Krylov-Schur
+([Stewart 2002](10-references.md#stewart-2002)). Driven solves turn out to be enough.
+
+Put a line source at $\mathbf{r}_0$, so $A(k)\,u = ik\,e_0$, where $e_0$ reads the field
+there. Dividing by $ik$ gives the Green's function, so
+
+$$F(k) = 2\,\mathrm{Re}(-u_0)$$
+
+is $\pi$ times the **local density of states** per unit $k$, how many modes the source can
+radiate into. In vacuum it's $k/2$, which `vacuum_ldos_is_half_of_k` checks.
+
+The response $u_0(k)$ is analytic above the real axis, because a causal system can't
+respond before it's driven. The stretch keeps that property, since $s = 1 + i\sigma/k$ has
+no singularity up there. For such a function, the value at $k + i\Gamma$ is the
+Lorentzian average of its values on the real axis. So one solve, at
+$k_0(1 + i/2Q)$, gives the LDOS averaged over a bandwidth, however sharp the resonances
+inside it ([Liang & Johnson 2013](10-references.md#liang-johnson-2013)). On a fixed mesh this
+is an exact identity, which `complex_frequency_is_a_lorentzian_average_of_real_ones` checks.
+
+Two warnings about that average. In 2D, a Lorentzian's slow tail meets an LDOS that grows
+with $k$, so the average carries a small term that grows logarithmically as cells shrink.
+At $Q = 100$, vacuum reads about 1% high, and each halving of the cell adds about 0.2%. At
+$Q = 20$ it's about 5%, adding 1%. And the identity's tail reaches the sharp modes far above the
+mesh's cutoff, which is why the test combines two widths to get a tail that falls faster.
+
+A leaky mode is a pole of that same response. Near it, $u_0 \approx R/(k - k_p)$, so $1/u_0$
+crosses zero at the complex $k_p$, and a secant iteration finds it in 6 or 7 driven solves
+(`resonance` in `solve2d.rs`). Then
+
+$$Q = \frac{\mathrm{Re}\,k_p}{2\,|\mathrm{Im}\,k_p|}, \qquad
+V = \frac{\int q\,|u|^2\,dA}{\max\,q\,|u|^2}.$$
+
+The solve closest to the pole is dominated by the mode, so it gives the field for $V$, with
+the integral stopping at the layer, whose artificial field isn't part of the mode's energy.
+Because nothing varies along $z$, $V$ is an area. It only means the usual electric mode
+volume for $E_z$: for $H_z$ it measures magnetic energy. Between degenerate modes it depends
+on which mix the eigensolver returned.
+
+The search needs a source where the mode is strong and a target within about a quarter of
+the answer. It refuses a pole further away than that, because in an empty domain it
+otherwise wanders up to a pole of the mesh and reports a plausible-looking $Q$.
+
+### Example: one rod missing
+
+Remove one rod from a square lattice of rods, with $\varepsilon = 12$ and $r = 0.2a$. Its
+$E_z$ gap runs from $a/\lambda = 0.281$ to $0.417$, and one mode moves into it. Plane waves put
+it at $0.3746$ in a periodic 5 × 5 supercell, and this solver converges to that from above.
+With open walls, more crystal blocks more leakage, while the mode's shape stays put:
+
+| Rods | $a/\lambda$ | $Q$ | $V / a^2$ |
+|---:|---:|---:|---:|
+| 3 × 3 | 0.3786 | 20 | 0.64 |
+| 5 × 5 | 0.3784 | 198 | 0.64 |
+| 7 × 7 | 0.3781 | 1,650 | 0.64 |
+| 9 × 9 | 0.3781 | 12,700 | 0.65 |
+| 13 × 13 | 0.3781 | 683,000 | 0.65 |
+
+These use 12 cells per period, and finer meshes move $Q$ by about 4%. So in 2D, $Q/V$ still
+changes mostly through $Q$ here, but $V$ now has a real meaning: this mode's area is smaller
+than one lattice cell.
 
 ## When the browser isn't the right tool
 

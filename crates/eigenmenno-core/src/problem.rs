@@ -118,17 +118,30 @@ pub struct Shape {
 #[derive(Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Analysis2d {
-    /// The lowest modes, at a Bloch phase per period if the walls are periodic.
+    /// The lowest modes, or those nearest `target_k0`, at a Bloch phase per period if
+    /// the walls are periodic.
     Cavity {
         n_modes: usize,
         #[serde(default)]
         bloch: [f64; 2],
+        #[serde(default)]
+        target_k0: Option<f64>,
     },
     /// Band diagram of a rectangular lattice, along Gamma, X, M and back.
     Bands { n_bands: usize, n_k: usize },
     /// The field at one wavelength in open space. An absorbing layer of thickness `pml`
-    /// surrounds the domain, so walls must be `absorbing`.
-    Driven { wavelength: f64, source: Source2d, pml: f64 },
+    /// surrounds the domain, so walls must be `absorbing`. `average_q` solves at
+    /// `k0 (1 + i / 2Q)`, which averages a line source's LDOS over a Lorentzian of that Q.
+    Driven {
+        wavelength: f64,
+        source: Source2d,
+        pml: f64,
+        #[serde(default)]
+        average_q: Option<f64>,
+    },
+    /// The leaky mode nearest `target_k0` in open space, excited by a line source that
+    /// must overlap it. Walls must be `absorbing`.
+    Resonance { target_k0: f64, x: f64, y: f64, pml: f64 },
 }
 
 /// `Line` is a current filament at a point. `PlaneWave` travels at `angle_deg` from the

@@ -16,7 +16,7 @@ const VIEW_HELP = {
   bands: 'The waves that can travel through an endless repeat of this structure, and the gaps where none can.',
   waveguide: 'The modes that travel along the layers at a fixed wavelength, and how fast each one propagates.',
   scatter2d: 'The field around 2D shapes in open space, from a plane wave or a line source. An absorbing layer outside the plot takes what leaves.',
-  cavity2d: 'The modes of a 2D structure inside walls, uniform along the third direction.',
+  cavity2d: 'The modes of a 2D structure, uniform along the third direction, inside walls or leaking into open space. Open walls find one mode from a few driven solves, with its Q and how tightly it is confined.',
   bands2d: 'The waves that can travel through an endless lattice of this cell. Floquet boundaries tie each edge to the opposite one, with a phase set by the wavevector k.',
   mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
   antireflection: 'Find the coating that reflects the least light, averaged across a band of wavelengths.',
@@ -228,8 +228,11 @@ function renderSettings() {
   show('field-map', flat);
   if (flat) {
     renderPlane();
+    const leaky = a === 'cavity2d' && state.plane.cavity2d.walls === 'absorbing';
     show('plane-walls-field', a === 'cavity2d');
-    show('plane-source-fields', a === 'scatter2d' && state.source === 'line');
+    show('plane-target-field', a === 'cavity2d');
+    show('plane-average-field', a === 'scatter2d' && state.source === 'line');
+    show('plane-source-fields', (a === 'scatter2d' && state.source === 'line') || leaky);
   }
   // TE and TM keep their meaning for the coefficients, but read differently in a plane.
   $('polarization').options[0].text = flat ? 'Ez (electric field out of the plane, often called TM)' : 'TE (electric field along the layers)';
@@ -243,7 +246,7 @@ function renderSettings() {
   fieldPlot.locked = designing;
   if (designing) renderDesignSettings();
   else fieldPlot.layers = state.layers;
-  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || (flat && a !== 'scatter2d'));
+  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || (flat && a !== 'scatter2d' && !(a === 'cavity2d' && state.plane.cavity2d.walls === 'absorbing')));
   show('source-field', a === 'field' || a === 'scatter2d');
   show('range-field', a === 'spectrum');
   $('polarization').value = state.polarization;
@@ -298,7 +301,9 @@ function renderPlane() {
   $('plane-cell').value = p.cell;
   $('plane-background').value = p.background;
   if (p.sourceX !== undefined) [$('plane-source-x').value, $('plane-source-y').value] = [p.sourceX, p.sourceY];
-  $('plane-walls').replaceChildren(...['pec', 'pmc', 'periodic'].map((w) => new Option(WALLS[w], w, false, w === p.walls)));
+  $('plane-target').value = p.target ?? '';
+  $('plane-average').value = p.averageQ ?? '';
+  $('plane-walls').replaceChildren(...['pec', 'pmc', 'periodic', 'absorbing'].map((w) => new Option(WALLS[w], w, false, w === p.walls)));
   const body = $('shapes');
   const focused = document.activeElement?.closest?.('#shapes') ? document.activeElement.getAttribute('aria-label') : null;
   body.replaceChildren();
@@ -330,7 +335,15 @@ bindNumber('plane-cell', (v) => { planeSettings().cell = v; }, 0.001);
 bindNumber('plane-background', (v) => { planeSettings().background = v; }, 0.01);
 bindNumber('plane-source-x', (v) => { planeSettings().sourceX = v; }, -1e9);
 bindNumber('plane-source-y', (v) => { planeSettings().sourceY = v; }, -1e9);
-$('plane-walls').addEventListener('change', () => { planeSettings().walls = $('plane-walls').value; changed(); });
+$('plane-walls').addEventListener('change', () => { planeSettings().walls = $('plane-walls').value; renderSettings(); changed(); });
+// These two may be left blank, which bindNumber would ignore.
+const bindOptional = (id, key) => $(id).addEventListener('input', () => {
+  const v = parseFloat($(id).value);
+  planeSettings()[key] = v > 0 ? v : null;
+  changed();
+});
+bindOptional('plane-target', 'target');
+bindOptional('plane-average', 'averageQ');
 $('add-shape').addEventListener('click', () => {
   const p = planeSettings();
   p.shapes.push({ type: 'circle', x: p.width / 2, y: p.height / 2, w: Math.min(p.width, p.height) / 4, h: Math.min(p.width, p.height) / 4, n: 2 });
@@ -402,7 +415,9 @@ for (const [problem, { name: groupName }] of Object.entries(PROBLEMS)) {
 $('preset').addEventListener('change', () => {
   const preset = PRESETS[$('preset').value];
   if (!preset) return;
-  Object.assign(state, structuredClone(preset));
+  const { planeSetup, ...rest } = structuredClone(preset);
+  Object.assign(state, rest);
+  if (planeSetup) state.plane[state.analysis] = planeSetup;
   clearForNewView();
   selectedLayer = -1;
   selectedField = 0;
@@ -675,6 +690,7 @@ function planeMarks(p) {
     return state.source === 'line' ? { open: true, source: [p.sourceX, p.sourceY] } : { open: true, incident: state.angle };
   }
   if (a === 'bands2d') return { bloch: blochAt(p.pick.s) };
+  if (p.walls === 'absorbing') return { open: true, source: [p.sourceX, p.sourceY] };
   return p.walls === 'periodic' ? { bloch: [0, 0] } : {};
 }
 
@@ -757,6 +773,7 @@ function resultsTitle() {
     case 'waveguide': return `Guided modes at ${+state.wavelength.toFixed(3)} µm`;
     case 'bands': return `Modes at kL/π = ${state.bandPick.k.toFixed(2)}`;
     case 'scatter2d': return `Field at ${+state.wavelength.toFixed(3)} µm`;
+    case 'cavity2d': return state.plane.cavity2d.walls === 'absorbing' ? 'Leaky mode' : 'Resonant modes';
     case 'bands2d': {
       const [x, y] = blochAt(state.plane.bands2d.pick.s).map((v) => (v / Math.PI).toFixed(2));
       return `Modes at k = (${x}, ${y}) π/a`;
@@ -770,12 +787,15 @@ function resultsTitle() {
 // A plane wave has amplitude 1, so its largest field is how much the shapes concentrate it.
 // A line source has no such scale, and the field grows without limit right beside it.
 function renderScatterTable(result, addRow) {
+  const p = state.plane.scatter2d;
   if (state.source === 'line') {
     $('empty').hidden = false;
-    $('empty').textContent = 'The source radiates in every direction. Move it with the settings below.';
+    $('empty').textContent = 'The source radiates in every direction. Move it with the settings below. This counts how many modes it can radiate into, and vacuum is 1.';
+    const { ldos, k0 } = result.meta.fields[0];
+    addRow([p.averageQ ? `Local density of states, averaged over Q = ${p.averageQ}` : 'Local density of states'], 'th');
+    addRow([(ldos / (k0 / 2)).toFixed(3)]);
     return;
   }
-  const p = state.plane.scatter2d;
   const { x, y } = result.channels;
   const name = result.meta.fields[0].components[0];
   const [re, im] = [result.channels[`field0/${name}/re`], result.channels[`field0/${name}/im`]];
@@ -819,14 +839,19 @@ function renderTable(result) {
     }
     return;
   }
-  const heading = a === 'waveguide' ? ['Mode', 'Effective index', 'Propagation β (1/µm)'] : ['Mode', 'Wavelength (µm)', 'Frequency (THz)'];
+  // A leaky mode's row is its own: Q and the area replace the columns that list many modes.
+  const leaky = fields[0].q != null;
+  const heading = leaky ? ['Wavelength (µm)', 'Q', 'Mode area (µm²)', 'Q / area']
+    : a === 'waveguide' ? ['Mode', 'Effective index', 'Propagation β (1/µm)'] : ['Mode', 'Wavelength (µm)', 'Frequency (THz)'];
+  if (a === 'cavity2d' && !leaky) heading.push('Mode area (µm²)');
   addRow(heading, 'th');
   fields.forEach((f, i) => {
     const wavelength = f.k0 > 1e-3 ? (2 * Math.PI) / f.k0 : Infinity;
     const cells = a === 'waveguide'
       ? [i, f.n_eff.toFixed(5), (f.n_eff * f.k0).toFixed(4)]
       : [i + 1, Number.isFinite(wavelength) ? wavelength.toFixed(4) : 'Static', Number.isFinite(wavelength) ? (THZ_MICRONS / wavelength).toFixed(1) : '0'];
-    const row = addRow(cells);
+    if (a === 'cavity2d') cells.push(f.volume.toFixed(3));
+    const row = addRow(leaky ? [wavelength.toFixed(4), Math.round(f.q).toLocaleString('en'), f.volume.toFixed(3), Math.round(f.q / f.volume).toLocaleString('en')] : cells);
     row.tabIndex = 0;
     row.classList.add('pickable');
     row.classList.toggle('selected', i === selectedField);
