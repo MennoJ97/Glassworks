@@ -3,7 +3,7 @@
 import { GUIDES, MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeState, defaultState, encodeState, guideGeometry, layer, problemOf, totalLength } from './model.js';
 import { EvolutionMap, FieldMap, FieldPlot, LineChart, seriesColors } from './plot.js';
 import { Solver } from './solver.js';
-import { STAGES, TOTAL_ITERATIONS, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, references, sharpnessAt } from './design.js';
+import { STAGES, bendGeometry, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, prepareDesign, totalIterations, references, sharpnessAt } from './design.js';
 
 const $ = (id) => document.getElementById(id);
 const THZ_MICRONS = 299.792458; // c, in THz times microns.
@@ -21,6 +21,7 @@ const VIEW_HELP = {
   bands2d: 'The waves that can travel through an endless lattice of this cell. Floquet boundaries tie each edge to the opposite one, with a phase set by the wavevector k.',
   mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
   antireflection: 'Find the coating that reflects the least light, averaged across a band of wavelengths.',
+  bend2d: 'Find the pattern of material that carries light around a corner in a slab waveguide, within a square one wavelength wide. It stays in the slab instead of radiating away at the corner.',
 };
 const PROBLEM_TEXT = {
   driven: {
@@ -76,6 +77,7 @@ const fieldPlot = new FieldPlot($('field-plot'), {
 const fieldMap = new FieldMap($('field-map'));
 const planar = () => Boolean(state.plane[state.analysis]);
 const guide2d = () => state.analysis === 'guide2d';
+const bend2d = () => state.analysis === 'bend2d';
 
 const chart = new LineChart($('chart'), (hit) => {
   if (problemOf(state.analysis) === 'design') { showFrame(hit.index); return; }
@@ -215,19 +217,19 @@ function renderSettings() {
   const show = (id, on) => { $(id).hidden = !on; };
   const designing = problem === 'design';
   show('wavelength-field', a === 'waveguide' || a === 'spectrum' || a === 'field' || a === 'mirror' || a === 'scatter2d' || a === 'guide2d');
-  show('angle-field', a === 'spectrum' || ((a === 'field' || a === 'scatter2d') && state.source === 'plane_wave') || designing);
-  show('design-fields', designing);
-  show('design-band', a === 'antireflection');
+  show('angle-field', a === 'spectrum' || ((a === 'field' || a === 'scatter2d') && state.source === 'plane_wave') || (designing && !bend2d()));
+  show('design-fields', designing && !bend2d());
+  show('design-band', a === 'antireflection' || bend2d());
   show('design-run', designing);
   show('left-field', !designing && !planar());
   show('right-field', !designing && !planar());
   show('accuracy', !designing && !planar());
-  show('polarization-field', !guide2d());
-  show('polarization-title', !guide2d());
+  show('polarization-field', !guide2d() && !bend2d());
+  show('polarization-title', !guide2d() && !bend2d());
   const flat = planar();
   show('layer-builder', !designing && !flat);
-  show('plane-builder', flat && !guide2d());
-  show('plane-fields', flat);
+  show('plane-builder', flat && !guide2d() && !bend2d());
+  show('plane-fields', flat && !bend2d());
   show('field-plot', !flat);
   show('field-map', flat);
   if (flat) {
@@ -253,7 +255,7 @@ function renderSettings() {
   fieldPlot.locked = designing;
   if (designing) renderDesignSettings();
   else fieldPlot.layers = state.layers;
-  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || (flat && a !== 'scatter2d' && a !== 'guide2d' && !(a === 'cavity2d' && state.plane.cavity2d.walls === 'absorbing')));
+  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || (flat && a !== 'scatter2d' && a !== 'guide2d' && !bend2d() && !(a === 'cavity2d' && state.plane.cavity2d.walls === 'absorbing')));
   show('source-field', a === 'field' || a === 'scatter2d');
   show('range-field', a === 'spectrum');
   $('polarization').value = state.polarization;
@@ -532,8 +534,9 @@ function resetDesign() {
 
 // Repaints the map from the stored frames, as when the colour scheme changes.
 function restartEvolution() {
+  if (bend2d()) return;
   const d = state.design[state.analysis];
-  evolution.reset(pixelCount(d), TOTAL_ITERATIONS + 1, d.thickness, STAGES);
+  evolution.reset(pixelCount(d), totalIterations(state) + 1, d.thickness, STAGES);
   design.frames.forEach((rho) => evolution.add(rho));
 }
 
@@ -543,13 +546,16 @@ function showDesign(rho, reply) {
   resultsView = state.analysis;
   $('save-csv').hidden = false;
   $('error').hidden = true;
-  fieldPlot.layers = plotLayers(state.design[state.analysis], rho);
+  if (!bend2d()) fieldPlot.layers = plotLayers(state.design[state.analysis], rho);
   showResults();
 }
 
 // Solves the hand-made references and the current design, without optimizing.
 async function previewDesign() {
   const run = design.run;
+  const prepared = await prepareDesign(state, (requests) => solver.run(requests));
+  if (!prepared || run !== design.run) return;
+  if (prepared.error) return setError(prepared.error);
   const found = [];
   for (const { name, requests } of references(state)) {
     const reply = await solver.run(requests);
@@ -584,19 +590,19 @@ async function startDesign() {
     design.history.push(meanReflection(reply.results));
     design.frames.push(rho);
     design.shown = design.frames.length - 1;
-    evolution.add(rho);
+    if (!bend2d()) evolution.add(rho);
     design.finished = beta === Infinity;
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     setStatus(design.finished
       ? `Finished in ${seconds} s, of which the solver took ${(solving / 1000).toFixed(1)} s.`
-      : `Iteration ${iteration} of ${TOTAL_ITERATIONS}, sharpness ${beta}.`);
+      : `Iteration ${iteration} of ${totalIterations(state)}, sharpness ${beta}.`);
     showDesign(rho, reply);
     return true;
   });
   if (run !== design.run) return;
   design.running = false;
   $('design-start').textContent = 'Start';
-  $('design-use').hidden = !design.finished;
+  $('design-use').hidden = !design.finished || bend2d();
   if (failure?.error) setError(failure.error);
   renderChart();
 }
@@ -607,7 +613,7 @@ async function solveFrame(frame, run) {
   const reply = await solver.run(gradientRequests(state, rho));
   if (!reply || reply.error || run !== design.run) return;
   design.shown = frame;
-  const sharp = sharpnessAt(frame);
+  const sharp = sharpnessAt(state, frame);
   setStatus(`Showing iteration ${frame + 1}, ${sharp === Infinity ? 'fully sharpened' : `sharpness ${sharp}`}.`);
   showDesign(rho, reply);
 }
@@ -656,10 +662,10 @@ $('design-use').addEventListener('click', () => {
 });
 
 function renderDesignTable(table, addRow) {
-  addRow(['Structure', 'Reflected'], 'th');
+  addRow(['Structure', bend2d() ? 'Transmitted' : 'Reflected'], 'th');
   const last = design.finished && design.shown === design.frames.length - 1;
-  const count = last && finishedLayers(state.design[state.analysis], design.rho).length - 2;
-  const name = count ? `This design, ${count} layers` : design.frames.length ? `Iteration ${design.shown + 1}` : 'This design';
+  const count = last && !bend2d() && finishedLayers(state.design[state.analysis], design.rho).length - 2;
+  const name = count ? `This design, ${count} layers` : last ? 'Finished design' : design.frames.length ? `Iteration ${design.shown + 1}` : 'This design';
   addRow([name, percent(meanReflection(results))]);
   for (const { name, value: reference } of design.references) addRow([name, percent(reference)]);
 }
@@ -706,6 +712,10 @@ function planeMarks(p) {
     return state.source === 'line' ? { open: true, source: [p.sourceX, p.sourceY] } : { open: true, incident: state.angle };
   }
   if (a === 'bands2d') return { bloch: blochAt(p.pick.s) };
+  if (a === 'bend2d') {
+    const g = bendGeometry();
+    return { open: true, source: g.mark, monitor: g.monitor, density: design.rho && { ...g.region, rho: design.rho } };
+  }
   if (a === 'guide2d') {
     const g = guideGeometry(p.bend, false);
     return { open: true, source: g.mark, monitor: g.monitor };
@@ -736,10 +746,10 @@ function showResults() {
     const p = state.plane[a];
     const { channels } = fieldResult;
     const marks = planeMarks(p);
-    const guide = guide2d() ? guideGeometry(p.bend, false) : null;
+    const guide = guide2d() ? guideGeometry(p.bend, false) : bend2d() ? bendGeometry() : null;
     const [width, height] = guide ? [guide.size, guide.size] : [p.width, p.height];
     fieldMap.setMesh({ x: channels.x, y: channels.y, triangles: channels.triangles, width, height }, guide ? guide.shapes : p.shapes, marks);
-    const size = a === 'scatter2d' ? 'The total field is shown.' : a === 'guide2d' ? 'The source sends light both ways, and the half going left leaves through the layer.' : 'Its overall size is arbitrary.';
+    const size = a === 'scatter2d' ? 'The total field is shown.' : a === 'guide2d' || a === 'bend2d' ? `The source sends light both ways, and the half going left leaves through the layer.${a === 'bend2d' ? ' Shaded pixels are the slab\'s material.' : ''}` : 'Its overall size is arbitrary.';
     $('field-note').textContent = `${planeNote(marks)} Colour shows the field at this moment, with red and blue as opposite signs. ${size}`;
     const name = fieldResult.meta.fields[selectedField]?.components[0];
     if (name) fieldMap.setField(channels[`field${selectedField}/${name}/re`], channels[`field${selectedField}/${name}/im`]);
@@ -803,6 +813,7 @@ function resultsTitle() {
     }
     case 'mirror': return `Reflection at ${+state.wavelength.toFixed(3)} µm`;
     case 'antireflection': return `Mean reflection, ${designSettings().from} to ${designSettings().to} µm`;
+    case 'bend2d': return `Mean transmission, ${designSettings().from} to ${designSettings().to} µm`;
     default: return 'Resonant modes';
   }
 }
@@ -902,30 +913,33 @@ function renderChart() {
   const wrap = $('chart-wrap');
   const designing = problemOf(a) === 'design';
   wrap.hidden = designing ? design.history.length < 2 : a !== 'spectrum' && a !== 'bands' && a !== 'bands2d';
-  $('evolution-wrap').hidden = !designing || design.frames.length < 2;
+  $('evolution-wrap').hidden = !designing || bend2d() || design.frames.length < 2;
   if (wrap.hidden) { chart.spec = null; return; }
   const channels = results[0].channels;
   const colors = seriesColors();
   if (designing) {
     // Both goals become light lost, on a log scale, where a mirror's last 1% shows.
-    const lost = (r) => Math.log10(Math.max(1e-5, a === 'mirror' ? 1 - r : r));
+    const lost = (r) => Math.log10(Math.max(1e-5, a === 'antireflection' ? r : 1 - r));
     const x = design.history.map((_, i) => i + 1);
     const y = design.history.map(lost);
     const levels = design.references.map(({ name, value }) => ({ name, y: lost(value) }));
     const yMin = Math.floor(Math.min(...y, ...levels.map((l) => l.y)));
     const yMax = Math.max(Math.ceil(Math.max(...y)), yMin + 1);
-    $('chart-title').textContent = a === 'mirror'
-      ? 'Light that gets through the mirror at each iteration, lower is better. It jumps where the pixels get sharper.'
+    $('chart-title').textContent = a === 'bend2d'
+      ? 'Light that doesn\'t get around the corner at each iteration, lower is better. It jumps where the pixels get sharper. Click to see any iteration.'
+      : a === 'mirror' ? 'Light that gets through the mirror at each iteration, lower is better. It jumps where the pixels get sharper.'
       : 'Light reflected by the coating at each iteration, lower is better. It jumps where the pixels get sharper.';
     chart.spec = {
-      xMin: 1, xMax: TOTAL_ITERATIONS + 1, yMin, yMax, xLabel: 'Iteration', levels, marker: design.shown + 1,
+      xMin: 1, xMax: totalIterations(state) + 1, yMin, yMax, xLabel: 'Iteration', levels, marker: design.shown + 1,
       yTicks: Array.from({ length: yMax - yMin + 1 }, (_, i) => yMin + i),
       yFormat: (v) => `${+(100 * 10 ** v).toPrecision(1)}%`,
       series: [{ name: 'Lost', x, y, color: colors[0] }],
-      format: (index) => [`Iteration ${x[index]}`, `Reflected ${percent(design.history[index])}`],
+      format: (index) => [`Iteration ${x[index]}`, `${bend2d() ? 'Transmitted' : 'Reflected'} ${percent(design.history[index])}`],
     };
-    evolution.marker = design.shown;
-    evolution.draw();
+    if (!bend2d()) {
+      evolution.marker = design.shown;
+      evolution.draw();
+    }
     const slider = $('design-frame');
     slider.max = design.frames.length - 1;
     slider.value = design.shown;

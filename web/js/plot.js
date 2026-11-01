@@ -281,7 +281,7 @@ export class FieldMap {
 
   // `marks` may hold `bloch`, the phase per period across x and y; `open` for edges that
   // absorb; `source`, a point; `incident`, a direction of travel in degrees; and `monitor`,
-  // a line that power is measured across.
+  // a line that power is measured across; and `density`, a rectangle of pixels with `rho`.
   setMesh(mesh, shapes, marks) {
     this.mesh = mesh;
     this.shapes = shapes;
@@ -396,6 +396,20 @@ export class FieldMap {
     ctx.beginPath();
     ctx.rect(a.left, a.top, a.right - a.left, a.bottom - a.top);
     ctx.clip();
+    if (this.marks.density) {
+      const { x0, y0, width: w, height: h, nx, ny, rho } = this.marks.density;
+      ctx.fillStyle = css('--ink');
+      rho.forEach((v, i) => {
+        if (v < 0.02) return;
+        ctx.globalAlpha = 0.35 * v;
+        // Whole device pixels, because overlapping edges would show as a grid.
+        const [px, py] = [i % nx, Math.floor(i / nx)];
+        const [left, right] = [Math.round(sx(x0 + (px * w) / nx)), Math.round(sx(x0 + ((px + 1) * w) / nx))];
+        const [top, bottom] = [Math.round(sy(y0 + ((py + 1) * h) / ny)), Math.round(sy(y0 + (py * h) / ny))];
+        ctx.fillRect(left, top, right - left, bottom - top);
+      });
+      ctx.globalAlpha = 1;
+    }
     for (const s of this.shapes) {
       ctx.beginPath();
       if (s.type === 'circle') ctx.arc(sx(s.x), sy(s.y), (s.w / 2) * a.scale, 0, 2 * Math.PI);

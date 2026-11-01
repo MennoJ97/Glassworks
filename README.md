@@ -16,8 +16,8 @@ It handles 1D layered structures, and 2D eigenmodes, scattering, leaky cavities 
 - **2D waveguide bends**, from a port or line source to a power monitor
 - **Reflection and transmission spectra**, including lossy layers and oblique incidence
 - **Fields at a single wavelength**, from a plane wave or a current sheet
-- **Inverse design** of mirrors and broadband coatings, using adjoint gradients of
-  reflection, transmission and absorption
+- **Inverse design** of mirrors, broadband coatings and 2D waveguide bends, using adjoint
+  gradients of reflection, transmission and absorption, or of power through a line
 
 Visitors build their own structure on the page: drag boundaries, split layers, pick
 materials, repeat blocks, and share the result as a link.

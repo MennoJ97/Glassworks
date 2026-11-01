@@ -116,6 +116,7 @@ export const PRESETS = {
   'Lattice of rods': { analysis: 'bands2d' },
   'Design a mirror': { analysis: 'mirror', wavelength: 1 },
   'Design a broadband coating': { analysis: 'antireflection' },
+  'Design a waveguide bend': { analysis: 'bend2d' },
 };
 
 // The kinds of problem. Driven views solve one linear system for a source the visitor
@@ -124,7 +125,7 @@ export const PRESETS = {
 export const PROBLEMS = {
   driven: { name: 'Driven response', views: ['spectrum', 'field', 'scatter2d', 'guide2d'] },
   eigen: { name: 'Eigenmodes', views: ['cavity', 'bands', 'waveguide', 'cavity2d', 'bands2d'] },
-  design: { name: 'Inverse design', views: ['mirror', 'antireflection'] },
+  design: { name: 'Inverse design', views: ['mirror', 'antireflection', 'bend2d'] },
 };
 export const problemOf = (analysis) => Object.keys(PROBLEMS).find((p) => PROBLEMS[p].views.includes(analysis));
 
@@ -154,6 +155,7 @@ export function defaultState() {
         shapes: [{ type: 'circle', x: 1.5, y: 1.5, w: 1, h: 1, n: 2 }],
       },
       guide2d: guideSetup('sharp'),
+      bend2d: { background: 1, walls: 'absorbing', shapes: [] },
       cavity2d: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', target: null, sourceX: 0.5, sourceY: 0.5, shapes: [] },
       bands2d: {
         width: 1, height: 1, cell: 0.04, background: 1, walls: 'periodic', pick: { s: 1, band: 0 },
@@ -163,6 +165,7 @@ export function defaultState() {
     design: {
       mirror: { thickness: 2, low: 'Silica glass', high: 'Titanium dioxide', left: 'Air', right: 'Air', radius: 20, seed: 1 },
       antireflection: { thickness: 0.6, low: 'Magnesium fluoride', high: 'Titanium dioxide', left: 'Air', right: 'Silica glass', radius: 15, seed: 1, from: 0.4, to: 0.8 },
+      bend2d: { radius: 3, seed: 1, from: 0.95, to: 1.05 },
     },
     ...structuredClone(PRESETS['Mirror with a resonant gap']),
   };
@@ -183,7 +186,7 @@ export function blochAt(s) {
   return [Math.PI * (3 - s), Math.PI * (3 - s)];
 }
 
-const toShape = (c) => ({
+export const toShape = (c) => ({
   material: material(c.n),
   ...(c.type === 'circle'
     ? { type: 'circle', x: c.x, y: c.y, r: c.w / 2 }
@@ -291,7 +294,7 @@ export function decodeState(text) {
     if (!valid) return null;
     const fresh = defaultState();
     // Links from before a view existed have no settings for it.
-    return { ...fresh, ...parsed, plane: { ...fresh.plane, ...parsed.plane } };
+    return { ...fresh, ...parsed, plane: { ...fresh.plane, ...parsed.plane }, design: { ...fresh.design, ...parsed.design } };
   } catch {
     return null;
   }

@@ -1,7 +1,7 @@
 # 9. Toward 2D
 
-The solver was written with 2D in mind. Scalar modes, open scattering, leaky cavities and
-waveguides on triangles now exist, in [`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs). Vector fields don't
+The solver was written with 2D in mind. Scalar modes, open scattering, leaky cavities,
+waveguides and inverse design on triangles now exist, in [`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs). Vector fields don't
 yet, so that part of this chapter describes what would change, and why they need new
 ideas.
 
@@ -261,6 +261,52 @@ layer reflect the guided mode: 2% of its power at $2a$ of layer, which formed a 
 the bend and gave a transmission over 100%. At $6a$ that's gone at these frequencies, and asking
 for a weaker absorption also helps. Close to the guide's cutoff, below about $\omega = 0.35$,
 light travels slowly enough that reflection returns, so these numbers shouldn't be trusted there.
+
+## Inverse design: letting the solver draw the bend
+
+Instead of analysing a bend someone drew, we can ask for the bend. Give each pixel of a region a
+density $\rho$ between 0 and 1, mixing air with the slab's material:
+$\varepsilon = \varepsilon_\text{low} + \rho\,(\varepsilon_\text{high} - \varepsilon_\text{low})$. Then
+improve the densities using the gradient of a monitor's power.
+
+Hundreds of pixels would take hundreds of solves by finite differences, but the **adjoint method**
+needs just one more. A monitor's power is a quadratic form, $P = u^H B\,u$, with $B$ Hermitian. A
+change in the matrix changes the field by $A\,\delta u = -\delta A\,u$, so
+
+$$\delta P = 2\,\mathrm{Re}(u^H B\,\delta u) = -2\,\mathrm{Re}(w^T \delta A\,u), \qquad A^T w = \overline{B\,u}.$$
+
+One solve for $w$ prices every pixel. It costs even less than that sounds: $A$ is complex
+symmetric, even inside the absorbing layer, so $A^T = A$, and $w$ only needs a back-substitution
+with the factors we already have. For a pixel, $\delta A$ is just $-k_0^2\,\delta\varepsilon$
+times its mass matrix. `density_gradient_matches_finite_differences` checks this.
+
+All the optimization itself lives in the website's `design.js`, outside the solver: a cone filter
+that removes single-pixel noise, a projection that gradually pushes densities to 0 or 1, and the
+method of moving asymptotes ([Svanberg 1987](10-references.md#svanberg-1987)). Those are the same
+as for layers, with the filter now in 2D ([Jensen & Sigmund 2004](10-references.md#jensen-sigmund-2004)
+did this for photonic crystal bends).
+
+### Example: a corner in a slab
+
+Take a slab of index 3.5 and width $0.125\lambda$, whose plain sharp corner passes 5% of the light,
+through a monitor far along the output. Give the optimizer a square one wavelength wide at that
+corner, and three wavelengths to serve at once. It takes 200 iterations:
+
+| Wavelength | Plain corner | Optimized, 24 cells per $\lambda$ | Optimized, 48 cells per $\lambda$ |
+|---:|---:|---:|---:|
+| 0.95 | 5.4% | 97.8% | 97.6% |
+| 1.00 | 5.3% | 99.3% | 99.3% |
+| 1.05 | 5.5% | 99.4% | 99.6% |
+
+For comparison, the crystal bend above reaches 97.9% to 95.8% over a much wider band, about 13%,
+in a crystal several periods across. So neither wins outright: this pattern is compact and needs no
+band gap, while the crystal gets its bandwidth from having nowhere else for light to go. We only
+optimized over 10% here, and didn't test how far this could stretch.
+
+Optimizers are known to exploit a mesh's errors, so `optimized_bend_survives_a_finer_mesh` checks
+the finished pattern at twice the resolution, and it holds. Around it, the power entering and
+leaving a closed loop balances to 0.02%. Optimizing for a single wavelength reached only 43% to 82%
+at the band's edges, which is why this asks for three.
 
 ## When the browser isn't the right tool
 
