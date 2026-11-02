@@ -529,7 +529,7 @@ been seen and agreed.
       against step 1. It takes six solves per iteration instead of two, so about three times as
       much computing, for a run that now takes 11 s on the page. Nine starts aren't enough, as this
       plan learned: use 18 at least, with unseen ones for any final comparison.
-- [ ] **Teach it.** A section in chapter 13, with a robust design beside the sharpest one, if there's a
+- [x] **Teach it.** In chapter 17, where the cavity moved, with a note on the bend in chapter 13. First planned as a section in chapter 13, with a robust design beside the sharpest one, if there's a
       difference to show. A negative result is worth teaching too.
 
 Done means the page can say what happens to its designs under a stated edge error, and either offers a
@@ -754,6 +754,43 @@ each at its own wavelength, predicted from `moves`, avoids that. Eight variants,
 Paired, the air disc's Q improves 1.9, 2.9 and 4.4 times at 1, 2 and 5 nm, on 12, 14 and 14 of 18 starts, with unmoved Q about level. Without the disc, Q doubles or so, but it also does
 when unmoved, so that looks more like a steadier optimization than robustness. Only the 14 of 18 are beyond what chance would readily give, at about 3% by a sign test, before allowing for how many things are compared. It doesn't remove the shift, as expected. At a fixed wavelength it
 changes little (at 2 nm, 0.96 times with the disc). So robustness helps Q and worst cases, and doesn't replace tuning. It takes five solves per iteration instead of two, about twice the time on one thread (77 s against 41 s).
+
+
+#### Feature sizes
+
+For each pixel, the largest square of its own phase that holds it gives a local feature size. Pixels are 41.7 nm at a wavelength of 1 µm. Medians over nine starts, for what's thinner than each width:
+
+| Design | Below 83 nm, material and air | Below 125 nm | Below 167 nm |
+|---|---:|---:|---:|
+| Rod | 5%, 3% | 59%, 40% | 94%, 59% |
+| Air disc | 7%, 2% | 66%, 17% | 87%, 50% |
+| Rod, robust | 3%, 4% | 61%, 55% | 84%, 83% |
+| Air disc, robust | 3%, 3% | 52%, 21% | 81%, 62% |
+
+Removing those features from finished designs, by opening and closing with a square. LDOS and Q after a search within 0.8 to 1.2 wavelengths, since the mode moves. Later columns aren't all the same mode:
+
+| Design | Nothing | Below 83 nm | Below 125 nm |
+|---|---:|---:|---:|
+| Rod | 1,006, Q 533,000 | 943, Q 22,000 | 16, Q 136 |
+| Air disc | 614, Q 296,000 | 601, Q 56,000 | 7, Q 79 |
+| Rod, robust | 1,034, Q 536,000 | 1,002, Q 287,000 | 6, Q 44 |
+| Air disc, robust | 599, Q 215,000 | 563, Q 21,000 | 9, Q 80 |
+
+Designing with a wider filter from the start, six starts each, which removes most thin parts but sets no strict limit, since isolated thin parts remain:
+
+| Design | LDOS: worst, median, best | Median Q | Below Q 10,000 | Shift per nm | Material below 125 nm |
+|---|---:|---:|---:|---:|---:|
+| No disc, filter 3 | 819, 1,036, 1,069 | 259,000 | 1 | 1.33% | 56% |
+| No disc, filter 4 | 6, 92, 370 | 369 | 5 | 0.65% | 4% |
+| Air disc, filter 3 | 579, 607, 611 | 643,000 | 0 | 0.26% | 37% |
+| Air disc, filter 4 | 79, 279, 517 | 7,700 | 3 | 0.27% | 6% |
+| Air disc, filter 6 | 8, 102, 345 | 1,600 | 5 | 0.24% | 1% |
+| Air disc 417 nm, filter 4 | 374, 492, 540 | 18,000 | 3 | 0.44% | 16% |
+| Air disc 417 nm, filter 6 | 128, 198, 316 | 2,100 | 5 | 0.37% | 6% |
+
+For comparison, the crystal's rods are 151 nm across, with LDOS 289. Bends over three starts, from 98%: removing what's below 83 nm leaves 95 to 98%, and below 125 nm, 5 to 87%. Filter sizes are in pixels. Six starts per row is few, and a poor result can be the optimizer's as much as the physics'. A strict minimum feature size hasn't been tried.
+
+The merge of the other session's work into this plan moved the cavity to chapter 17 and renamed `gradient.rs` and `resonance.rs`, and those names above are historical.
 
 ### After milestone 6, not yet ordered
 

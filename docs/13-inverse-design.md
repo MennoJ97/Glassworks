@@ -93,6 +93,8 @@ Optimizers are known to exploit a mesh's errors, so `optimized_bend_survives_a_f
 resolution, and it holds. Around it, the power entering and leaving a closed loop balances to 0.02%. Optimizing for a single wavelength
 reached only 43% to 82% at the band's edges, which is why this asks for three.
 
+This pattern also tolerates small errors. With every pixel edge moved at random, drawn exactly rather than as densities, three starts keep 97.8% to 98.3% at a spread of 1 nm and 94.7% to 98.7% at 5 nm, for a wavelength of 1 µm. At 10 nm they fall to 84.9% to 96.8%. It does rely on fine lines, though: removing what's thinner than 83 nm keeps 95% to 98%, while removing what's thinner than 125 nm leaves 5% to 87%. [Chapter 17](17-designing-a-cavity.md#would-it-work-if-you-built-it) tests a much more sensitive design the same way.
+
 The structure and its mesh scale with the middle of the band, so 1.9 to 2.1 µm gets the same design as 0.95 to 1.05 µm, at twice the
 size. Chapter 12 explains why that's exact.
 
