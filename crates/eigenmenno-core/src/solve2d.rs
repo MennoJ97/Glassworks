@@ -11,6 +11,7 @@
 
 mod adjoint;
 mod closed;
+mod dipole;
 mod driven;
 mod grating;
 mod leaky;
@@ -33,7 +34,9 @@ pub fn solve(req: &Request2d) -> Result<Output, String> {
         Analysis2d::Driven { wavelength, source, pml, average_q } => {
             driven::solve(req, wavelength, source, pml, average_q)
         }
-        Analysis2d::Resonance { target_k0, x, y, pml } => leaky::solve(req, target_k0, (x, y), pml),
+        Analysis2d::Resonance { target_k0, x, y, pml, dipole_deg } => {
+            leaky::solve(req, target_k0, (x, y), pml, dipole_deg)
+        }
         Analysis2d::Cavity { .. } | Analysis2d::Bands { .. } => closed::solve(req),
         Analysis2d::Grating { .. } => grating::solve(req),
     }

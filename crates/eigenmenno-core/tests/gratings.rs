@@ -142,9 +142,15 @@ fn scaling_a_grating_with_its_wavelength_changes_nothing() {
 #[test]
 fn a_grating_gradient_matches_finite_differences() {
     // At an angle, so the ties really do break A^T = A, and for orders on both sides.
-    for (transmitted, order) in [(true, 1), (false, -1), (true, 0)] {
+    for (transmitted, order, pol) in [
+        (true, 1, Polarization::Te),
+        (false, -1, Polarization::Te),
+        (true, 0, Polarization::Te),
+        (true, 1, Polarization::Tm),
+        (false, -1, Polarization::Tm),
+    ] {
         let make = |rho: &[f64]| {
-            let mut r = grating_request(1.0, 0.375, 20.0, Polarization::Te, 1.0 / 40.0, 1.0);
+            let mut r = grating_request(1.0, 0.375, 20.0, pol, 1.0 / 40.0, 1.0);
             r.shapes.truncate(1);
             r.density = Some(Density {
                 x0: 0.0,

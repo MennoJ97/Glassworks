@@ -43,6 +43,24 @@ pub(super) fn pixel_of(req: &Request2d, mesh: &Mesh, pml: f64, c: usize) -> Opti
         .then(|| (v * d.ny as f64) as usize * d.nx + (u * d.nx as f64) as usize)
 }
 
+/// `(p, q)` of a cell, where a density pixel mixes permittivities: `q = eps` for `E_z`, and
+/// `p = 1 / eps` for `H_z`.
+pub(super) fn cell_material(
+    req: &Request2d,
+    mesh: &Mesh,
+    coef: &[(C64, C64)],
+    pml: f64,
+    c: usize,
+) -> (C64, C64) {
+    let Some(pixel) = pixel_of(req, mesh, pml, c) else { return coef[mesh.region[c]] };
+    let d = req.density.as_ref().unwrap();
+    let eps = C64::new(d.eps_low + d.rho[pixel] * (d.eps_high - d.eps_low), 0.0);
+    match req.polarization {
+        Polarization::Te => (ONE, eps),
+        Polarization::Tm => (eps.inv(), ONE),
+    }
+}
+
 /// The operator at any `k0`, real or complex. Coordinates in the layer stretch by
 /// `s = 1 + i sigma / k`, which makes outgoing waves decay. With `sigma` growing
 /// quadratically into the layer, a wave crossing it and back loses a factor of about 1e-4.
@@ -80,11 +98,7 @@ pub(super) fn stretched_matrix(
         C64::new(1.0, 0.0) + I * strength * (sigma_max * depth * depth) / k
     };
     let t = assemble_split(space, dofs, |c| {
-        let (mut p, mut q) = coef[space.mesh.region[c]];
-        if let Some(pixel) = pixel_of(req, space.mesh, pml, c) {
-            let d = req.density.as_ref().unwrap();
-            (p, q) = (ONE, C64::new(d.eps_low + d.rho[pixel] * (d.eps_high - d.eps_low), 0.0));
-        }
+        let (p, q) = cell_material(req, space.mesh, coef, pml, c);
         let (x, y) = cell_center(space.mesh, c);
         let (sx, sy) = (stretch(x, req.width, side_layer(req, pml)), stretch(y, req.height, pml));
         (p * sy / sx, p * sx / sy, -k0 * k0 * q * sx * sy)
@@ -92,7 +106,7 @@ pub(super) fn stretched_matrix(
     Csr::from_triplets(dofs.n_free, t)
 }
 
-fn locate(space: &H1Triangle, x: f64, y: f64) -> Option<usize> {
+pub(super) fn locate(space: &H1Triangle, x: f64, y: f64) -> Option<usize> {
     (0..space.n_cells()).find(|&c| space.contains(c, x, y))
 }
 

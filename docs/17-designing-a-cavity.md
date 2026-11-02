@@ -20,7 +20,7 @@ and the gradient costs one more sum over cells. `ldos_gradient_matches_finite_di
 ## The first attempts
 
 Maximize the LDOS at a line source in the middle of a square, with Liang & Johnson's idea
-([Liang & Johnson 2013](19-references.md#liang-johnson-2013)): use chapter 11's complex frequency, and start at a low $Q$, whose
+([Liang & Johnson 2013](20-references.md#liang-johnson-2013)): use chapter 11's complex frequency, and start at a low $Q$, whose
 smooth average gives the optimizer something to climb. Raising $Q$ in stages narrows the bandwidth, and leads it toward a sharp
 resonance. The gradient is the one that needs no extra solve.
 

@@ -500,7 +500,8 @@ fn complex_frequency_is_a_lorentzian_average_of_real_ones() {
 fn leaky_mode_matches_the_ldos_peak_and_q_grows_with_the_crystal() {
     let mode = |n: usize| {
         let c = n as f64 / 2.0;
-        let analysis = Analysis2d::Resonance { target_k0: 2.0 * PI * 0.38, x: c, y: c, pml: 1.3 };
+        let analysis =
+            Analysis2d::Resonance { target_k0: 2.0 * PI * 0.38, x: c, y: c, pml: 1.3, dipole_deg: None };
         let o =
             eigenmenno_core::solve2d::solve(&defect_crystal(n, 1.0 / 12.0, Boundary::Absorbing, analysis))
                 .unwrap();
@@ -542,7 +543,7 @@ fn leaky_mode_matches_the_ldos_peak_and_q_grows_with_the_crystal() {
 #[test]
 fn an_empty_domain_has_no_leaky_mode() {
     let r = Request2d {
-        analysis: Analysis2d::Resonance { target_k0: 4.0, x: 1.0, y: 1.0, pml: 0.5 },
+        analysis: Analysis2d::Resonance { target_k0: 4.0, x: 1.0, y: 1.0, pml: 0.5, dipole_deg: None },
         ..ldos_request(vec![], 4.0, None)
     };
     assert!(eigenmenno_core::solve2d::solve(&r).is_err());
@@ -955,9 +956,6 @@ fn density_gradient_matches_finite_differences() {
 
 #[test]
 fn density_requests_are_checked() {
-    let mut wrong = density_bend(vec![0.5; 144]);
-    wrong.polarization = Polarization::Tm;
-    assert!(eigenmenno_core::solve2d::solve(&wrong).is_err());
     assert!(eigenmenno_core::solve2d::solve(&density_bend(vec![0.5; 3])).is_err());
     let mut unmeasured = density_bend(vec![0.5; 144]);
     unmeasured.monitors.clear();
@@ -1168,7 +1166,7 @@ fn square_rod_cavity(d: f64, cell: f64, target_k0: f64) -> Request2d {
         shapes,
         polarization: Polarization::Te,
         walls: Boundary::Absorbing,
-        analysis: Analysis2d::Resonance { target_k0, x: 3.5, y: 3.5, pml: 1.0 },
+        analysis: Analysis2d::Resonance { target_k0, x: 3.5, y: 3.5, pml: 1.0, dipole_deg: None },
         monitors: vec![],
         density: None,
     }

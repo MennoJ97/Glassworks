@@ -194,3 +194,28 @@ test('a cavity beats the crystal in its footprint, on target, and as drawn recta
   assert.ok(Math.abs(last.mode.wavelength - 1) < 2e-3, `mode at ${last.mode.wavelength}`);
   assert.ok(last.mode.q > 1000, `Q ${last.mode.q}`);
 });
+
+test('in H_z, a bend beats a sharp corner, staying in one wider guide', async () => {
+  const s = { ...state('bend2d'), polarization: 'tm' };
+  const { seen, grey } = await run(s);
+  assert.ok(grey < 0.05, `grey ${grey}`);
+  const [, corner] = await referenceValues(s);
+  // Six starts in plans/2d-solver.md reach 94 to 98%.
+  assert.ok(corner < 0.5, `corner ${corner}`);
+  assert.ok(seen.at(-1) > 0.93, `T ${seen.at(-1)}`);
+});
+
+test('in H_z, a cavity beats a crystal of air holes, seen by an electric dipole', async () => {
+  const s = { ...cavityState(), polarization: 'tm' };
+  let last = null;
+  const failure = await optimize(s, solve, (step) => { last = step; return true; });
+  assert.equal(failure?.error, undefined);
+  assert.equal(last.beta, Infinity);
+  const ldos = meanReflection(last.reply.results);
+  const [crystal] = await referenceValues(s);
+  // In plans/2d-solver.md, the crystal reads 371, and nine starts 200 to 681. This start reads 681 here, and 507 in a browser, from round-off.
+  assert.ok(crystal > 300 && crystal < 420, `crystal ${crystal}`);
+  assert.ok(ldos > 1.2 * crystal, `${ldos} against ${crystal}`);
+  assert.ok(Math.abs(last.mode.wavelength - 1) < 5e-3, `mode at ${last.mode.wavelength}`);
+  assert.ok(last.mode.q > 1000, `Q ${last.mode.q}`);
+});

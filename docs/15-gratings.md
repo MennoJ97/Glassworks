@@ -40,7 +40,7 @@ Here $k_{y,\min}$ belongs to the most grazing propagating order and $\kappa_{\mi
 
 ## Checking it
 
-The reference is the Fourier modal method ([Moharam et al. 1995](19-references.md#moharam-1995)), in `plans/probe-grating/rcwa.py`. It expands fields in plane waves, with no mesh and no absorbing layer, so it shares nothing with this solver. For a ridge of index 2.5 on glass, with $L = 1.5\lambda$ at $20°$, on cells of $\lambda/80$ and one wavelength of layer:
+The reference is the Fourier modal method ([Moharam et al. 1995](20-references.md#moharam-1995)), in `plans/probe-grating/rcwa.py`. It expands fields in plane waves, with no mesh and no absorbing layer, so it shares nothing with this solver. For a ridge of index 2.5 on glass, with $L = 1.5\lambda$ at $20°$, on cells of $\lambda/80$ and one wavelength of layer:
 
 | Order | $E_z$ here | $E_z$ reference | $H_z$ here | $H_z$ reference |
 |---:|---:|---:|---:|---:|

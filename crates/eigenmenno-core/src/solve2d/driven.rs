@@ -1,6 +1,7 @@
 //! Driven solves in an open domain: a line source, a plane wave or a port, and what monitors read.
 
 use super::adjoint::density_gradient;
+use super::dipole;
 use super::open::{
     cell_center, cell_load, line_response, open_dofs, open_matrix, open_mesh, open_output, point_load,
 };
@@ -43,6 +44,13 @@ pub(super) fn solve(
             measured = Some([response.re, response.im]);
             dofs.expand(&u)
         }
+        Source2d::Dipole { x, y, angle_deg } => {
+            let load = dipole::load(req, &space, &dofs, &coef, pml, (x + pml, y + pml, angle_deg), k0)?;
+            let (u, response) = line_response(&lu, a.n, &load, k);
+            ldos = Some(2.0 * response.re);
+            measured = Some([response.re, response.im]);
+            dofs.expand(&u)
+        }
         Source2d::PlaneWave { angle_deg } => plane_wave(&space, &dofs, &coef, &lu, k0, k, angle_deg, pml),
         Source2d::Port { x, y0, y1 } => port(req, &space, &dofs, &coef, &lu, k0, k, (x, y0, y1), pml)?,
     };
@@ -54,7 +62,12 @@ pub(super) fn solve(
         monitor_power(&space, &coef, &u, k0, req.cell, pml, &req.monitors, &mut bu)?,
     ));
     if let Some(density) = &req.density {
-        let (gradient, imaginary) = density_gradient(req, density, &space, &dofs, &lu, pml, k, &u, &bu);
+        let (mut gradient, mut imaginary) =
+            density_gradient(req, density, &space, &dofs, &lu, pml, k, &u, &bu);
+        if let Source2d::Dipole { x, y, angle_deg } = source {
+            let at = (x + pml, y + pml, angle_deg);
+            dipole::add_source_slope(req, density, &space, pml, at, k0, &u, &mut gradient, &mut imaginary)?;
+        }
         out.channels.push(("gradient".into(), gradient));
         // For the LDOS, the two together are the slope of `-2 u_0`, and so of a resonance's `k`.
         out.channels.push(("gradient_im".into(), imaginary));

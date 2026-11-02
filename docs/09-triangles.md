@@ -51,7 +51,7 @@ With $p = 2$ that's a factor of 16 per halving, and a square cavity's error fall
 ## A mesh that fits the shapes
 
 A general mesher, such as [Triangle](https://www.cs.cmu.edu/~quake/triangle.html)
-([Shewchuk 1996](19-references.md#shewchuk-1996)), could handle any geometry. Here a simpler idea
+([Shewchuk 1996](20-references.md#shewchuk-1996)), could handle any geometry. Here a simpler idea
 goes a long way, and it has a useful property that a general mesher lacks.
 
 Start from a structured grid. On a **staircase** mesh, each cell takes the material at its centre,
@@ -105,7 +105,7 @@ unchanged.
 A **band diagram** repeats that eigenproblem for wavevectors around the edge of the irreducible
 Brillouin zone: from $\Gamma$ ($\mathbf{k} = 0$) to X to M and back to $\Gamma$. For a square lattice, the
 extremes of the bands are usually found on this path, though this isn't guaranteed
-([Harrison et al. 2007](19-references.md#harrison-2007)). Only the phases change between
+([Harrison et al. 2007](20-references.md#harrison-2007)). Only the phases change between
 wavevectors, so where the nonzeros are stays the same, which the next chapter exploits.
 
 ### Example: a lattice of rods

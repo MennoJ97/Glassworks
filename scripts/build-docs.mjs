@@ -23,8 +23,8 @@ const math = (tex, displayMode) =>
     .replace(/<mi mathvariant="bold">([A-Za-z]+)<\/mi>/g, (_, letters) => `<mi>${[...letters].map(boldLetter).join('')}</mi>`);
 
 const sources = [
-  ...['mesh', 'space', 'assemble', 'banded', 'eigen', 'problem', 'output', 'solve1d', 'sparse', 'sparse/symmetric', 'sparse/transposed', 'solve2d', 'solve2d/closed', 'solve2d/open', 'solve2d/driven', 'solve2d/leaky', 'solve2d/adjoint', 'solve2d/grating', 'solve2d/validate'].map((n) => `crates/eigenmenno-core/src/${n}.rs`),
-  ...['analytic', 'analytic2d', 'gratings', 'cross_check'].map((n) => `crates/eigenmenno-core/tests/${n}.rs`),
+  ...['mesh', 'space', 'assemble', 'banded', 'eigen', 'problem', 'output', 'solve1d', 'sparse', 'sparse/symmetric', 'sparse/transposed', 'solve2d', 'solve2d/closed', 'solve2d/open', 'solve2d/driven', 'solve2d/leaky', 'solve2d/adjoint', 'solve2d/grating', 'solve2d/dipole', 'solve2d/validate'].map((n) => `crates/eigenmenno-core/src/${n}.rs`),
+  ...['analytic', 'analytic2d', 'gratings', 'hz_design', 'cross_check'].map((n) => `crates/eigenmenno-core/tests/${n}.rs`),
 ];
 
 // A citation pointing at a missing reference has to fail the build too.

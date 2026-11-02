@@ -38,8 +38,9 @@ Each of these stands on its own, so read any that interest you, or none.
 16. [Making it faster](16-making-it-faster.md): what was tried, and which of it was worth keeping
 17. [Designing a cavity](17-designing-a-cavity.md): holding a resonance still while the optimizer works
 18. [When numbers lie](18-when-numbers-lie.md): two results that looked wrong, or looked fine and weren't
+19. [Designing in the other polarization](19-designing-in-hz.md): bends and cavities in $H_z$, where a chip's light usually is
 
-The [references](19-references.md) list every source cited in the chapters.
+The [references](20-references.md) list every source cited in the chapters.
 
 ## Where the code lives
 
@@ -65,3 +66,4 @@ The files follow the chapters. Whatever only a Going further chapter needs has a
 | 15 | [`solve2d/grating.rs`](../crates/eigenmenno-core/src/solve2d/grating.rs), [`sparse/transposed.rs`](../crates/eigenmenno-core/src/sparse/transposed.rs), [`tests/gratings.rs`](../crates/eigenmenno-core/tests/gratings.rs) |
 | 16 | [`sparse/symmetric.rs`](../crates/eigenmenno-core/src/sparse/symmetric.rs) |
 | 17 | `web/js/cavity-design.js`, on the website rather than in the solver |
+| 19 | [`solve2d/dipole.rs`](../crates/eigenmenno-core/src/solve2d/dipole.rs), [`tests/hz_design.rs`](../crates/eigenmenno-core/tests/hz_design.rs) |

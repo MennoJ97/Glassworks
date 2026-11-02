@@ -14,19 +14,29 @@ pub(super) fn validate(req: &Request2d) -> Result<(), String> {
     if let Some(d) = &req.density {
         let plane_wave =
             matches!(req.analysis, Analysis2d::Driven { source: Source2d::PlaneWave { .. }, .. });
-        let line = matches!(req.analysis, Analysis2d::Driven { source: Source2d::Line { .. }, .. });
+        let line = matches!(
+            req.analysis,
+            Analysis2d::Driven { source: Source2d::Line { .. } | Source2d::Dipole { .. }, .. }
+        );
         let grating = matches!(req.analysis, Analysis2d::Grating { goal: Some(_), .. });
         if !(matches!(req.analysis, Analysis2d::Driven { .. }) || grating)
             || plane_wave
-            || req.polarization != Polarization::Te
             || (req.monitors.is_empty() && !line && !grating)
         {
-            return Err("a density map needs a driven E_z solve from a line source or port, and a monitor unless it's a line source, or a grating with a goal".into());
+            return Err("a density map needs a driven solve from a line source, dipole or port, with a monitor for a port, or a grating with a goal".into());
         }
         if d.rho.len() != d.nx * d.ny
             || !(d.width > 0.0 && d.height > 0.0 && d.eps_low > 0.0 && d.eps_high > 0.0)
         {
             return Err("the density map's size or materials are invalid".into());
+        }
+        // A monitor reads `p` by shape, which isn't `H_z`'s `p` inside the pixels.
+        let inside =
+            |x: f64, y: f64| (d.x0..=d.x0 + d.width).contains(&x) && (d.y0..=d.y0 + d.height).contains(&y);
+        if req.polarization == Polarization::Tm
+            && req.monitors.iter().any(|m| inside(m.x0, m.y0) || inside(m.x1, m.y1))
+        {
+            return Err("an H_z monitor must stay outside a density map".into());
         }
         // A pixel edge through a cell would make its material depend on where the cell's centre
         // falls, which an optimizer can exploit, and which no drawn structure would reproduce.
@@ -63,7 +73,10 @@ pub(super) fn validate(req: &Request2d) -> Result<(), String> {
     if !driven && matches!(req.walls, Boundary::Absorbing | Boundary::Port) {
         return Err("2D eigenmode analyses need PEC, PMC or periodic walls".into());
     }
-    if let Analysis2d::Resonance { target_k0, x, y, pml } = req.analysis {
+    if let Analysis2d::Resonance { target_k0, x, y, pml, dipole_deg } = req.analysis {
+        if dipole_deg.is_some() && req.polarization != Polarization::Tm {
+            return Err("a dipole in the plane needs H_z, since its field has no E_z".into());
+        }
         if req.walls != Boundary::Absorbing || !(target_k0 > 0.0 && pml > 0.0) {
             return Err("2D leaky modes need absorbing walls, a positive target and a positive PML".into());
         }
@@ -83,10 +96,13 @@ pub(super) fn validate(req: &Request2d) -> Result<(), String> {
             return Err("averaging over frequency needs a line source and a positive Q".into());
         }
         match source {
-            Source2d::Line { x, y }
+            Source2d::Line { x, y } | Source2d::Dipole { x, y, .. }
                 if !(0.0..=req.width).contains(&x) || !(0.0..=req.height).contains(&y) =>
             {
                 return Err("the source lies outside the domain".into());
+            }
+            Source2d::Dipole { .. } if req.polarization != Polarization::Tm => {
+                return Err("a dipole in the plane needs H_z, since its field has no E_z".into());
             }
             // The incident wave is defined in the background, so scatterers can't reach the absorber.
             Source2d::PlaneWave { .. }

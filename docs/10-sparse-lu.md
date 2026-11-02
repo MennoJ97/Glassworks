@@ -16,7 +16,7 @@ $N^{3/2}$ entries and costs about $N^2$ operations. At 40,000 unknowns it took 9
 ## Nested dissection
 
 The order of elimination decides the fill, so let's choose it from the geometry
-([George 1973](19-references.md#george-1973)).
+([George 1973](20-references.md#george-1973)).
 
 Cut the mesh in half with a line of nodes. Those nodes are a **separator**: nothing on the left
 touches anything on the right except through them. If we number the separator last, then eliminating
@@ -25,7 +25,7 @@ each half, and each quarter, and so on, which makes a tree of ever smaller separ
 
 Now the expensive part is only the separators, and most of them are small. For a 2D mesh, the
 factorization costs about $N^{3/2}$ operations rather than $N^2$, and storage about $N\log N$. No
-ordering of such a mesh can do better than $N^{3/2}$ ([George 1973](19-references.md#george-1973)).
+ordering of such a mesh can do better than $N^{3/2}$ ([George 1973](20-references.md#george-1973)).
 
 [`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) does this with a few decisions that keep it short:
 

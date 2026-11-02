@@ -33,7 +33,7 @@ matches $F/4$, with the LDOS $F$ from chapter 11, within 0.3%.
 
 ### Example: a sharp bend
 
-[Mekis et al. 1996](19-references.md#mekis-1996) showed that a photonic crystal can steer light around a
+[Mekis et al. 1996](20-references.md#mekis-1996) showed that a photonic crystal can steer light around a
 corner of zero radius. Their crystal has rods of index 3.4 and radius $0.18a$ on a square lattice, with a row
 removed to make the guide. No extended mode exists in the band gap for light to radiate into, so what doesn't
 get through must come back.

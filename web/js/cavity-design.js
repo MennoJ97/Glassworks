@@ -4,7 +4,7 @@
 import { scaled } from './model.js';
 import { Mma, coneFilter2d, project, randomStart } from './optimizer.js';
 
-// A square of pixels around a line source, in units of the wavelength, as big as 7 x 7 rods.
+// A square of pixels around an emitter, in units of the wavelength, as big as 7 x 7 rods.
 // `stages` raises the bandwidth's Q to a level a sharpening design can follow, then sharpens.
 export const CAVITY_Q = 1000;
 export const CAVITY = {
@@ -22,13 +22,16 @@ export function cavityGeometry(wavelength) {
   const size = cavitySide + 2 * margin;
   return scaled({
     size, shapes: [],
-    source: { type: 'line', x: size / 2, y: size / 2 },
     mark: [size / 2, size / 2],
     region: { x0: margin, y0: margin, width: cavitySide, height: cavitySide, nx: CAVITY.pixels, ny: CAVITY.pixels },
   }, wavelength);
 }
 
-// What the plot needs for a 2D design.
+// An emitter's electric field: a line source for E_z, and for H_z, a dipole in the plane, since
+// a line source there is a magnetic current.
+const emitter = (s, g) => (s.polarization === 'tm'
+  ? { type: 'dipole', x: g.mark[0], y: g.mark[1], angle_deg: 0 }
+  : { type: 'line', x: g.mark[0], y: g.mark[1] });
 
 export function cavityRequest(s, rho, Q, wavelength = s.wavelength) {
   const scale = s.wavelength * (tuned.get(rho) ?? 1);
@@ -39,10 +42,10 @@ export function cavityRequest(s, rho, Q, wavelength = s.wavelength) {
     cell: (cavitySide * scale) / CAVITY.pixels,
     background: { eps: 1, mu: 1 },
     shapes: [],
-    polarization: 'te',
+    polarization: s.polarization,
     walls: 'absorbing',
     monitors: [],
-    analysis: { type: 'driven', wavelength, source: g.source, pml: CAVITY.pml * scale, average_q: Q },
+    analysis: { type: 'driven', wavelength, source: emitter(s, g), pml: CAVITY.pml * scale, average_q: Q },
     density: { ...g.region, eps_low: 1, eps_high: CAVITY.eps, rho: Array.from(rho) },
   };
 }
@@ -54,23 +57,45 @@ const over = (a, b) => {
 };
 const complexK = (wavelength, Q) => [(2 * Math.PI) / wavelength, Math.PI / (wavelength * Q)];
 
+const plus = (a, b) => [a[0] + b[0], a[1] + b[1]];
+const minus = (a, b) => [a[0] - b[0], a[1] - b[1]];
+
+// `r = B + R / (k - p)` through three points, as `B` and `R`, and `p`. It rearranges to a straight
+// line in the unknowns `(p, B, C)`, with `r k = r p + B k - C`, which Cramer's rule solves.
+function fitPole(points) {
+  const det3 = (m) => [[0, 1, 2], [1, 2, 0], [2, 0, 1]].reduce((sum, [i, j, l]) => plus(sum, times(m[0][i], minus(times(m[1][j], m[2][l]), times(m[1][l], m[2][j])))), [0, 0]);
+  const rows = points.map(({ r, k }) => [r, k, [-1, 0]]);
+  const rhs = points.map(({ r, k }) => times(r, k));
+  const swap = (col) => rows.map((row, i) => row.map((v, j) => (j === col ? rhs[i] : v)));
+  const d = det3(rows);
+  const [p, B, C] = [0, 1, 2].map((col) => over(det3(swap(col)), d));
+  return { pole: p, background: B, residue: minus(times(B, p), C) };
+}
+
 // Where a design's resonance is, and how each density moves it. Close to a pole, 1 / u_0 is
 // nearly linear in k, so two solves place it. The solver's two gradient channels are the slope
-// of `2 u_0`, which through `1 / u_0` is also the slope of the pole's own k.
+// of `2 u_0`, which through `1 / u_0` is also the slope of the pole's own k. A dipole's response
+// also holds a large background from its near field, so it takes three solves to fit that too.
 export async function findResonance(s, rho, Q, solve, wavelength = s.wavelength) {
-  const beside = wavelength * (1 + 1 / (4 * Q) + 1e-3);
-  const reply = await solve([cavityRequest(s, rho, Q, wavelength), cavityRequest(s, rho, Q, beside)]);
+  const offset = 1 / (4 * Q) + 1e-3;
+  const dipole = s.polarization === 'tm';
+  const wavelengths = [wavelength, wavelength * (1 + offset), ...(dipole ? [wavelength * (1 - offset)] : [])];
+  const reply = await solve(wavelengths.map((w) => cavityRequest(s, rho, Q, w)));
   if (!reply || reply.error) return { reply };
-  const [here, there] = reply.results;
-  const response = here.meta.fields[0].response;
-  const [k, kBeside] = [complexK(wavelength, Q), complexK(beside, Q)];
-  const [g, gBeside] = [over([1, 0], response), over([1, 0], there.meta.fields[0].response)];
-  const slope = over([kBeside[0] - k[0], kBeside[1] - k[1]], [gBeside[0] - g[0], gBeside[1] - g[1]]);
-  const factor = times(slope, over([1, 0], times(response, response)));
+  const here = reply.results[0];
+  const points = reply.results.map((result, i) => ({ r: result.meta.fields[0].response, k: complexK(wavelengths[i], Q) }));
   const { gradient, gradient_im: imaginary } = here.channels;
+  const resonant = dipole ? fitPole(points) : null;
+  // The pole's own slope is `R / r^2` times the response's, with `r` less any background.
+  const r = dipole ? minus(points[0].r, resonant.background) : points[0].r;
+  const g = over([1, 0], r);
+  const slope = dipole
+    ? resonant.residue
+    : over(minus(points[1].k, points[0].k), minus(over([1, 0], points[1].r), g));
+  const factor = times(slope, over([1, 0], times(r, r)));
   return {
     reply: { ...reply, results: [here] },
-    poleK: k[0] - times(g, slope)[0],
+    poleK: dipole ? resonant.pole[0] : points[0].k[0] - times(g, slope)[0],
     moves: Float64Array.from(gradient, (re, i) => (factor[0] * re - factor[1] * imaginary[i]) / 2),
   };
 }
@@ -135,16 +160,31 @@ export async function optimizeCavity(s, solve, onStep) {
   }
   const rho = project(filter.apply(symmetric(x)), 1000).rho.map((v) => (v > 0.5 ? 1 : 0));
   // Find the peak, and place it precisely, then resize so that it's on the target.
-  const scan = Array.from({ length: 21 }, (_, i) => s.wavelength * (0.96 + 0.004 * i));
+  // Grey pixels matter more to H_z, whose field crosses their edges, so removing them moves its
+  // mode further: nine starts were resized by up to 10.4%, where E_z needs 1.2%.
+  const scan = s.polarization === 'tm'
+    ? Array.from({ length: 61 }, (_, i) => s.wavelength * (0.85 + 0.005 * i))
+    : Array.from({ length: 21 }, (_, i) => s.wavelength * (0.96 + 0.004 * i));
   const swept = await solve(scan.map((wavelength) => cavityRequest(s, rho, 100, wavelength)));
   if (!swept || swept.error) return swept;
   const strengths = swept.results.map((r, i) => r.meta.fields[0].ldos * scan[i]);
   let peak = scan[strengths.indexOf(Math.max(...strengths))];
-  for (const Q of [100, 300, 1000, 1000]) {
-    const { reply, poleK } = await findResonance(s, rho, Q, solve, peak);
-    if (!reply || reply.error) return reply;
-    const next = (2 * Math.PI) / poleK;
-    if (Math.abs(next - peak) < 0.02 * peak) peak = next;
+  if (s.polarization === 'tm') {
+    // A dipole's background makes the fit below less sure of a broad mode, so narrow in by LDOS.
+    for (const Q of [300, 1000, 3000]) {
+      const near = Array.from({ length: 9 }, (_, i) => peak * (1 + ((i - 4) * 0.5) / Q));
+      const local = await solve(near.map((wavelength) => cavityRequest(s, rho, Q, wavelength)));
+      if (!local || local.error) return local;
+      const values = local.results.map((r, i) => r.meta.fields[0].ldos * near[i]);
+      peak = near[values.indexOf(Math.max(...values))];
+    }
+  } else {
+    for (const Q of [100, 300, 1000, 1000]) {
+      const { reply, poleK } = await findResonance(s, rho, Q, solve, peak);
+      if (!reply || reply.error) return reply;
+      const next = (2 * Math.PI) / poleK;
+      if (Math.abs(next - peak) < 0.02 * peak) peak = next;
+    }
   }
   tuned.set(rho, s.wavelength / peak);
   const reply = await solve([cavityRequest(s, rho, CAVITY.Q)]);
@@ -152,7 +192,7 @@ export async function optimizeCavity(s, solve, onStep) {
   // Checks it as a drawn structure, with the search for leaky modes, which shares nothing of this.
   const scale = tuned.get(rho) * s.wavelength;
   const g = cavityGeometry(scale);
-  const found = await solve([{ width: g.size, height: g.size, cell: g.region.width / CAVITY.pixels, background: { eps: 1, mu: 1 }, shapes: cavityShapes(rho, scale), polarization: 'te', walls: 'absorbing', monitors: [], analysis: { type: 'resonance', target_k0: target, x: g.source.x, y: g.source.y, pml: CAVITY.pml * scale } }]);
+  const found = await solve([{ width: g.size, height: g.size, cell: g.region.width / CAVITY.pixels, background: { eps: 1, mu: 1 }, shapes: cavityShapes(rho, scale), polarization: s.polarization, walls: 'absorbing', monitors: [], analysis: { type: 'resonance', target_k0: target, x: g.mark[0], y: g.mark[1], pml: CAVITY.pml * scale, dipole_deg: s.polarization === 'tm' ? 0 : null } }]);
   const field = found?.results?.[0]?.meta.fields[0];
   const mode = field && { wavelength: (2 * Math.PI) / field.k0, q: field.q, volume: field.volume / s.wavelength ** 2 };
   onStep({ rho, reply, iteration, beta: Infinity, mode, bandwidth: CAVITY.Q });

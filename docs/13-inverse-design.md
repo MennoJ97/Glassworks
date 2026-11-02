@@ -34,8 +34,8 @@ $$\delta P = -2\,\mathrm{Re}(w^T \delta A\,u), \qquad A^T w = \overline{B\,u}.$$
 
 One solve for $w$ prices every pixel. It costs even less than that sounds. Chapter 11 noted that $A$ is complex symmetric,
 even inside the absorbing layer, so $A^T = A$, and $w$ only needs a back-substitution with the factors we already have.
-For a pixel, $\delta A$ is just $-k_0^2\,\delta\varepsilon$ times its mass matrix, so each pixel's slope is a small
-sum over its cells. `density_gradient_matches_finite_differences` checks this.
+For a pixel in $E_z$, $\delta A$ is just $-k_0^2\,\delta\varepsilon$ times its mass matrix, so each pixel's slope is a small
+sum over its cells. Chapter 19 does the same for $H_z$, the polarization most planar chips use. `density_gradient_matches_finite_differences` checks this.
 
 ## From grey to sharp
 
@@ -55,7 +55,7 @@ the problem nearly impossible, since every pixel's slope would be zero or huge, 
 structure sharpens gradually. The slope of $\hat\rho$ joins the chain rule.
 
 **Optimizer.** With thousands of unknowns and an expensive function, a good step matters. The **method of moving asymptotes**
-([Svanberg 1987](19-references.md#svanberg-1987)) replaces the objective with a simple convex model for each variable,
+([Svanberg 1987](20-references.md#svanberg-1987)) replaces the objective with a simple convex model for each variable,
 built from its slope and two asymptotes on either side, and minimizing that has a closed form. A variable that keeps
 oscillating gets tighter asymptotes, and a steady one gets looser ones. Since projection amplifies a change in density
 by up to about $\beta/2$, the largest step allowed shrinks as $\beta$ grows.
@@ -71,7 +71,7 @@ is exactly the same matrix as the same shapes drawn by hand.
 Take a slab of index 3.5 and width $0.125\lambda$, with a monitor far along the output. A plain sharp corner passes 23 to 34% of the
 light. Now cut out a square one wavelength wide at that corner, which leaves two guides ending at an empty region that passes about
 5%, and give that square to the optimizer, with three wavelengths to serve at once
-([Jensen & Sigmund 2004](19-references.md#jensen-sigmund-2004) did this kind of thing for photonic crystal bends). A
+([Jensen & Sigmund 2004](20-references.md#jensen-sigmund-2004) did this kind of thing for photonic crystal bends). A
 pattern from a longer run gives:
 
 | Wavelength | Empty region | Sharp corner, 72 cells per $\lambda$ | Optimized, 24 cells per $\lambda$ | Optimized, 48 cells per $\lambda$ |

@@ -10,9 +10,11 @@ const PIXEL = 0.005;
 const AMBIENT = 0.3;
 const SHARPNESS = [1, 2, 4, 8, 16, 32, 64, 128];
 const ITERATIONS_PER_STAGE = 40;
-// A 2D solve costs far more than a 1D one, and these converge sooner: 25 did no better
+// A 2D solve costs far more than a 1D one, and these converge sooner: for E_z, 25 did no better
 // over three starts, while 7 sometimes fell short, and so did skipping every other sharpness.
-export const stageLength = (s) => (s.analysis === 'cavityDesign' ? CAVITY.iterations : s.analysis === 'bend2d' ? 10 : ITERATIONS_PER_STAGE);
+// H_z converges more slowly: its mean over three starts rose from 81% at 10 to 96% at 40.
+const bendIterations = (s) => (s.polarization === 'tm' ? 40 : 10);
+export const stageLength = (s) => (s.analysis === 'cavityDesign' ? CAVITY.iterations : s.analysis === 'bend2d' ? bendIterations(s) : ITERATIONS_PER_STAGE);
 const sharpnessOf = (s) => (s.analysis === 'cavityDesign' ? CAVITY.stages.map(([, beta]) => beta) : SHARPNESS);
 export const totalIterations = (s) => sharpnessOf(s).length * stageLength(s);
 export const STAGES = SHARPNESS.map((beta, i) => ({ frame: i * ITERATIONS_PER_STAGE, name: `β ${beta}` }));
@@ -27,7 +29,7 @@ export const pixelCount = (d) => (d.cavity ? CAVITY.pixels ** 2 : d.thickness ==
 // A slab of index 3.5 turning a corner through a square of pixels, in units of the band's
 // centre wavelength, so a band anywhere gets the same design at its own size.
 // Everything lies on a grid of 1/24, so each pixel is a whole number of pairs of triangles.
-const BEND = { pixels: 24, x0: 1, y0: 0.5, size: 1, width: 0.125, domain: 2.5, n: 3.5, pml: 0.5, span: 0.35 };
+const BEND = { pixels: 24, x0: 1, y0: 0.5, size: 1, domain: 2.5, n: 3.5, pml: 0.5, span: 0.35 };
 const bendCentre = { x: BEND.x0 + BEND.size / 2, y: BEND.y0 + BEND.size / 2 };
 const rectangle = (x0, y0, x1, y1) => ({ type: 'rect', x: (x0 + x1) / 2, y: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, n: BEND.n });
 
@@ -42,17 +44,23 @@ function bendRefinement(s) {
   return { refine, cells: (shortest * refine) / (BEND.n * cell) };
 }
 
-// Why a band's percentages can't be trusted, if they can't. A slab this wide carries a
-// second mode below 0.84 of the centre, and the port launches only the first.
+// A thin slab barely holds H_z, whose electric field crosses its walls: at 0.125 its effective
+// index is 1.32, against 2.73 for E_z. Twice as wide gives H_z a similar 2.92, so that the two
+// polarizations ask comparable things of a design.
+const bendWidth = (polarization) => (polarization === 'tm' ? 0.25 : 0.125);
+
+// Why a band's percentages can't be trusted, if they can't. Below 0.84 of the centre, the slab
+// carries a mode more than it does at the centre, and the port launches only the first.
 export function bendWarning(s) {
   if (bendRefinement(s).cells < 4) return 'This band is too wide for the mesh to resolve its short end, so these percentages aren\'t reliable.';
-  if (s.design.bend2d.from / bendScale(s) < 0.84) return 'The guide carries a second mode at the short end of this band, so these percentages are less reliable there. A narrower band avoids that.';
+  if (s.design.bend2d.from / bendScale(s) < 0.84) return 'The guide carries another mode at the short end of this band, so these percentages are less reliable there. A narrower band avoids that.';
   return null;
 }
 
 // What the plot needs, and each solve shares.
-export function bendGeometry(straight, scale, meeting) {
-  const { x0, y0, size, width, domain, span } = BEND;
+export function bendGeometry(straight, scale, polarization, meeting) {
+  const { x0, y0, size, domain, span } = BEND;
+  const width = bendWidth(polarization);
   const { x, y } = bendCentre;
   const far = domain + 3;
   const shapes = straight
@@ -72,7 +80,7 @@ export function bendGeometry(straight, scale, meeting) {
 
 function bendRequest(s, wavelength, straight, rho, meeting) {
   const scale = bendScale(s);
-  const g = bendGeometry(straight, scale, meeting);
+  const g = bendGeometry(straight, scale, s.polarization, meeting);
   const n2 = BEND.n ** 2;
   return {
     width: g.size,
@@ -80,7 +88,7 @@ function bendRequest(s, wavelength, straight, rho, meeting) {
     cell: (BEND.size * scale) / BEND.pixels / bendRefinement(s).refine,
     background: { eps: 1, mu: 1 },
     shapes: g.shapes.map(toShape),
-    polarization: 'te',
+    polarization: s.polarization,
     walls: 'absorbing',
     monitors: [g.monitor],
     analysis: { type: 'driven', wavelength, source: g.source, pml: BEND.pml * scale },
@@ -102,7 +110,7 @@ export async function prepareDesign(s, solve) {
 }
 
 export const designGeometry = (s, rho) => (s.analysis === 'bend2d'
-  ? bendGeometry(false, bendScale(s))
+  ? bendGeometry(false, bendScale(s), s.polarization)
   : cavityGeometry(s.wavelength * (tuned.get(rho) ?? 1)));
 
 // Goal wavelengths, with the centre last so the plotted field comes from it.
@@ -151,26 +159,53 @@ const measure = ({ meta, channels }) => (meta.fields[0].ldos != null
   : meta.fields[0].power[0]);
 export const meanReflection = (results) => results.reduce((sum, r) => sum + measure(r), 0) / results.length;
 
+// E_z's crystal: rods with one removed. A period of 0.3781 puts its mode on the wavelength.
+function rodCrystal(s) {
+  const a = 0.3781 * s.wavelength;
+  const { margin, pml } = CAVITY;
+  const edge = margin * s.wavelength;
+  const rods = [];
+  for (let i = 0; i < 49; i++) {
+    if (i !== 24) rods.push({ type: 'circle', x: edge + (i % 7 + 0.5) * a, y: edge + (Math.floor(i / 7) + 0.5) * a, w: 0.4 * a, h: 0.4 * a, n: Math.sqrt(CAVITY.eps) });
+  }
+  const size = 7 * a + 2 * edge;
+  return {
+    name: 'Crystal of 7 x 7 rods',
+    requests: [{
+      width: size, height: size, cell: a / 12, background: { eps: 1, mu: 1 }, shapes: rods.map(toShape), polarization: 'te', walls: 'absorbing', monitors: [],
+      analysis: { type: 'driven', wavelength: s.wavelength, source: { type: 'line', x: size / 2, y: size / 2 }, pml: pml * s.wavelength, average_q: CAVITY.Q },
+    }],
+  };
+}
+
+// H_z's crystal, since rods have no use for it: a triangular lattice of air holes filling the
+// design's own square, with the middle one filled. The best period and hole size found by scanning.
+function holeCrystal(s) {
+  const a = 0.2759 * s.wavelength;
+  const r = 0.4 * a;
+  const g = cavityGeometry(s.wavelength);
+  const { x0, width: side } = g.region;
+  const [c, end] = [g.size / 2, x0 + side];
+  const shapes = [{ type: 'rect', x0, y0: x0, x1: end, y1: end, material: { eps: CAVITY.eps, mu: 1 } }];
+  for (let j = -12; j <= 12; j++) {
+    for (let i = -12; i <= 12; i++) {
+      const [x, y] = [c + a * (i + j / 2), c + (a * j * Math.sqrt(3)) / 2];
+      const inside = x - r > x0 && x + r < end && y - r > x0 && y + r < end;
+      if ((i || j) && inside) shapes.push({ type: 'circle', x, y, r, material: { eps: 1, mu: 1 } });
+    }
+  }
+  return {
+    name: 'Crystal of air holes',
+    requests: [{
+      width: g.size, height: g.size, cell: side / CAVITY.pixels, background: { eps: 1, mu: 1 }, shapes, polarization: 'tm', walls: 'absorbing', monitors: [],
+      analysis: { type: 'driven', wavelength: s.wavelength, source: { type: 'dipole', x: c, y: c, angle_deg: 0 }, pml: CAVITY.pml * s.wavelength, average_q: CAVITY.Q },
+    }],
+  };
+}
+
 // The structures a designer would try by hand, solved at the same wavelengths.
 export function references(s) {
-  if (s.analysis === 'cavityDesign') {
-    // Rods with one removed. A period of 0.3781 puts this crystal's mode on the wavelength.
-    const a = 0.3781 * s.wavelength;
-    const { margin, pml } = CAVITY;
-    const edge = margin * s.wavelength;
-    const rods = [];
-    for (let i = 0; i < 49; i++) {
-      if (i !== 24) rods.push({ type: 'circle', x: edge + (i % 7 + 0.5) * a, y: edge + (Math.floor(i / 7) + 0.5) * a, w: 0.4 * a, h: 0.4 * a, n: Math.sqrt(CAVITY.eps) });
-    }
-    const size = 7 * a + 2 * edge;
-    return [{
-      name: 'Crystal of 7 x 7 rods',
-      requests: [{
-        width: size, height: size, cell: a / 12, background: { eps: 1, mu: 1 }, shapes: rods.map(toShape), polarization: 'te', walls: 'absorbing', monitors: [],
-        analysis: { type: 'driven', wavelength: s.wavelength, source: { type: 'line', x: size / 2, y: size / 2 }, pml: pml * s.wavelength, average_q: CAVITY.Q },
-      }],
-    }];
-  }
+  if (s.analysis === 'cavityDesign') return [s.polarization === 'tm' ? holeCrystal(s) : rodCrystal(s)];
   if (s.analysis === 'bend2d') {
     return [
       { name: 'Empty region', requests: gradientRequests(s, new Float64Array(BEND.pixels ** 2)) },

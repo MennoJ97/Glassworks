@@ -876,6 +876,21 @@ in `solve2d/grating.rs` and `sparse/`. Renames: `solve.rs` to `solve1d.rs` with 
 `resonance.rs` to `leaky.rs`, `eigs_with` to `eigs_factored`, and in JavaScript `optimizer.js` and `cavity-design.js` out of `design.js`.
 Tests split the same way: `analytic.rs` for 1D, `analytic2d.rs` and `gratings.rs`.
 
+### Designing in H_z
+
+**Done, on the bend, the cavity and gratings.** Chips usually carry `H_z` in a top-down model, and an `E_z` bend reads 39 to 48% there
+against 98%. Chapter 19 teaches this. Rust grew from 3,355 to about 3,510 lines, against an estimate of 100 to 150: the gradient is about 15, `solve2d/dipole.rs` 75, and the rest
+is requests and checks. The mirror and coating needed nothing, since their 1D gradients already cover both polarizations.
+
+- **Bend:** width 0.25, not 0.125, since `H_z`'s effective index is 1.32 at 0.125 against `E_z`'s 2.73, and 40 iterations per stage. Six starts reach 94.1 to 97.8%. The second
+  mode, at index 1.10, takes very little: transmission varies by under 2% along the guide.
+- **Cavity:** an in-plane electric dipole, since a line source in `H_z` is magnetic. Nine starts read 200 to 681 at Q 1,000, median 437, with mode Q from 760 to 18,345.
+  A triangular crystal of air holes in the same square reads 371, and 378 on a finer mesh, with the design median at 432. Four of the nine fall short of it. Rods read about 1.
+- **Pole fit:** three solves for `H_z`, to fit the dipole's near-field background. `E_z` keeps two, and its results are unchanged: start 1 still reads 1,066 and Q 1,512,224.
+- **Grey pixels:** finished designs were resized by up to 10.4%, against 1.2%. Two more sharpness stages looked better on three starts and worse on nine, median 345 against 437, so they were left out.
+- **Chaotic:** start 1 reads 681 in Node and 507 in the browser, and each repeats exactly. It isn't the workers, since three instances in Node still read 681. A single instance in the browser reads 507, and the engines' `Math.cosh(1.7)**2` differs in its last digit. `E_z`'s start 1 reads the same in both, so `H_z`'s path is more sensitive.
+- **Not done:** effective indices, robustness in `H_z`, a dipole along the other direction, and designing gratings on the page. The chapter on tolerance is `E_z` only.
+
 ### Vector fields: a line estimate
 
 The target is the first real need: full-vector modes of a waveguide's cross-section, at a fixed wavelength, in closed walls.
@@ -897,7 +912,7 @@ So **about 350 to 650 lines of Rust**, or 10 to 20% on the solver, all of it in 
 modes only. Driven vector problems need ports and a tensor absorbing layer as well, for perhaps 200 to 400 more, and 3D is out of reach
 in a browser anyway, as chapter 14 says.
 
-Recommendation: **don't start yet.** It's real new capability, and chapter 14 would teach from working code, but it's the only item here that reaches into the
+`H_z` designs turned out not to need any of this, since `H_z` is a scalar. Recommendation: **don't start yet.** It's real new capability, and chapter 14 would teach from working code, but it's the only item here that reaches into the
 essentials, through `Space` and `assemble`, which every reader goes through. Nothing else planned depends on it. If it's wanted,
 start with a throwaway probe of the element alone against a hollow guide, as `plans/probe-sparse/` did for the solver. It's about 150
 lines, and it would replace this table's guesses with a measurement.

@@ -140,8 +140,15 @@ pub enum Analysis2d {
         average_q: Option<f64>,
     },
     /// The leaky mode nearest `target_k0` in open space, excited by a line source that
-    /// must overlap it. Walls must be `absorbing`.
-    Resonance { target_k0: f64, x: f64, y: f64, pml: f64 },
+    /// must overlap it. Walls must be `absorbing`. With `dipole_deg`, the source is a `Dipole`.
+    Resonance {
+        target_k0: f64,
+        x: f64,
+        y: f64,
+        pml: f64,
+        #[serde(default)]
+        dipole_deg: Option<f64>,
+    },
     /// A plane wave falling on one period of a grating, which repeats along x, at `angle_deg`
     /// from the normal. A sheet at `source_y` launches it downward, and absorbing layers of
     /// thickness `pml` sit above and below, so walls must be `periodic`. Shapes may run through
@@ -171,12 +178,15 @@ pub struct OrderGoal {
 /// x-axis through the background, with amplitude 1, and the field returned is the total.
 /// `Port` launches a layered guide's strongest mode both ways along x, from a current
 /// sheet on the line at `x` between `y0` and `y1`, across which the guide must be layered.
+/// `Dipole` is an in-plane electric dipole for `H_z`, at `angle_deg` from the x-axis, scaled
+/// so that its `F` in vacuum is `k / 2`, like a line source's. There, a line is magnetic.
 #[derive(Deserialize, Clone, Copy)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Source2d {
     Line { x: f64, y: f64 },
     PlaneWave { angle_deg: f64 },
     Port { x: f64, y0: f64, y1: f64 },
+    Dipole { x: f64, y: f64, angle_deg: f64 },
 }
 
 /// A straight line that power crossing it is measured along. Power counts as positive
@@ -190,9 +200,9 @@ pub struct Monitor {
 }
 
 /// A rectangle of pixels, each mixing two permittivities by its density in `rho`, by rows
-/// from the corner `(x0, y0)`. It replaces whatever shapes are there. Driven `E_z` solves
-/// then return `gradient`, the derivative with each density of the first monitor's power, or
-/// with no monitors, of a line source's LDOS.
+/// from the corner `(x0, y0)`. It replaces whatever shapes are there. Driven solves then
+/// return `gradient`, the derivative with each density of the first monitor's power, or with
+/// no monitors, of a source's LDOS.
 #[derive(Deserialize, Clone)]
 pub struct Density {
     pub x0: f64,

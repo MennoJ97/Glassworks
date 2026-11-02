@@ -1,5 +1,6 @@
 //! Leaky modes of an open domain, found from the poles of a line source's response.
 
+use super::dipole;
 use super::open::{cell_center, line_response, open_dofs, open_matrix, open_mesh, open_output, point_load};
 use super::{coefficients, free_positions, mode_volume};
 use crate::output::{normalized, FieldMeta, Output};
@@ -11,15 +12,24 @@ use crate::C64;
 /// A pole search that needs more driven solves than this has lost its way.
 const MAX_POLE_STEPS: usize = 30;
 
-/// Finds a leaky mode with no eigensolver. The line source's response has a pole at the
+/// Finds a leaky mode with no eigensolver. The source's response has a pole at the
 /// mode's complex `k`, so its reciprocal has a zero there, which a secant iteration finds
 /// in a few driven solves. Close to the pole, the field is the mode.
-pub(super) fn solve(req: &Request2d, target_k0: f64, (x, y): (f64, f64), pml: f64) -> Result<Output, String> {
+pub(super) fn solve(
+    req: &Request2d,
+    target_k0: f64,
+    (x, y): (f64, f64),
+    pml: f64,
+    dipole_deg: Option<f64>,
+) -> Result<Output, String> {
     let mesh = open_mesh(req, pml)?;
     let space = H1Triangle::new(&mesh);
     let coef = coefficients(req);
     let dofs = open_dofs(req, &space, pml);
-    let load = point_load(&space, &dofs, x + pml, y + pml)?;
+    let load = match dipole_deg {
+        Some(angle) => dipole::load(req, &space, &dofs, &coef, pml, (x + pml, y + pml, angle), target_k0)?,
+        None => point_load(&space, &dofs, x + pml, y + pml)?,
+    };
     let at = |k: C64| {
         let a = open_matrix(req, &space, &dofs, &coef, pml, k);
         let ordering = Ordering::reused(&a, || free_positions(&space, &dofs));

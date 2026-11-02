@@ -7,7 +7,7 @@ $$S\mathbf{u} = k_0^2\,Q\,\mathbf{u}$$
 
 This is a **generalized eigenproblem**, $A\mathbf{x} = \lambda B\mathbf{x}$. Here $A$
 is Hermitian and $B$ is positive definite, which guarantees real eigenvalues
-([Parlett 1998](19-references.md#parlett-1998)).
+([Parlett 1998](20-references.md#parlett-1998)).
 
 Guided modes have the same form. Rearranging the operator from chapter 2 with
 $k_t = \beta$:
@@ -20,7 +20,7 @@ iterative method.
 ## The power method, and its problem
 
 Repeatedly multiplying a vector by a matrix makes it line up with the eigenvector of
-largest $|\lambda|$ ([Golub & Van Loan 2013](19-references.md#golub-van-loan-2013)). It's simple, but it finds the *largest* eigenvalue, and we want
+largest $|\lambda|$ ([Golub & Van Loan 2013](20-references.md#golub-van-loan-2013)). It's simple, but it finds the *largest* eigenvalue, and we want
 the smallest ones, or the ones near a particular value. The largest eigenvalues of
 an FEM matrix are also the mesh's least accurate modes.
 
@@ -33,7 +33,7 @@ $$(A - \sigma B)^{-1} B\,\mathbf{x} = \theta\,\mathbf{x}, \qquad \theta = \frac{
 
 It has the same eigenvectors, but eigenvalues close to $\sigma$ now have the *largest*
 $|\theta|$. The modes you want have become the easiest to find
-([Ericsson & Ruhe 1980](19-references.md#ericsson-ruhe-1980)).
+([Ericsson & Ruhe 1980](20-references.md#ericsson-ruhe-1980)).
 
 Applying the operator means solving a linear system, but we only factor
 $A - \sigma B$ once and reuse the factors each iteration. Chapter 5's fast solver is
@@ -50,7 +50,7 @@ Each analysis chooses its own shift:
 The power method throws away every vector but the last. **Lanczos** keeps them all,
 building an orthonormal basis $V_m$ of the *Krylov space*
 $\{\mathbf{v}, C\mathbf{v}, C^2\mathbf{v}, \dots\}$ and solving the eigenproblem
-restricted to that space ([Lanczos 1950](19-references.md#lanczos-1950)).
+restricted to that space ([Lanczos 1950](20-references.md#lanczos-1950)).
 
 For a Hermitian operator, a remarkable simplification happens. The restricted matrix
 is **tridiagonal**, so each new vector needs only a three-term recurrence:
@@ -59,26 +59,26 @@ $$C\mathbf{v}_j = \beta_{j-1}\mathbf{v}_{j-1} + \alpha_j\mathbf{v}_j + \beta_j\m
 
 Its eigenvalues, called *Ritz values*, are very good approximations to the outermost
 eigenvalues of $C$ after just a few steps
-([Parlett 1998](19-references.md#parlett-1998); [Saad 2011](19-references.md#saad-2011)). `tridiagonal_eigen` in
+([Parlett 1998](20-references.md#parlett-1998); [Saad 2011](20-references.md#saad-2011)). `tridiagonal_eigen` in
 [`eigen.rs`](../crates/eigenmenno-core/src/eigen.rs) finds them with the QL algorithm
-([Bowdler et al. 1968](19-references.md#bowdler-1968)).
+([Bowdler et al. 1968](20-references.md#bowdler-1968)).
 
 Three details in the code are worth pointing out.
 
 **The inner product uses $B$.** The operator is only Hermitian in the $B$ inner
 product, $\langle \mathbf{x}, \mathbf{y}\rangle_B = \mathbf{x}^H B\,\mathbf{y}$, so the
-basis is $B$-orthonormal ([Ericsson & Ruhe 1980](19-references.md#ericsson-ruhe-1980)). That's why the code stores both `v` and `bv`.
+basis is $B$-orthonormal ([Ericsson & Ruhe 1980](20-references.md#ericsson-ruhe-1980)). That's why the code stores both `v` and `bv`.
 
 **Full reorthogonalization.** In exact arithmetic, the three-term recurrence keeps the
 basis orthogonal. In floating point, it doesn't, and copies of converged eigenvectors
-creep back in ([Paige 1972](19-references.md#paige-1972)). So each new vector is orthogonalized again against the whole basis.
+creep back in ([Paige 1972](20-references.md#paige-1972)). So each new vector is orthogonalized again against the whole basis.
 This costs memory and $O(m^2 N)$ time in total, but it makes the code short and
 reliable.
 
 **The stopping test is nearly free.** The residual of a Ritz pair equals the coupling
 to the next basis vector times the last component of its eigenvector in the
 tridiagonal problem. So we can tell what has converged without computing a single
-actual eigenvector ([Parlett 1998](19-references.md#parlett-1998)).
+actual eigenvector ([Parlett 1998](20-references.md#parlett-1998)).
 
 ## Degenerate modes
 
@@ -87,7 +87,7 @@ So when two modes share an eigenvalue, Lanczos can only find one of them. This
 actually happens: a uniform periodic structure has two modes at each frequency, for
 waves going left and right.
 
-`eigs_near` handles this by **locking** ([Bai et al. 2000](19-references.md#bai-2000)). It runs Lanczos, keeps the converged modes,
+`eigs_near` handles this by **locking** ([Bai et al. 2000](20-references.md#bai-2000)). It runs Lanczos, keeps the converged modes,
 then runs it again from a fresh random vector that's kept orthogonal to them. The
 second copy of each degenerate mode is then visible. It stops when a run finds
 nothing closer than the current $k$-th best mode. The test
@@ -102,7 +102,7 @@ large basis. A waveguide with 20 µm of cladding took 454 ms for only 2,119 unkn
 compared with 23 ms for a 2,799-unknown resonance problem.
 
 The standard fix is **thick restarting**, as in Krylov-Schur, which bounds the basis
-size ([Wu & Simon 2000](19-references.md#wu-simon-2000); [Stewart 2002](19-references.md#stewart-2002)). We left it out to keep the code readable, and `faer` provides it if we ever
+size ([Wu & Simon 2000](20-references.md#wu-simon-2000); [Stewart 2002](20-references.md#stewart-2002)). We left it out to keep the code readable, and `faer` provides it if we ever
 need it.
 
 Next: [driven problems](07-driven.md).

@@ -75,4 +75,4 @@ A band diagram explains why: this crystal's complete gaps are at $a/\lambda$ of 
 and a wavelength of 1 µm, with $a = 1$ µm, lands in overlapping bands. The second gap does guide light, reaching 36%
 to 48% at 1.31 to 1.35 µm, but the sharp bend passes only about 4 to 9% of it at 1.33 and 1.35 µm.
 
-Next: [references](19-references.md).
+Next: [designing in the other polarization](19-designing-in-hz.md).

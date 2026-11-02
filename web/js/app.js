@@ -23,7 +23,7 @@ const VIEW_HELP = {
   bands2d: 'The waves that can travel through an endless lattice of this cell. Floquet boundaries tie each edge to the opposite one, with a phase set by the wavevector k.',
   mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
   antireflection: 'Find the coating that reflects the least light, averaged across a band of wavelengths.',
-  cavityDesign: 'Find the pattern of material around a line source that holds light for longest in the smallest space, in a square as big as 7 x 7 rods of the crystal it\'s compared with. It measures the local density of states, which a cavity raises in proportion to Q / V, over a bandwidth that narrows as the pixels sharpen. The structure and its mesh scale with the wavelength.',
+  cavityDesign: 'Find the pattern of material around an emitter that holds light for longest in the smallest space, in a square as big as 7 x 7 rods of the crystal it\'s compared with. It measures the local density of states, which a cavity raises in proportion to Q / V, over a bandwidth that narrows as the pixels sharpen. The structure and its mesh scale with the wavelength.',
   bend2d: 'Find the pattern of material that carries light around a corner in a slab waveguide, within a square one wavelength wide. It stays in the slab instead of radiating away at the corner. The structure and its mesh scale with the middle of the band.',
 };
 const PROBLEM_TEXT = {
@@ -241,8 +241,8 @@ function renderSettings() {
   show('left-field', !designing && !planar());
   show('right-field', !designing && !planar());
   show('accuracy', !designing && !planar());
-  show('polarization-field', !guide2d() && !pixelDesign());
-  show('polarization-title', !guide2d() && !pixelDesign());
+  show('polarization-field', !guide2d());
+  show('polarization-title', !guide2d());
   const flat = planar();
   show('layer-builder', !designing && !flat);
   show('plane-builder', flat && !guide2d() && !pixelDesign());
@@ -812,7 +812,7 @@ function renderDesignTable(table, addRow) {
   addRow([`${name}${at(design.running ? design.bandwidth : CAVITY_Q)}`, value(meanReflection(results))]);
   for (const { name, value: reference } of design.references) addRow([`${name}${at(CAVITY_Q)}`, value(reference)]);
   if (last && design.mode) {
-    setResultNote(`Drawn as ordinary rectangles, its mode is at ${design.mode.wavelength.toFixed(4)} µm, with Q ${Math.round(design.mode.q).toLocaleString()} and a volume of ${design.mode.volume.toFixed(4)} λ². Resized by ${(100 * (designGeometry(state, design.rho).size / designGeometry(state).size - 1)).toFixed(2)}% to put it on target.`);
+    setResultNote(`Drawn as ordinary rectangles, its mode is at ${design.mode.wavelength.toFixed(4)} µm, with Q ${Math.round(design.mode.q).toLocaleString()} and ${state.polarization === 'tm' ? 'a magnetic mode area' : 'a volume'} of ${design.mode.volume.toFixed(4)} λ². Resized by ${(100 * (designGeometry(state, design.rho).size / designGeometry(state).size - 1)).toFixed(2)}% to put it on target.`);
   }
 }
 
