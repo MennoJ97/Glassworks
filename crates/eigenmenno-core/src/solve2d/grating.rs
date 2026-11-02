@@ -122,6 +122,11 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
         .collect::<Result<Vec<_>, _>>()?;
     let below = line_points(req, &space, transmit_y + pml)?;
     let above = line_material(&space, &coef, &lines[0])?;
+    for line in &lines[1..] {
+        if line_material(&space, &coef, line)? != above {
+            return Err("a grating's reflect lines must all lie in one material".into());
+        }
+    }
     let under = line_material(&space, &coef, &below)?;
     let wavenumber = |(p, q): (f64, f64)| k0 * (q / p).sqrt();
     let span = source_y - reflect_y;

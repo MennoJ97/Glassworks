@@ -202,4 +202,13 @@ fn a_grating_refuses_lines_it_cannot_read() {
     assert!(lines(1.26, 1.25, 0.25).contains("wavelengths above"));
     // Across the ridge, where no single order is defined.
     assert!(lines(1.75, 0.75, 0.25).contains("uniform"));
+    // A patch across only an upper reflect line, or a layer filling one, changes that line alone.
+    let crossing = |x0: f64, x1: f64| {
+        let mut r = grating_request(1.5, 1.125, 0.0, Polarization::Te, 1.0 / 20.0, 1.0);
+        let outline = Outline::Rect { x0, y0: 1.5, x1, y1: 1.7 };
+        r.shapes.push(Shape { outline, material: Material { eps: 4.0, mu: 1.0 } });
+        eigenmenno_core::solve2d::solve(&r).map(|_| ()).unwrap_err()
+    };
+    assert!(crossing(0.1, 0.4).contains("uniform"));
+    assert!(crossing(-1.0, 2.5).contains("one material"));
 }
