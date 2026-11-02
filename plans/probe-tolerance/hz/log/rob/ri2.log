@@ -1,0 +1,25 @@
+{"seed":2,"Q":1222.3852113193304,"V":0.03957951825875884,"w":0.9999541502925606,"F":385.4446728694581,"scale":1.0145519738673632,"sec":118.79}
+{"seed":8,"Q":1432.9960851589465,"V":0.07055955206755074,"w":1.0000299631208756,"F":433.82703859076787,"scale":0.9909249458433504,"sec":119.438}
+{"seed":7,"Q":297.7814761532769,"V":0.136807728299713,"w":1.0001729449720584,"F":71.9001588062524,"scale":1.048169665945182,"sec":119.507}
+{"seed":1,"Q":240.97061225921036,"V":0.09573922542994143,"w":1.0003084952324857,"F":91.56289344299084,"scale":1.0724072771198532,"sec":119.532}
+{"seed":4,"Q":244.89795580862886,"V":0.21614963107047303,"w":1.0002327281615857,"F":225.495459666539,"scale":1.0647172290444513,"sec":119.755}
+{"seed":5,"Q":30185.198403200615,"V":0.04441840617242928,"w":0.9999460544671802,"F":709.626459622624,"scale":0.9951907407453481,"sec":119.87}
+{"seed":9,"Q":1146.7884817569532,"V":0.05759720144587552,"w":1.0000285305545773,"F":290.3955410789841,"scale":1.0569688087315454,"sec":120.281}
+{"seed":6,"Q":1095.2161682526441,"V":0.110035286334459,"w":0.9999444935254983,"F":750.7202707799744,"scale":1.0116187191849875,"sec":121.37}
+file:///private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/hz/pkg/eigenmenno_wasm.js:87
+            const ret = Error(getStringFromWasm0(arg0, arg1));
+                        ^
+
+Error: no leaky mode found near this wavelength: try a different target, or a source where the mode is strong
+    at __wbg_Error_208446807d0d1e30 (file:///private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/hz/pkg/eigenmenno_wasm.js:87:25)
+    at eigenmenno_wasm.wasm.wasm_bindgen[87619f3701382650]::__wbindgen_error_new::__wbg_Error_208446807d0d1e30 externref shim (wasm://wasm/eigenmenno_wasm.wasm-0029bc72:wasm-function[514]:0x83392)
+    at eigenmenno_wasm.wasm.eigenmenno_wasm[f5ee72aaeb6d4bcf]::solution (wasm://wasm/eigenmenno_wasm.wasm-0029bc72:wasm-function[29]:0x41aca)
+    at eigenmenno_wasm.wasm.solve_2d (wasm://wasm/eigenmenno_wasm.wasm-0029bc72:wasm-function[19]:0x378e8)
+    at eigenmenno_wasm.wasm.solve_2d multivalue shim (wasm://wasm/eigenmenno_wasm.wasm-0029bc72:wasm-function[502]:0x83212)
+    at Module.solve_2d (file:///private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/hz/pkg/eigenmenno_wasm.js:77:22)
+    at one (file:///private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/hz/genrob.mjs:9:34)
+    at Array.map (<anonymous>)
+    at last (file:///private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/hz/genrob.mjs:12:48)
+    at optimizeCavity (file:///private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/hz/rob/web/js/cavity-design.js:213:23)
+
+Node.js v26.11.1

@@ -1,0 +1,16 @@
+node:fs:782
+  return binding.open(
+                 ^
+
+Error: ENOENT: no such file or directory, open 'des/ri2-3.json'
+    at Object.openSync (node:fs:782:18)
+    at readFileSync (node:fs:628:35)
+    at load (file:///private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/hz/pix.mjs:4:56)
+    at file:///private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/hz/judge.mjs:5:11 {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'des/ri2-3.json'
+}
+
+Node.js v26.11.1

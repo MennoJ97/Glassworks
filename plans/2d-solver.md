@@ -889,7 +889,7 @@ is requests and checks. The mirror and coating needed nothing, since their 1D gr
 - **Pole fit:** three solves for `H_z`, to fit the dipole's near-field background. `E_z` keeps two, and its results are unchanged: start 1 still reads 1,066 and Q 1,512,224.
 - **Grey pixels:** finished designs were resized by up to 10.4%, against 1.2%. Two more sharpness stages looked better on three starts and worse on nine, median 345 against 437, so they were left out.
 - **Chaotic:** start 1 reads 681 in Node and 507 in the browser, and each repeats exactly. It isn't the workers, since three instances in Node still read 681. A single instance in the browser reads 507, and the engines' `Math.cosh(1.7)**2` differs in its last digit. `E_z`'s start 1 reads the same in both, so `H_z`'s path is more sensitive.
-- **Not done:** effective indices, robustness in `H_z`, a dipole along the other direction, and designing gratings on the page. The chapter on tolerance is `E_z` only.
+- **Not done:** effective indices, robust sampling on the page, and designing gratings on the page. Chapter 17's tolerance section is `E_z` only, and chapter 19 covers `H_z`.
 
 #### Tolerance in `H_z`, measured 2026-11-02
 
@@ -924,6 +924,42 @@ Findings on the way:
 - **The centre's mode is one of a pair.** A dipole at the centre of an eight-fold design excites a doubly degenerate mode. The split is about 1e-12% on the page's mesh. Random disorder should split it, unlike `E_z`'s single mode.
 - **Shift, three starts:** 0.79 to 0.95% per nm on start 1 as the cell halves and thirds, 0.84 to 1.00 on start 4, and 0.70 to 0.81 on start 5, with the source in air. It rises with refinement.
 - **Perturbation theory:** `moving_an_edge_in_hz_shifts_a_mode_as_perturbation_theory_says` passes, with a ratio of 1.00013 on a square rod with corners, in closed walls.
+
+#### Optimizing for robustness in `H_z`, measured 2026-11-02
+
+The crystal's disorder draws were later raised from 6 to 18, which moves its medians at correlated 2 and 5 nm from 316 and 286 to 335 and 269. Against those, 9 and 3 of the 18 plain starts win, not 10 and 2. The table above keeps the six-draw figures.
+
+**A grey edge isn't a drawn edge here.** A fraction of a pixel moves `H_z`'s mode about twice as far as drawing the same move: 1.65 against 0.79% per nm on start 1, 1.69 against 0.84 on start 4, and 1.30 against 0.70 on start 5, all on the page's mesh. So samples are scaled by 0.5, and every result is judged by drawn edges. The gradient predicts the grey edge within 8 to 22%.
+
+Each iteration adds three samples, at their own predicted wavelengths, and the step follows their mean gradient, as for `E_z` in step 4. The probe is `plans/probe-tolerance/hz/robust-cavity-design.js`, 19 added lines. Judged by correlated disorder over 100 nm, with four draws per start, on starts 1 to 9 (one independent-noise run failed its final mode search, so that row has 8):
+
+| Sampled during optimization | No disorder | 2 nm | 5 nm | Beating the crystal at 5 nm |
+|---|---:|---:|---:|---:|
+| Nothing | 437 | 339 | 231 | |
+| Independent, 2 nm | 324 | 334 | 185 | 2 of 8 |
+| **Correlated, 2 nm** | 674 | 571 | 287 | 5 of 9 |
+| Correlated, 5 nm | 390 | 286 | 170 | 1 of 9 |
+
+Three variants were tried, so the best went to 18 unseen starts, 101 to 118, each paired with a plain run from the same start:
+
+| | Plain | Robust | Paired: robust better, median ratio |
+|---|---:|---:|---:|
+| LDOS, no disorder | 417 | 664 | 13 of 18, 1.45 |
+| LDOS, 2 nm | 308 | 517 | 13 of 18, 1.68 |
+| LDOS, 5 nm | 197 | 363 | 16 of 18, 2.12 |
+| Lowest start, 5 nm | 39 | 200 | |
+| Beating the crystal, 2 nm (335) | 8 of 18 | 15 of 18 | |
+| Beating the crystal, 5 nm (269) | 4 of 18 | 13 of 18 | |
+| Share of LDOS kept, 5 nm | 0.43 | 0.51 | 13 of 18, 1.30 |
+| Mode Q, no disorder | 2,883 | 3,507 | 11 of 18, 2.52 |
+| Mode Q, 5 nm | 681 | 1,832 | |
+| Shift per nm | 0.89% | 0.94% | |
+
+- **It works, and mostly as a better search.** Most of the gain is already there with no disorder, and only some is in the share kept: on starts 1 to 9 that share was level, 0.50 against 0.54 at 5 nm. So 16 of 18 is the firm result, about 0.1% by a sign test, while the share kept is 13 of 18, about 10%.
+- **It doesn't reduce the shift,** so tuning is still needed. LDOS at the original wavelength at 5 nm stays at 4 for both.
+- **The highest reading is real.** Start 107 reads 1,353 on half cells, and 1,335 on `h/4`, with Q 17,400. Three others hold within 3%.
+- **Cost:** about twice the time per run, with six solves per iteration rather than three. No Rust. Not on the page, and the page's own numbers would differ, since a run is chaotic between engines.
+- **Not measured:** other sample counts or correlation lengths, and whether noise of any kind gives the same better search. Only one crystal, though now with 18 draws.
 
 ### Vector fields: a line estimate
 
