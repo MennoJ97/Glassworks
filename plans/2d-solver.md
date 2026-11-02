@@ -109,16 +109,15 @@ high-index material will need refining, which the probe didn't test.
    [MPB tutorial](https://mpb.readthedocs.io/en/latest/Python_Tutorial/)'s 0.28262 to
    0.41933 is 0.5–0.7% higher. The likely cause is its coarse resolution of 32, but no
    MPB run has confirmed that, so it isn't used as a reference.
-3. **Band diagram speed.** Eigenproblems use the LU with a reused ordering, within 8% of `faer`'s
-   Cholesky. Warm-starting Lanczos from the previous k-point is the next speed-up to try.
-4. **Transposed solves.** Bloch-periodic driven problems lose `Aᵀ = A`,
-   so their adjoints need `Aᵀ` solves. Not needed before periodic gratings.
+3. **Band diagram speed: settled for now.** Warm-starting Lanczos was measured and left out. Loosening
+   the tolerance took 15 to 23% off instead: see "Faster band diagrams" under "Done after milestone 6".
+4. **Transposed solves: done.** Bloch-periodic driven problems lose `Aᵀ = A`, and
+   `sparse/transposed.rs` solves `Aᵀ` with the same factors. See "Periodic gratings" below.
 
 ## Code changes
 
 | Module | Change |
 |---|---|
-| Website, later | Dragging shapes |
 | Tutorial | Chapters 9 to 14 cover 2D |
 
 Milestone 1 added `Mesh::fitted_grid`, `H1Triangle`, many-tie `DofMap`, the `Factors` trait
@@ -760,15 +759,111 @@ changes little (at 2 nm, 0.96 times with the disc). So robustness helps Q and wo
 
 None of these is planned in detail.
 
-- **Tutorial clean-up.** Small, and best done first, whatever comes next: check the two citations written from
-  memory, test the two inferred explanations in chapters 10 and 13, and read chapters 9 to 14 line by line.
-- **Faster band diagrams.** Warm-start Lanczos from the previous k-point (open problem 3). Symmetric factors
-  don't help these, because Bloch phases make the matrix Hermitian.
-- **Dragging shapes.** The remaining website item, in JavaScript only.
-- **Periodic gratings.** A port plus Bloch ties, which needs open problem 4.
-- **Vector fields.** Full-vector waveguide cross-sections are the first real need for Nédélec elements, and
-  the way to full polarization or 3D. This is the largest of these, and works against keeping the solver lean,
-  so it needs a line estimate first.
+- **Designing gratings on the page.** The solver returns each order's gradient, so this is JavaScript only.
+- **Vector fields.** Full-vector waveguide cross-sections are the first real need for Nédélec elements. See
+  "Vector fields: a line estimate" below, which recommends not starting yet.
+
+### Done after milestone 6
+
+**Tutorial clean-up.** Chapters 9 to 14 were read line by line, and the items flagged when they were written were tested.
+
+- **Joannopoulos, for band extremes on the zone's edge:** the book's text couldn't be reached, so chapter 9 now cites
+  Harrison et al. 2007, whose abstract says this directly.
+- **Davis 2006, for storage cost:** also unreachable, and not needed. George 1973's abstract states $O(n^3)$ operations and
+  $O(n^2 \log n)$ storage, and that no ordering beats $O(n^3)$. Davis 2006 stays in chapter 4, for compressed rows.
+- **Why eigenmode solves use the most memory: holds.** Counting allocations natively at 579,121 unknowns, for ten modes:
+  0.63 GiB for mesh and matrices, 1.18 GiB held by the factors, 1.85 GiB at the peak of factoring, then 0.97 GiB more for
+  Lanczos, whose 56 vectors each store $B$ times themselves. That ends at 2.78 GiB, or 2.50 GiB for four modes. At 160,801
+  unknowns it reads 0.72 GiB, matching the 0.7 GiB in WebAssembly.
+- **Why the plain corner reads 7.1% on the page and 5.4% in the table: holds.** On the same mesh, moving only the monitor from
+  2.1 to 2.85 takes it from 7.10% to 5.40%, and to the table's value at each wavelength.
+- **A real error, found while testing that.** The "plain corner" wasn't a corner. The guides stop at the design region, so it's
+  two guides ending at an empty square a wavelength wide. With guides that meet, at 72 cells per wavelength:
+
+| Width | Sharp corner, 0.95, 1, 1.05 | Empty square, 0.95, 1, 1.05 |
+|---:|---:|---:|
+| 0.06 | 57.4, 57.0, 56.6% | 6.3, 6.9, 7.6% |
+| 0.1 | 45.3, 48.9, 51.5% | 5.0, 5.4, 5.8% |
+| 0.125 | 23.0, 28.6, 34.2% | 5.4, 5.3, 5.5% |
+| 0.143 | 18.7, 17.2, 19.4% | 8.0, 6.7, 6.1% |
+| 0.17 | 46.1, 39.4, 29.0% | 9.6, 10.9, 10.7% |
+| 0.2 | 39.8, 43.6, 46.0% | 7.2, 8.1, 9.4% |
+
+  So the corner that chapter 13's bend replaces passes 23 to 34%, not 5%, and it now agrees with chapter 12's 18 to 23% at
+  0.143. The optimizer really starts from the empty square, and the page now shows both references. The sharp corner's dip
+  near 0.143 isn't explained.
+
+Smaller corrections: projection amplifies by up to about $\beta/2$, not $\beta$, in chapter 13 and a comment in `design.js`,
+though the step limit is unchanged. "At least 2.7 times" predated the factorization change, and is now 2.9.
+
+**Faster band diagrams: warm start measured, and left out.** The Lanczos starting from the sum of the previous k-point's modes,
+about 15 lines, over the path of 16 k-points with 6 bands, and solves per k-point:
+
+| Unknowns | Tolerance 1e-10, cold | 1e-10, warm | 1e-5, cold | 1e-5, warm |
+|---:|---:|---:|---:|---:|
+| 2,500 | 62.5 | 62.5 | 47.5 | 46.5 |
+| 10,000 | 62.0 | 62.5 | 46.5 | 45.5 |
+| 40,000 | 62.0 | 61.0 | 51.0 | 46.5 |
+
+With 12 bands at 10,000 unknowns, 88.8, 81.3, 70.8 and 66.2. Warm starts did no better on a path twice as fine. So band diagrams
+now use a tolerance of 1e-5, for 6 net lines, and solves that return fields keep 1e-10. A whole diagram in WebAssembly goes from 741 to 576 ms at 2,500 unknowns, 3,444 to 2,692 ms at 10,000 and
+16,827 to 14,383 ms at 40,000. The largest change in $k_0$ is 6e-11 away from $\Gamma$, and 9e-9 at $\Gamma$, where $k_0 = 0$ turns
+round-off into a square root. Tolerances down to 1e-3 didn't lose or repeat a band, so locking doesn't need the tighter one. Factoring is
+now about a third of what's left at 40,000 unknowns, and solves and Lanczos's own work are the rest.
+
+**Dragging shapes.** On views with shapes the visitor drew: drag inside to move, an edge or corner of a rectangle or a circle's
+rim to resize, and the source too. `grabShape` and `dragShape` are pure functions in `model.js`, tested in `tests/shapes.test.mjs`.
+Mouse drags were checked in a browser. Touch was checked only as far as which touches claim the gesture, not on a phone.
+
+**Periodic gratings.** `solve2d/grating.rs` ties one period along x, with absorbing layers above and below, launches a plane wave
+from a sheet, and reads each diffraction order's share of the power from lines of field values. There's a view on the page under
+**Driven response**, and chapter 15 teaches it. The estimate was about 190 lines, and it took 390 (2,965 to 3,355), so the estimate was
+low by a factor of 2: `grating.rs` 227, the transposed solve 50, and most of the rest generalizing `open.rs` and `validate.rs`.
+
+- **Reference:** `plans/probe-grating/rcwa.py`, an independent Fourier modal method with no mesh or layer, steady to 1e-6 at 320
+  orders. Both polarizations agree within 4e-5 at cells of λ/80, and power balances within 2e-5.
+- **Two absorbing-layer errors found by it, neither visible to mesh refinement.** A grazing order absorbs at a rate of `ky / k`, so
+  the layer's strength is set for the slowest one. An evanescent order just past cutoff isn't absorbed at all and returns from the wall,
+  so the stretch gets a real part, set the same way. A first guess, that the steep layer reflected into the transmission reading, was
+  wrong: measured directly, the up-going part was about 1e-5.
+- **Rayleigh anomalies:** about 1% off exactly on a cutoff, under 0.2% within 0.1% of it, and about 1e-4 at 7% away.
+- **A boundary off the grid is harmless.** Edge nodes can't move, so a layer crossing the periodic edge off a grid row is stepped in the
+  last column. It put under 4e-6 of the power in other orders.
+- **Moharam et al. 1995:** Crossref confirms the journal, volume, issue and first page. Its author order differs from the usual
+  citation's, which the references follow, and it gives no last page.
+
+**The tutorial and code now separate the essentials.** Chapters 1 to 13 read straight through, and 14 to 18 are "Going further", each
+standing alone: gratings are 15, and 16 to 18 hold what used to interrupt chapters 9, 10, 12 and 13. References are 19. So where this plan
+says chapter 13 about a cavity, read 17, and chapter 10 about speed, read 16. Essentials are about 3,000 lines of Rust, with 343 apart from them
+in `solve2d/grating.rs` and `sparse/`. Renames: `solve.rs` to `solve1d.rs` with `output.rs` split out, `gradient.rs` to `adjoint.rs`,
+`resonance.rs` to `leaky.rs`, `eigs_with` to `eigs_factored`, and in JavaScript `optimizer.js` and `cavity-design.js` out of `design.js`.
+Tests split the same way: `analytic.rs` for 1D, `analytic2d.rs` and `gratings.rs`.
+
+### Vector fields: a line estimate
+
+The target is the first real need: full-vector modes of a waveguide's cross-section, at a fixed wavelength, in closed walls.
+This is an estimate from reading the code, with no prototype behind it. Gratings ran at twice their estimate, so the right column allows for that.
+
+| Part | What it needs | First guess | Allowing for overrun |
+|---|---|---:|---:|
+| Nédélec triangles | Basis, curl, local matrices with signs. `local_matrices` assumes a scalar's x and y stiffness, so this needs its own form | 110 | 200 |
+| Signs in assembly | An edge's direction decides a dof's sign. Each caller of `cell_dofs` must honour it, or a new path must be added | 30 | 60 |
+| Mesh edges | Global edge directions, and ties for periodic walls if wanted | 15 | 30 |
+| Mode problem | The tangential and axial blocks, with the Lee transformation so that `B` stays positive semi-definite | 110 | 220 |
+| Eigensolver | `lanczos` assumes `B` is positive definite, and `B` here is singular on the axial block unless transformed. May need care | 20 | 60 |
+| Request, validation, output | A new analysis, and three field components each on two kinds of dof | 50 | 90 |
+| **Solver total** | | **335** | **660** |
+| Tests | A hollow metal guide's exact modes, no spurious modes in a uniform guide, and a dielectric guide against a reference | 150 | 300 |
+| Page | A new view, and drawing a vector field | 100 | 200 |
+
+So **about 350 to 650 lines of Rust**, or 10 to 20% on the solver, all of it in Going further files apart from the signs in assembly. That's
+modes only. Driven vector problems need ports and a tensor absorbing layer as well, for perhaps 200 to 400 more, and 3D is out of reach
+in a browser anyway, as chapter 14 says.
+
+Recommendation: **don't start yet.** It's real new capability, and chapter 14 would teach from working code, but it's the only item here that reaches into the
+essentials, through `Space` and `assemble`, which every reader goes through. Nothing else planned depends on it. If it's wanted,
+start with a throwaway probe of the element alone against a hollow guide, as `plans/probe-sparse/` did for the solver. It's about 150
+lines, and it would replace this table's guesses with a measurement.
 
 ## Own sparse solver
 
@@ -814,8 +909,8 @@ nothing further left into the right part, about 10 lines, and shrinking leaves f
 did far more than Cholesky could, for every problem: it halved peak memory, and sped up the leaky
 13 x 13 by another 2×. Leaf sizes from 8 to 24 made little difference.
 
-If band diagrams ever need more, Lanczos itself costs about as much as the solves, so
-warm-starting it from the previous k-point is the next thing to try.
+Lanczos itself costs about as much as the solves. A warm start from the previous k-point didn't
+help, and a looser tolerance did: see "Faster band diagrams" under "Done after milestone 6".
 
 ### Measurements
 

@@ -20,13 +20,13 @@ The term is proportional to $u(b)$, so it adds one entry to the matrix, at the
 position of the last dof. Abbreviating $Y = p k_x$, that entry is $-iY$.
 
 In 1D this is **exact**: the condition is perfectly reflectionless at every frequency
-and angle ([Johnson 2021](15-references.md#johnson-2021)). Higher dimensions aren't so lucky, which is why chapter 11 needs perfectly
+and angle ([Johnson 2021](19-references.md#johnson-2021)). Higher dimensions aren't so lucky, which is why chapter 11 needs perfectly
 matched layers.
 
 The square root has two branches, and physics picks one. The wave must carry energy
 away or decay, so $\operatorname{Im} k_x \ge 0$. If the sideways wavevector $k_t$ is
 large enough, $k_x$ becomes purely imaginary and the wave is evanescent, which is
-total internal reflection ([Born & Wolf 1999](15-references.md#born-wolf-1999)).
+total internal reflection ([Born & Wolf 1999](19-references.md#born-wolf-1999)).
 
 ## The incident wave
 
@@ -69,7 +69,7 @@ check. In the app it shows as 0.0%.
 
 A wave arriving at angle $\theta$ in a medium of index $n_1$ has $k_t = k_0 n_1\sin\theta$,
 and $k_t$ is the same in every layer. That's just **Snell's law**, arising from the
-translation symmetry along $z$ ([Born & Wolf 1999](15-references.md#born-wolf-1999)). No separate physics is needed: the solver adds
+translation symmetry along $z$ ([Born & Wolf 1999](19-references.md#born-wolf-1999)). No separate physics is needed: the solver adds
 $k_t^2 P$ and the correct $k_x$ at the ports.
 
 ## A current source
@@ -82,7 +82,7 @@ $$-(u')' - k_0^2 u = ik_0\,\delta(x - x_0).$$
 The weak form handles the delta function gracefully, since
 $\int \delta(x - x_0)\,v\,dx = v(x_0)$. So the right-hand side is just the basis
 functions evaluated at $x_0$. See `add_point_load` in
-[`solve.rs`](../crates/eigenmenno-core/src/solve.rs).
+[`solve1d.rs`](../crates/eigenmenno-core/src/solve1d.rs).
 
 The exact solution in free space is $u = -\tfrac12 e^{ik_0|x - x_0|}$. Note the minus
 sign: the field opposes the current at the sheet, which is exactly what lets the

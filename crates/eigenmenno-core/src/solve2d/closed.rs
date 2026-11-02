@@ -3,10 +3,10 @@
 use super::{coefficients, free_positions, grid_size, mode_volume, push_mesh};
 use crate::assemble::{assemble, Csr, DofMap};
 use crate::banded::Factors;
-use crate::eigen::eigs_with;
+use crate::eigen::eigs_factored;
 use crate::mesh::Mesh;
+use crate::output::{normalized, FieldMeta, Meta, Output};
 use crate::problem::{Analysis2d, Boundary, Polarization, Request2d};
-use crate::solve::{normalized, FieldMeta, Meta, Output};
 use crate::space::H1Triangle;
 use crate::sparse::{Ordering, SparseLu};
 use crate::{C64, ZERO};
@@ -14,6 +14,9 @@ use std::collections::HashMap;
 use std::f64::consts::PI;
 
 const EIG_TOL: f64 = 1e-10;
+/// A band diagram reads only eigenvalues, whose error goes as the square of the residual, so
+/// this still gives `k0` to about 1e-10, far below the mesh's error.
+const BAND_TOL: f64 = 1e-5;
 
 /// Dirichlet walls, or Bloch ties from the right and top edges to the left and
 /// bottom. Corners tie straight to the origin, carrying both phases.
@@ -59,13 +62,14 @@ fn modes(
     coef: &[(C64, C64)],
     n: usize,
     sigma: f64,
+    tol: f64,
 ) -> Result<Vec<(f64, Vec<C64>)>, String> {
     let region = &space.mesh.region;
     let a = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (coef[region[c]].0, ZERO)));
     let b = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (ZERO, coef[region[c]].1)));
     let shifted = a.sub_scaled(sigma, &b);
     let ordering = Ordering::reused(&shifted, || free_positions(space, dofs));
-    eigs_with(&SparseLu::factor(&shifted, &ordering) as &dyn Factors, &b, sigma, n, EIG_TOL)
+    eigs_factored(&SparseLu::factor(&shifted, &ordering) as &dyn Factors, &b, sigma, n, tol)
 }
 
 pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
@@ -84,7 +88,9 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
             out.meta.n_dofs = dofs.n_free;
             push_mesh(&space, &mut out);
             let field = if req.polarization == Polarization::Te { "Ez" } else { "Hz" };
-            for (lambda, x) in modes(&space, &dofs, &coef, *n_modes, target_k0.map_or(sigma, |k| k * k))? {
+            for (lambda, x) in
+                modes(&space, &dofs, &coef, *n_modes, target_k0.map_or(sigma, |k| k * k), EIG_TOL)?
+            {
                 let i = out.meta.fields.len();
                 let u = normalized(dofs.expand(&x));
                 out.channels.push((format!("field{i}/{field}/re"), u.iter().map(|v| v.re).collect()));
@@ -98,7 +104,7 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
                 });
             }
         }
-        Analysis2d::Driven { .. } | Analysis2d::Resonance { .. } => {
+        Analysis2d::Driven { .. } | Analysis2d::Resonance { .. } | Analysis2d::Grating { .. } => {
             unreachable!("sent elsewhere by solve2d::solve")
         }
         Analysis2d::Bands { n_bands, n_k } => {
@@ -114,8 +120,8 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
             for &s in &path {
                 let dofs = constraints(req, &space, nx, ny, phases(s));
                 out.meta.n_dofs = dofs.n_free;
-                for (band, (lambda, _)) in table.iter_mut().zip(modes(&space, &dofs, &coef, *n_bands, sigma)?)
-                {
+                let found = modes(&space, &dofs, &coef, *n_bands, sigma, BAND_TOL)?;
+                for (band, (lambda, _)) in table.iter_mut().zip(found) {
                     band.push(lambda.max(0.0).sqrt());
                 }
             }

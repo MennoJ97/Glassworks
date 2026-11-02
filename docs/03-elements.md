@@ -3,7 +3,7 @@
 Galerkin's method works with any basis. What makes it the *finite element* method is
 one specific choice: basis functions that are simple polynomials, and nonzero only
 on a few small pieces of the domain
-([Courant 1943](15-references.md#courant-1943)).
+([Courant 1943](19-references.md#courant-1943)).
 
 ## Local basis functions make sparse matrices
 
@@ -35,7 +35,7 @@ matrix ends up banded, with neighbours close together.
 
 This code uses evenly spaced nodes because they're the easiest to understand. They
 get badly conditioned at high order, which is one reason order is capped at 5
-([Trefethen 2019](15-references.md#trefethen-2019)).
+([Trefethen 2019](19-references.md#trefethen-2019)).
 
 ## The reference element
 
@@ -55,7 +55,7 @@ matrix, but the idea stays the same.
 ## Quadrature
 
 The integrals on the reference element are of polynomials, and **Gauss-Legendre
-quadrature** computes those exactly ([Davis & Rabinowitz 1984](15-references.md#davis-rabinowitz-1984)):
+quadrature** computes those exactly ([Davis & Rabinowitz 1984](19-references.md#davis-rabinowitz-1984)):
 
 $$\int_{-1}^{1} g(\xi)\,d\xi \approx \sum_{q=1}^{n} w_q\,g(\xi_q)$$
 
@@ -90,7 +90,7 @@ chapter 2 predicted. The solver returns exactly this value for this mesh:
 ## Why higher order is worth it
 
 For smooth fields, raising $p$ reduces the error far faster than shrinking $h$ does
-([Babuška et al. 1981](15-references.md#babuska-1981)).
+([Babuška et al. 1981](19-references.md#babuska-1981)).
 This table is real output from this solver, on the same cavity problem:
 
 | | Unknowns | Error in $k_0^2$ |

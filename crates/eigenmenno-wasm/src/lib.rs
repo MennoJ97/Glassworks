@@ -1,7 +1,7 @@
 //! Thin browser interface: JSON request in, JSON metadata plus typed arrays out.
 
+use eigenmenno_core::output::Output;
 use eigenmenno_core::problem::{Request, Request2d};
-use eigenmenno_core::solve::Output;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -32,7 +32,7 @@ fn solution(out: Result<Output, String>) -> Result<Solution, JsError> {
 #[wasm_bindgen]
 pub fn solve(request_json: &str) -> Result<Solution, JsError> {
     let req: Request = serde_json::from_str(request_json)?;
-    solution(eigenmenno_core::solve::solve(&req))
+    solution(eigenmenno_core::solve1d::solve(&req))
 }
 
 #[wasm_bindgen]

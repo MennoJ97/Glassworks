@@ -1,6 +1,6 @@
 //! Checks a 2D request before any work starts, so that errors say what to change.
 
-use super::steps_in;
+use super::{side_layer, steps_in};
 use crate::problem::{Analysis2d, Boundary, Polarization, Request2d, Source2d};
 
 pub(super) fn validate(req: &Request2d) -> Result<(), String> {
@@ -15,12 +15,13 @@ pub(super) fn validate(req: &Request2d) -> Result<(), String> {
         let plane_wave =
             matches!(req.analysis, Analysis2d::Driven { source: Source2d::PlaneWave { .. }, .. });
         let line = matches!(req.analysis, Analysis2d::Driven { source: Source2d::Line { .. }, .. });
-        if !matches!(req.analysis, Analysis2d::Driven { .. })
+        let grating = matches!(req.analysis, Analysis2d::Grating { goal: Some(_), .. });
+        if !(matches!(req.analysis, Analysis2d::Driven { .. }) || grating)
             || plane_wave
             || req.polarization != Polarization::Te
-            || (req.monitors.is_empty() && !line)
+            || (req.monitors.is_empty() && !line && !grating)
         {
-            return Err("a density map needs a driven E_z solve from a line source or port, and a monitor unless it's a line source".into());
+            return Err("a density map needs a driven E_z solve from a line source or port, and a monitor unless it's a line source, or a grating with a goal".into());
         }
         if d.rho.len() != d.nx * d.ny
             || !(d.width > 0.0 && d.height > 0.0 && d.eps_low > 0.0 && d.eps_high > 0.0)
@@ -29,16 +30,33 @@ pub(super) fn validate(req: &Request2d) -> Result<(), String> {
         }
         // A pixel edge through a cell would make its material depend on where the cell's centre
         // falls, which an optimizer can exploit, and which no drawn structure would reproduce.
-        let Analysis2d::Driven { pml, .. } = req.analysis else { unreachable!("checked above") };
+        let (Analysis2d::Driven { pml, .. } | Analysis2d::Grating { pml, .. }) = req.analysis else {
+            unreachable!("checked above")
+        };
+        let side = side_layer(req, pml);
         let (hx, hy) = (
-            (req.width + 2.0 * pml) / steps_in(req.width + 2.0 * pml, req.cell) as f64,
+            (req.width + 2.0 * side) / steps_in(req.width + 2.0 * side, req.cell) as f64,
             (req.height + 2.0 * pml) / steps_in(req.height + 2.0 * pml, req.cell) as f64,
         );
         let on_grid = |at: f64, h: f64| (at / h - (at / h).round()).abs() < 1e-6;
-        let aligned = (0..=d.nx).all(|i| on_grid(pml + d.x0 + i as f64 * d.width / d.nx as f64, hx))
+        let aligned = (0..=d.nx).all(|i| on_grid(side + d.x0 + i as f64 * d.width / d.nx as f64, hx))
             && (0..=d.ny).all(|j| on_grid(pml + d.y0 + j as f64 * d.height / d.ny as f64, hy));
         if !aligned {
             return Err("the density map's pixels must line up with the mesh: choose a cell that divides each pixel exactly".into());
+        }
+    }
+    if let Analysis2d::Grating { wavelength, angle_deg, pml, source_y, reflect_y, transmit_y, .. } =
+        req.analysis
+    {
+        if req.walls != Boundary::Periodic || !(wavelength > 0.0 && pml > 0.0 && angle_deg.abs() < 90.0) {
+            return Err(
+                "gratings need periodic walls, a positive wavelength and PML, and an angle under 90°".into(),
+            );
+        }
+        if !(0.0 <= transmit_y && transmit_y < reflect_y && reflect_y < source_y && source_y <= req.height) {
+            return Err(
+                "a grating needs its lines in order inside the domain, from the bottom: transmit, reflect, source. A taller domain or a shorter wavelength makes room".into()
+            );
         }
     }
     let driven = matches!(req.analysis, Analysis2d::Driven { .. } | Analysis2d::Resonance { .. });

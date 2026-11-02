@@ -19,7 +19,7 @@ It handles 1D layered structures, and 2D eigenmodes, scattering, leaky cavities 
 - **Inverse design** of mirrors, broadband coatings and 2D waveguide bends, using adjoint
   gradients of reflection, transmission and absorption, or of power through a line
 
-Visitors build their own structure on the page: drag boundaries, split layers, pick
+Visitors build their own structure on the page: drag boundaries and shapes, split layers, pick
 materials, repeat blocks, and share the result as a link.
 
 **New to the finite element method?** The [tutorial](docs/README.md) explains it using

@@ -2,8 +2,8 @@
 
 use super::open::{cell_center, line_response, open_dofs, open_matrix, open_mesh, open_output, point_load};
 use super::{coefficients, free_positions, mode_volume};
+use crate::output::{normalized, FieldMeta, Output};
 use crate::problem::Request2d;
-use crate::solve::{normalized, FieldMeta, Output};
 use crate::space::H1Triangle;
 use crate::sparse::{Ordering, SparseLu};
 use crate::C64;

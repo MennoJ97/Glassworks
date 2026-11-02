@@ -179,3 +179,37 @@ fn sparse_lu_recovers_when_a_part_sits_on_its_own_resonance() {
         assert!((x[i] - direct[i]).norm() < 1e-9 * size, "unknown {i}");
     }
 }
+
+#[test]
+fn sparse_lu_solves_the_transposed_system() {
+    // An unsymmetric matrix on a grid of nodes, with a tiny pivot so that refinement runs too.
+    for tiny in [1.0, 1e-12] {
+        let side = 30;
+        let n = side * side;
+        let pos: Vec<(f64, f64)> = (0..n).map(|i| ((i % side) as f64, (i / side) as f64)).collect();
+        let mut t = vec![];
+        for i in 0..n {
+            let w = (i as f64 * 0.37).sin();
+            t.push((i, i, C64::new(5.0 + w, 1.0 + 2.0 * w)));
+            if i % side + 1 < side {
+                t.push((i, i + 1, C64::new(-1.0, 0.3 * w)));
+                t.push((i + 1, i, C64::new(0.5 * w, -1.2)));
+            }
+            if i + side < n {
+                t.push((i, i + side, C64::new(0.8, w)));
+                t.push((i + side, i, C64::new(-1.1, 0.2)));
+            }
+        }
+        t.push((0, 0, C64::new(-5.0 + tiny, -1.0)));
+        let a = Csr::from_triplets(n, t);
+        let ordering = Ordering::new(&a, &pos);
+        let lu = SparseLu::factor(&a, &ordering);
+        let b: Vec<C64> = (0..n).map(|i| C64::new((i as f64).cos(), (i as f64 * 0.7).sin())).collect();
+        let mut x = b.clone();
+        lu.solve_transposed(&mut x);
+        let mut back = vec![C64::new(0.0, 0.0); n];
+        a.mul_transposed(&x, &mut back);
+        let error = back.iter().zip(&b).map(|(p, q)| (p - q).norm()).fold(0.0, f64::max);
+        assert!(error < 1e-9, "tiny {tiny}: residual {error}");
+    }
+}

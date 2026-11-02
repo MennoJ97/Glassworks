@@ -1,6 +1,7 @@
-// Canvas drawing: the field drawn over its structure, and the line charts.
-// A 2D field view would replace FieldPlot with a WebGL triangle renderer that reads
-// the same channels; nothing outside this file draws anything.
+// Canvas drawing: a 1D field over its layers, a 2D field over its shapes, and the line charts.
+// Nothing outside this file draws anything.
+
+import { grabShape } from './model.js';
 
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 export const seriesColors = () => ['--series-1', '--series-2', '--series-3'].map(css);
@@ -269,7 +270,7 @@ export class FieldPlot {
 // A scalar field over a triangle mesh, with shape outlines on top. The mesh is
 // rasterized once per size, so animating only recombines two stored images.
 export class FieldMap {
-  constructor(canvas) {
+  constructor(canvas, onDrag) {
     this.canvas = canvas;
     this.mesh = null;
     this.shapes = [];
@@ -277,11 +278,59 @@ export class FieldMap {
     this.phase = 0;
     this.raster = null;
     this.image = document.createElement('canvas');
+    // Only a structure the visitor drew can be dragged, not a fixed guide or a design.
+    this.editable = false;
+    this.hover = null;
+    this.drag = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      this.drag = this.grab(e);
+      if (this.drag) canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (this.drag && this.mesh) onDrag(this.drag, ...this.toDomain(e));
+      this.setHover(this.drag ?? this.grab(e));
+    });
+    for (const stop of ['pointerup', 'pointercancel']) canvas.addEventListener(stop, () => { this.drag = null; });
+    canvas.addEventListener('pointerleave', () => this.setHover(this.drag));
+    // Touching a shape drags it, and touching anywhere else still scrolls the page.
+    canvas.addEventListener('touchstart', (e) => { if (this.grab(e.touches[0])) e.preventDefault(); }, { passive: false });
+  }
+
+  // A pointer's place in the domain, kept inside so that nothing can be dragged out of reach.
+  toDomain(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const a = this.box(rect.width, rect.height);
+    const x = (e.clientX - rect.left - a.left) / a.scale;
+    const y = this.mesh.height - (e.clientY - rect.top - a.top) / a.scale;
+    return [Math.max(0, Math.min(this.mesh.width, x)), Math.max(0, Math.min(this.mesh.height, y))];
+  }
+
+  // What a pointer would grab: the source marker, or a shape.
+  grab(e) {
+    if (!this.editable || !this.mesh) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    const a = this.box(rect.width, rect.height);
+    const [px, py] = [e.clientX - rect.left, e.clientY - rect.top];
+    if (px < a.left || px > a.right || py < a.top || py > a.bottom) return null;
+    const [x, y] = this.toDomain(e);
+    const reach = 8 / a.scale;
+    const { source } = this.marks;
+    if (source && Math.hypot(x - source[0], y - source[1]) < reach) return { part: 'source' };
+    return grabShape(this.shapes, x, y, reach);
+  }
+
+  setHover(next) {
+    const same = next?.index === this.hover?.index && next?.part === this.hover?.part;
+    this.hover = next;
+    const across = next?.sideX && next.sideY ? (next.sideX === next.sideY ? 'nesw-resize' : 'nwse-resize') : next?.sideX ? 'ew-resize' : 'ns-resize';
+    this.canvas.style.cursor = !next ? 'default' : next.part === 'edge' ? across : next.part === 'rim' ? 'nwse-resize' : next.part === 'source' ? 'grab' : 'move';
+    if (!same) this.draw();
   }
 
   // `marks` may hold `bloch`, the phase per period across x and y; `open` for edges that
-  // absorb; `source`, a point; `incident`, a direction of travel in degrees; and `monitor`,
-  // a line that power is measured across; and `density`, a rectangle of pixels with `rho`.
+  // absorb; `source`, a point; `incident`, a direction of travel in degrees; `monitor`, a line
+  // that power is measured across; `lines`, labelled heights; and `density`, a rectangle of
+  // pixels with `rho`.
   setMesh(mesh, shapes, marks) {
     this.mesh = mesh;
     this.shapes = shapes;
@@ -410,14 +459,15 @@ export class FieldMap {
       });
       ctx.globalAlpha = 1;
     }
-    for (const s of this.shapes) {
+    for (const [i, s] of this.shapes.entries()) {
+      ctx.lineWidth = this.hover?.index === i ? 3 : 1.5;
       ctx.beginPath();
       if (s.type === 'circle') ctx.arc(sx(s.x), sy(s.y), (s.w / 2) * a.scale, 0, 2 * Math.PI);
       else ctx.rect(sx(s.x - s.w / 2), sy(s.y + s.h / 2), s.w * a.scale, s.h * a.scale);
       ctx.stroke();
     }
     ctx.restore();
-    const { bloch, open, source, incident, monitor } = this.marks;
+    const { bloch, open, source, incident, monitor, lines } = this.marks;
     if (bloch) this.drawBloch(ctx, a);
     else if (open) this.drawOpen(ctx, a);
     else ctx.strokeRect(a.left, a.top, a.right - a.left, a.bottom - a.top);
@@ -430,6 +480,17 @@ export class FieldMap {
       ctx.lineTo(sx(monitor.x1), sy(monitor.y1));
       ctx.stroke();
       this.drawLabel(ctx, 'Monitor', sx((monitor.x0 + monitor.x1) / 2), sy((monitor.y0 + monitor.y1) / 2) - 15);
+    }
+    for (const [y, name] of lines ?? []) {
+      ctx.strokeStyle = css('--ink');
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(a.left, sy(y));
+      ctx.lineTo(a.right, sy(y));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      this.drawLabel(ctx, name, (a.left + a.right) / 2, sy(y) - 10);
     }
     if (incident !== undefined) {
       const angle = (incident * Math.PI) / 180;

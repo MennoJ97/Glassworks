@@ -9,16 +9,17 @@
 //! and `assemble` are unchanged. `Te` and `Tm` in the request keep their 1D meaning
 //! for these coefficients: `Te` solves for `E_z` and `Tm` for `H_z`.
 
+mod adjoint;
 mod closed;
 mod driven;
-mod gradient;
+mod grating;
+mod leaky;
 mod open;
-mod resonance;
 mod validate;
 
 use crate::assemble::DofMap;
-use crate::problem::{Analysis2d, Polarization, Request2d};
-use crate::solve::Output;
+use crate::output::Output;
+use crate::problem::{Analysis2d, Boundary, Polarization, Request2d};
 use crate::space::{H1Triangle, Space};
 use crate::C64;
 
@@ -32,8 +33,18 @@ pub fn solve(req: &Request2d) -> Result<Output, String> {
         Analysis2d::Driven { wavelength, source, pml, average_q } => {
             driven::solve(req, wavelength, source, pml, average_q)
         }
-        Analysis2d::Resonance { target_k0, x, y, pml } => resonance::solve(req, target_k0, (x, y), pml),
+        Analysis2d::Resonance { target_k0, x, y, pml } => leaky::solve(req, target_k0, (x, y), pml),
         Analysis2d::Cavity { .. } | Analysis2d::Bands { .. } => closed::solve(req),
+        Analysis2d::Grating { .. } => grating::solve(req),
+    }
+}
+
+/// How far an absorbing layer extends the domain sideways: not at all for a grating.
+fn side_layer(req: &Request2d, pml: f64) -> f64 {
+    if req.walls == Boundary::Periodic {
+        0.0
+    } else {
+        pml
     }
 }
 

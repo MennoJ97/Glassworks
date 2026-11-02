@@ -9,15 +9,19 @@
 //! its own, though, and then its front has only a poor pivot, even if the whole matrix is
 //! fine. So a front reports any weak pivot, and solves are then refined against the matrix.
 //!
-//! An absorbing layer's operator is complex symmetric, `A^T = A`, so half of every update repeats
-//! the other half. `factor_symmetric` skips that half and pivoting with it, as `A = L D L^T`.
-//! Refinement covers its weak pivots, and a pivot too small to trust falls back to `factor`.
+//! This file has the method itself. Two refinements that a first reading can skip are in
+//! `sparse/`: `symmetric.rs` is faster when `A^T = A`, and `transposed.rs` solves `A^T x = b`.
 
 use crate::assemble::Csr;
 use crate::banded::Factors;
 use crate::{C64, ZERO};
 use std::cell::RefCell;
 use std::rc::Rc;
+
+mod symmetric;
+mod transposed;
+
+use symmetric::partial_ldl;
 
 /// Parts this small are eliminated whole.
 const LEAF: usize = 16;
@@ -245,59 +249,6 @@ fn partial_lu(f: &mut [C64], m: usize, p: usize, scale: f64) -> (Vec<u32>, bool)
     (swaps, weak)
 }
 
-/// As `partial_lu`, for a complex symmetric front, updating only its lower triangle and leaving
-/// `U = D L^T` for the solves. Returns whether any pivot was weak, or `None` if one is unusable.
-fn partial_ldl(f: &mut [C64], m: usize, p: usize, scale: f64) -> Option<bool> {
-    let mut weak = false;
-    let mut k = 0;
-    while k < p {
-        let e = (k + BLOCK).min(p);
-        for j in k..e {
-            let d = f[j + j * m];
-            let below = f[j * m + j + 1..(j + 1) * m].iter().fold(0.0f64, |b, v| b.max(v.norm_sqr()));
-            if d.norm_sqr() < 1e-16 * below || d.norm_sqr() < 1e-28 * scale * scale {
-                return None;
-            }
-            weak |= d.norm_sqr() < 1e-4 * below || d.norm_sqr() < 1e-16 * scale * scale;
-            let inv = d.inv();
-            f[j * m + j + 1..(j + 1) * m].iter_mut().for_each(|v| *v *= inv);
-            let (left, right) = f.split_at_mut((j + 1) * m);
-            for (c, col) in (j + 1..e).zip(right.chunks_exact_mut(m)) {
-                let u = d * left[j * m + c];
-                col[c..].iter_mut().zip(&left[j * m + c..]).for_each(|(y, x)| *y -= u * *x);
-            }
-        }
-        // Update the later columns from this block.
-        let (left, right) = f.split_at_mut(e * m);
-        for (c, col) in (e..m).zip(right.chunks_exact_mut(m)) {
-            let mut q = k;
-            while q < e {
-                let take = (e - q).min(4);
-                let at = |o: usize| {
-                    let from = if o < take { q + o } else { q };
-                    &left[from * m + c..(from + 1) * m]
-                };
-                let coef = |o: usize| {
-                    if o < take {
-                        left[(q + o) * m + q + o] * left[(q + o) * m + c]
-                    } else {
-                        ZERO
-                    }
-                };
-                subtract(&mut col[c..], [at(0), at(1), at(2), at(3)], [coef(0), coef(1), coef(2), coef(3)]);
-                q += take;
-            }
-        }
-        k = e;
-    }
-    for c in 1..m {
-        for i in 0..c.min(p) {
-            f[i + c * m] = f[i + i * m] * f[c + i * m];
-        }
-    }
-    Some(weak)
-}
-
 struct Front {
     /// The front's first `p` columns: LU of the pivots, then `L` below them.
     lower: Vec<C64>,
@@ -316,11 +267,6 @@ pub struct SparseLu<'a> {
 impl<'a> SparseLu<'a> {
     pub fn factor(a: &'a Csr, ordering: &'a Ordering) -> Self {
         Self::factor_as(a, ordering, false).expect("pivoting always finds a usable pivot")
-    }
-
-    /// For `A^T = A`. About half the cost of `factor`, with the same accuracy after refinement.
-    pub fn factor_symmetric(a: &'a Csr, ordering: &'a Ordering) -> Self {
-        Self::factor_as(a, ordering, true).unwrap_or_else(|| Self::factor(a, ordering))
     }
 
     fn factor_as(a: &'a Csr, ordering: &'a Ordering, symmetric: bool) -> Option<Self> {
@@ -411,20 +357,30 @@ impl<'a> SparseLu<'a> {
             rhs[old] = x[new];
         }
     }
+
+    /// One solve, then refinement against the matrix if any pivot was weak.
+    fn refined(
+        &self,
+        rhs: &mut [C64],
+        once: impl Fn(&Self, &mut [C64]),
+        mul: impl Fn(&Csr, &[C64], &mut [C64]),
+    ) {
+        let b = rhs.to_vec();
+        once(self, rhs);
+        if self.weak {
+            for _ in 0..REFINEMENT_STEPS {
+                let mut r = vec![ZERO; rhs.len()];
+                mul(self.matrix, rhs, &mut r);
+                r.iter_mut().zip(&b).for_each(|(v, w)| *v = *w - *v);
+                once(self, &mut r);
+                rhs.iter_mut().zip(&r).for_each(|(v, d)| *v += *d);
+            }
+        }
+    }
 }
 
 impl Factors for SparseLu<'_> {
     fn solve(&self, rhs: &mut [C64]) {
-        let b = rhs.to_vec();
-        self.solve_once(rhs);
-        if self.weak {
-            for _ in 0..REFINEMENT_STEPS {
-                let mut r = vec![ZERO; rhs.len()];
-                self.matrix.mul(rhs, &mut r);
-                r.iter_mut().zip(&b).for_each(|(v, w)| *v = *w - *v);
-                self.solve_once(&mut r);
-                rhs.iter_mut().zip(&r).for_each(|(v, d)| *v += *d);
-            }
-        }
+        self.refined(rhs, Self::solve_once, Csr::mul);
     }
 }

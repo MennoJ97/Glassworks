@@ -51,7 +51,7 @@ With $p = 2$ that's a factor of 16 per halving, and a square cavity's error fall
 ## A mesh that fits the shapes
 
 A general mesher, such as [Triangle](https://www.cs.cmu.edu/~quake/triangle.html)
-([Shewchuk 1996](15-references.md#shewchuk-1996)), could handle any geometry. Here a simpler idea
+([Shewchuk 1996](19-references.md#shewchuk-1996)), could handle any geometry. Here a simpler idea
 goes a long way, and it has a useful property that a general mesher lacks.
 
 Start from a structured grid. On a **staircase** mesh, each cell takes the material at its centre,
@@ -88,30 +88,6 @@ domain have matching nodes, which is exactly what periodic boundaries need.
 Straight cells still cut the corners of a circle, so a curved outline's error falls at second order,
 even with second-order elements. Fitting doesn't undo that: it just gets the outline's position right.
 
-## Ties, and what rounding noise can do
-
-A fitted mesh makes many exact ties, and a fixed grid under a regular structure makes more. A
-rectangle's edge can lie exactly halfway between two rows, many nodes can be equally far from a
-shape, and a domain can be exactly 84 cells wide. What decides each tie is then floating-point
-noise. This looks harmless until the same structure gets a different mesh for no physical reason.
-
-This solver has a test that made that visible: multiplying every length and the wavelength by the same
-number shouldn't change anything (chapter 12 explains why). At first, it changed one structure's gradients by
-up to 17%, even though no solve was wrong. It took four separate fixes to find all of these:
-
-| Tie | What noise did |
-|---|---|
-| A count of steps along a grid, monitor or port is a whole number | `ceil(84.00000000000001)` adds a row |
-| A shape's corner is exactly halfway between two nodes | It decides which node moves |
-| Several nodes are equally far from a shape | It decides the order they snap in |
-| A triangle's centroid lies exactly on an outline, where it meets the outer edge whose nodes can't move | It picks that cell's material |
-
-The fix is the same each time: decide with a small tolerance, relative to the cell, so that a tie
-always falls the same way. Results at different scales now agree to $10^{-11}$. The last one took
-longest to find, because the field was only wrong in the last column of cells, next to the wall, and
-its effect was $10^{-6}$. Looking at *where* two solutions differ located it, after several good
-theories about the eigensolver and the linear solver had been ruled out by measuring them.
-
 ## Periodic ties and band diagrams
 
 Chapter 4 handled a Bloch boundary by mapping the last dof onto the first, with a phase. In 2D this is
@@ -129,7 +105,7 @@ unchanged.
 A **band diagram** repeats that eigenproblem for wavevectors around the edge of the irreducible
 Brillouin zone: from $\Gamma$ ($\mathbf{k} = 0$) to X to M and back to $\Gamma$. For a square lattice, the
 extremes of the bands are usually found on this path, though this isn't guaranteed
-([Joannopoulos et al. 2008](15-references.md#joannopoulos-2008)). Only the phases change between
+([Harrison et al. 2007](19-references.md#harrison-2007)). Only the phases change between
 wavevectors, so where the nonzeros are stays the same, which the next chapter exploits.
 
 ### Example: a lattice of rods

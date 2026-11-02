@@ -139,6 +139,7 @@ export const PRESETS = {
     layers: [layer('Silica glass', 3), layer('Silicon nitride', 0.8), layer('Silica glass', 3)],
   },
   'Scattering by a rod': { analysis: 'scatter2d', source: 'plane_wave', wavelength: 1, angle: 0 },
+  'Diffraction grating': { analysis: 'grating2d', wavelength: 1, angle: 20 },
   'Sharp bend in a photonic crystal': { analysis: 'guide2d', wavelength: GUIDES.sharp.wavelength, planeSetup: guideSetup('sharp') },
   'Bend in an ordinary waveguide': { analysis: 'guide2d', wavelength: GUIDES.slab.wavelength, planeSetup: guideSetup('slab') },
   'Empty square cavity': { analysis: 'cavity2d', planeSetup: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', target: null, sourceX: 0.5, sourceY: 0.5, shapes: [] } },
@@ -154,7 +155,7 @@ export const PRESETS = {
 // picks; eigenmode views have no source and solve for the modes themselves; design
 // views repeat driven solves, using their gradients to change the structure.
 export const PROBLEMS = {
-  driven: { name: 'Driven response', views: ['spectrum', 'field', 'scatter2d', 'guide2d'] },
+  driven: { name: 'Driven response', views: ['spectrum', 'field', 'scatter2d', 'guide2d', 'grating2d'] },
   eigen: { name: 'Eigenmodes', views: ['cavity', 'bands', 'waveguide', 'cavity2d', 'bands2d'] },
   design: { name: 'Inverse design', views: ['mirror', 'antireflection', 'bend2d', 'cavityDesign'] },
 };
@@ -186,6 +187,11 @@ export function defaultState() {
         shapes: [{ type: 'circle', x: 1.5, y: 1.5, w: 1, h: 1, n: 2 }],
       },
       guide2d: guideSetup('sharp'),
+      // The substrate runs out through the layer below, as anything reaching it must.
+      grating2d: {
+        width: 1.5, height: 2, cell: 0.025, background: 1, walls: 'periodic',
+        shapes: [{ type: 'rect', x: 0.75, y: -1.25, w: 3.5, h: 3.5, n: 1.5 }, { type: 'rect', x: 0.75, y: 0.75, w: 0.75, h: 0.5, n: 1.5 }],
+      },
       bend2d: { background: 1, walls: 'absorbing', shapes: [] },
       cavityDesign: { background: 1, walls: 'absorbing', shapes: [] },
       cavity2d: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', target: null, sourceX: 0.5, sourceY: 0.5, shapes: [] },
@@ -226,6 +232,45 @@ export const toShape = (c) => ({
     : { type: 'rect', x0: c.x - c.w / 2, y0: c.y - c.h / 2, x1: c.x + c.w / 2, y1: c.y + c.h / 2 }),
 });
 
+// What a pointer at (x, y) would grab, with later shapes on top: an outline within `reach`
+// resizes, and inside moves. A small shape keeps a middle to hold it by.
+export function grabShape(shapes, x, y, reach) {
+  for (let index = shapes.length - 1; index >= 0; index--) {
+    const s = shapes[index];
+    const [dx, dy] = [x - s.x, y - s.y];
+    if (s.type === 'circle') {
+      const rim = Math.hypot(dx, dy) - s.w / 2;
+      if (rim < reach && rim > -Math.min(reach, s.w / 4)) return { index, part: 'rim' };
+      if (rim < 0) return { index, part: 'body', dx, dy };
+    } else {
+      const [ex, ey] = [Math.abs(dx) - s.w / 2, Math.abs(dy) - s.h / 2];
+      if (ex >= reach || ey >= reach) continue;
+      const sideX = ex > -Math.min(reach, s.w / 4) ? Math.sign(dx) : 0;
+      const sideY = ey > -Math.min(reach, s.h / 4) ? Math.sign(dy) : 0;
+      return sideX || sideY ? { index, part: 'edge', sideX, sideY } : { index, part: 'body', dx, dy };
+    }
+  }
+  return null;
+}
+
+// Applies a grab to its shape. Dragging a rectangle's edge leaves the opposite edge in place.
+export function dragShape(s, grab, x, y) {
+  const [snap, smallest] = [(v) => Math.round(v * 1000) / 1000, 0.005];
+  if (grab.part === 'body') {
+    [s.x, s.y] = [snap(x - grab.dx), snap(y - grab.dy)];
+  } else if (grab.part === 'rim') {
+    s.w = Math.max(smallest, snap(2 * Math.hypot(x - s.x, y - s.y)));
+  } else {
+    const resize = (centre, size, side, at) => {
+      const fixed = centre - (side * size) / 2;
+      const next = Math.max(smallest, snap(side * (at - fixed)));
+      return [+(fixed + (side * next) / 2).toFixed(6), next];
+    };
+    if (grab.sideX) [s.x, s.w] = resize(s.x, s.w, grab.sideX, x);
+    if (grab.sideY) [s.y, s.h] = resize(s.y, s.h, grab.sideY, y);
+  }
+}
+
 // A straight guide, then the bend. The same source in each gives the bend's transmission.
 function guideRequests(s) {
   const p = s.plane.guide2d;
@@ -243,6 +288,18 @@ function guideRequests(s) {
       analysis: { type: 'driven', wavelength: s.wavelength, source: g.source, pml: g.pml },
     };
   });
+}
+
+// Where a grating's lines go: reflection just above the structure with the sheet above that,
+// and transmission halfway down the space below it.
+export function gratingLines(s) {
+  const p = s.plane.grating2d;
+  const inside = p.shapes.map((c) => [c.y - c.h / 2, c.y + c.h / 2]);
+  const top = Math.max(0, ...inside.map(([, high]) => high));
+  const lows = inside.map(([low]) => low).filter((low) => low > 0);
+  const wavelength = s.wavelength / p.background;
+  const reflect = top + Math.max(2 * p.cell, 0.05 * wavelength);
+  return { reflect, source: reflect + 0.5 * wavelength, transmit: Math.min(p.height, ...lows) / 2 };
 }
 
 function planeRequests(s) {
@@ -265,6 +322,11 @@ function planeRequests(s) {
     // wavelength of layer changed the rod crystal's Q by under 0.2% against a whole one.
     const wavelength = p.target || 2 * Math.max(p.width, p.height);
     return [{ ...base, analysis: { type: 'resonance', target_k0: (2 * Math.PI) / wavelength, x: p.sourceX, y: p.sourceY, pml: wavelength / 4 } }];
+  }
+  if (s.analysis === 'grating2d') {
+    const { reflect, source, transmit } = gratingLines(s);
+    const pml = s.wavelength / p.background;
+    return [{ ...base, analysis: { type: 'grating', wavelength: s.wavelength, angle_deg: s.angle, pml, source_y: source, reflect_y: reflect, transmit_y: transmit } }];
   }
   if (s.analysis === 'scatter2d') {
     const source = s.source === 'line' ? { type: 'line', x: p.sourceX, y: p.sourceY } : { type: 'plane_wave', angle_deg: s.angle };

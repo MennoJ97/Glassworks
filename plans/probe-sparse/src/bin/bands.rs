@@ -2,7 +2,7 @@
 //! runs one diagram of a lattice of rods, with the shift below every eigenvalue.
 use eigenmenno_core::assemble::{assemble, Csr, DofMap};
 use eigenmenno_core::banded::Factors;
-use eigenmenno_core::eigen::eigs_with;
+use eigenmenno_core::eigen::eigs_factored;
 use eigenmenno_core::mesh::{Mesh, Outline};
 use eigenmenno_core::space::H1Triangle;
 use eigenmenno_core::sparse::{Ordering, SparseLu};
@@ -93,7 +93,7 @@ fn main() {
                 };
                 *factor.borrow_mut() += t.elapsed().as_secs_f64();
                 let timed = Timed { inner, time: &solve, count: &count };
-                low += eigs_with(&timed as &dyn Factors, &e.q, sigma, 6, 1e-10).unwrap()[0].0;
+                low += eigs_factored(&timed as &dyn Factors, &e.q, sigma, 6, 1e-10).unwrap()[0].0;
             }
             let total = start.elapsed().as_secs_f64();
             let (fa, so) = (*factor.borrow(), solve.get());

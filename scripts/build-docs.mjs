@@ -23,8 +23,8 @@ const math = (tex, displayMode) =>
     .replace(/<mi mathvariant="bold">([A-Za-z]+)<\/mi>/g, (_, letters) => `<mi>${[...letters].map(boldLetter).join('')}</mi>`);
 
 const sources = [
-  ...['mesh', 'space', 'assemble', 'banded', 'eigen', 'problem', 'solve', 'sparse', 'solve2d', 'solve2d/closed', 'solve2d/open', 'solve2d/driven', 'solve2d/gradient', 'solve2d/resonance', 'solve2d/validate'].map((n) => `crates/eigenmenno-core/src/${n}.rs`),
-  ...['analytic', 'cross_check'].map((n) => `crates/eigenmenno-core/tests/${n}.rs`),
+  ...['mesh', 'space', 'assemble', 'banded', 'eigen', 'problem', 'output', 'solve1d', 'sparse', 'sparse/symmetric', 'sparse/transposed', 'solve2d', 'solve2d/closed', 'solve2d/open', 'solve2d/driven', 'solve2d/leaky', 'solve2d/adjoint', 'solve2d/grating', 'solve2d/validate'].map((n) => `crates/eigenmenno-core/src/${n}.rs`),
+  ...['analytic', 'analytic2d', 'gratings', 'cross_check'].map((n) => `crates/eigenmenno-core/tests/${n}.rs`),
 ];
 
 // A citation pointing at a missing reference has to fail the build too.
@@ -94,6 +94,9 @@ function tableHtml(self, token) {
   return `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
 }
 
+// Chapters before this one are the essentials, and each one after stands on its own.
+const FIRST_OPTIONAL = '14-';
+
 const chapters = readdirSync(docs)
   .filter((f) => /^\d+-.*\.md$/.test(f))
   .sort()
@@ -105,7 +108,7 @@ const chapters = readdirSync(docs)
 
 function layout({ title, body, current, prefix = '' }) {
   const links = chapters
-    .map((c) => `<li><a href="${prefix}${c.href}"${c.href === current ? ' aria-current="page"' : ''}>${escapeHtml(c.title)}</a></li>`)
+    .map((c) => `${c.file.startsWith(FIRST_OPTIONAL) ? '<li class="part">Going further</li>\n        ' : ''}<li><a href="${prefix}${c.href}"${c.href === current ? ' aria-current="page"' : ''}>${escapeHtml(c.title)}</a></li>`)
     .join('\n        ');
   return `<!doctype html>
 <html lang="en">

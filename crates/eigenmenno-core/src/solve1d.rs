@@ -15,10 +15,10 @@ use crate::assemble::{assemble, Csr, DofMap};
 use crate::banded::BandedLu;
 use crate::eigen::eigs_near;
 use crate::mesh::Mesh;
+use crate::output::{normalized, FieldMeta, Meta, Output};
 use crate::problem::{Analysis, Boundary, Layer, Polarization, Request, Source};
 use crate::space::{H1Line, Space};
 use crate::{C64, I, ONE, ZERO};
-use serde::Serialize;
 use std::f64::consts::PI;
 
 const EIG_TOL: f64 = 1e-11;
@@ -26,39 +26,6 @@ const EIG_TOL: f64 = 1e-11;
 const MAX_FIELD_POINTS: usize = 20_000;
 /// Refuses meshes that would exhaust a browser tab's memory.
 const MAX_DOFS: f64 = 2.0e6;
-
-/// Numbers travel as `channels`, so large fields stay cheap to hand to
-/// JavaScript. Fields are named `field{i}/x` and `field{i}/{component}/re|im`.
-pub struct Output {
-    pub meta: Meta,
-    pub channels: Vec<(String, Vec<f64>)>,
-}
-
-#[derive(Serialize, Default)]
-pub struct Meta {
-    pub n_dofs: usize,
-    pub length: f64,
-    pub fields: Vec<FieldMeta>,
-}
-
-#[derive(Serialize, Default)]
-pub struct FieldMeta {
-    pub components: Vec<&'static str>,
-    pub k0: f64,
-    /// Effective index of a waveguide mode.
-    pub n_eff: Option<f64>,
-    /// Reflected, transmitted and absorbed power of a plane wave.
-    pub power: Option<[f64; 3]>,
-    /// Quality factor of a leaky 2D mode.
-    pub q: Option<f64>,
-    /// Effective area of a 2D mode: energy over its peak density.
-    pub volume: Option<f64>,
-    /// `2 Re(-u)` at a 2D line source, which is pi times the LDOS per unit k.
-    pub ldos: Option<f64>,
-    /// `-u_0`, whose reciprocal is nearly linear in `k` close to a resonance, as `[re, im]`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub response: Option<[f64; 2]>,
-}
 
 fn c(v: [f64; 2]) -> C64 {
     C64::new(v[0], v[1])
@@ -162,15 +129,6 @@ impl<'a> Setup<'a> {
             ..Default::default()
         });
     }
-}
-
-/// Scales a mode to a unit real peak, so plots are comparable.
-pub(crate) fn normalized(mut u: Vec<C64>) -> Vec<C64> {
-    let peak = u.iter().fold(ZERO, |m, x| if x.norm() > m.norm() { *x } else { m });
-    if peak != ZERO {
-        u.iter_mut().for_each(|x| *x /= peak);
-    }
-    u
 }
 
 fn validate(req: &Request) -> Result<(), String> {

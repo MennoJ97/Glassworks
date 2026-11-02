@@ -142,6 +142,29 @@ pub enum Analysis2d {
     /// The leaky mode nearest `target_k0` in open space, excited by a line source that
     /// must overlap it. Walls must be `absorbing`.
     Resonance { target_k0: f64, x: f64, y: f64, pml: f64 },
+    /// A plane wave falling on one period of a grating, which repeats along x, at `angle_deg`
+    /// from the normal. A sheet at `source_y` launches it downward, and absorbing layers of
+    /// thickness `pml` sit above and below, so walls must be `periodic`. Shapes may run through
+    /// them. The space from `reflect_y` up to `source_y` must be uniform, and from 0.1 to 1
+    /// wavelengths long. Each diffraction order's share of the incident power is read there and
+    /// along `transmit_y`.
+    Grating {
+        wavelength: f64,
+        angle_deg: f64,
+        pml: f64,
+        source_y: f64,
+        reflect_y: f64,
+        transmit_y: f64,
+        #[serde(default)]
+        goal: Option<OrderGoal>,
+    },
+}
+
+/// The diffraction order whose share of the power a density map's `gradient` is the slope of.
+#[derive(Deserialize, Clone, Copy)]
+pub struct OrderGoal {
+    pub transmitted: bool,
+    pub order: i32,
 }
 
 /// `Line` is a current filament at a point. `PlaneWave` travels at `angle_deg` from the

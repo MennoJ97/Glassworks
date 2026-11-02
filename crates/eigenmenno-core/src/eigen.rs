@@ -1,7 +1,7 @@
 //! Shift-invert Lanczos for `A x = lambda B x`, with A Hermitian and B positive
 //! definite. Inverting `A - sigma B` maps the eigenvalues nearest `sigma` to the
-//! largest ones, which Lanczos finds first. In 2D this also skips the large
-//! null space of the curl-curl operator.
+//! largest ones, which Lanczos finds first. With vector fields, this would also
+//! skip the large null space of the curl-curl operator.
 
 use crate::assemble::Csr;
 use crate::banded::{BandedLu, Factors};
@@ -149,11 +149,11 @@ fn lanczos(lu: &dyn Factors, b: &Csr, found: &[Mode], want: usize, tol: f64, see
 /// stays orthogonal to the modes already found, and we stop once a run finds
 /// nothing closer than the current k-th mode.
 pub fn eigs_near(a: &Csr, b: &Csr, sigma: f64, k: usize, tol: f64) -> Result<Vec<(f64, Vec<C64>)>, String> {
-    eigs_with(&BandedLu::factor(&a.sub_scaled(sigma, b))?, b, sigma, k, tol)
+    eigs_factored(&BandedLu::factor(&a.sub_scaled(sigma, b))?, b, sigma, k, tol)
 }
 
 /// `eigs_near` for an `lu` that already factors `A - sigma B`.
-pub fn eigs_with(
+pub fn eigs_factored(
     lu: &dyn Factors,
     b: &Csr,
     sigma: f64,
