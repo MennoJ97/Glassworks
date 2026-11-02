@@ -1,6 +1,6 @@
 // Connects the controls, the solver and the plots.
 
-import { GUIDES, MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeState, defaultState, encodeState, guideCell, guideGeometry, guideResolved, guideScale, layer, problemOf, totalLength } from './model.js';
+import { GUIDES, MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeState, defaultState, dragShape, encodeState, guideCell, guideGeometry, guideResolved, guideScale, layer, problemOf, totalLength } from './model.js';
 import { EvolutionMap, FieldMap, FieldPlot, LineChart, drawDensity, seriesColors } from './plot.js';
 import { Solver } from './solver.js';
 import { CAVITY_Q, STAGES, bendWarning, designGeometry, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, prepareDesign, stageLength, totalIterations, references, sharpnessAt } from './design.js';
@@ -75,7 +75,18 @@ const fieldPlot = new FieldPlot($('field-plot'), {
   },
 });
 
-const fieldMap = new FieldMap($('field-map'));
+const fieldMap = new FieldMap($('field-map'), (grab, x, y) => {
+  const p = planeSettings();
+  if (grab.part === 'source') {
+    [p.sourceX, p.sourceY] = [x, y].map((v) => Math.round(v * 1000) / 1000);
+    fieldMap.marks.source = [p.sourceX, p.sourceY];
+  } else {
+    dragShape(p.shapes[grab.index], grab, x, y);
+  }
+  renderPlane();
+  changed();
+  fieldMap.draw();
+});
 const planar = () => Boolean(state.plane[state.analysis]);
 const guide2d = () => state.analysis === 'guide2d';
 const bend2d = () => state.analysis === 'bend2d';
@@ -883,8 +894,10 @@ function showResults() {
     const guide = guide2d() ? guideGeometry(p.bend, false, guideScale(state)) : pixelDesign() ? designGeometry(state, design.rho) : null;
     const [width, height] = guide ? [guide.size, guide.size] : [p.width, p.height];
     fieldMap.setMesh({ x: channels.x, y: channels.y, triangles: channels.triangles, width, height }, guide ? guide.shapes : p.shapes, marks);
+    fieldMap.editable = !guide;
     const size = a === 'scatter2d' ? 'The total field is shown.' : a === 'cavityDesign' ? 'Shaded pixels are the high-index material.' : a === 'guide2d' || a === 'bend2d' ? `The source sends light both ways, and the half going left leaves through the layer.${a === 'bend2d' ? ' Shaded pixels are the slab\'s material.' : ''}` : 'Its overall size is arbitrary.';
-    $('field-note').textContent = `${planeNote(marks)} Colour shows the field at this moment, with red and blue as opposite signs. ${size}`;
+    const drag = guide ? '' : ` Drag a shape to move it, or its edge to resize it.${marks.source ? ' The source can be dragged too.' : ''}`;
+    $('field-note').textContent = `${planeNote(marks)} Colour shows the field at this moment, with red and blue as opposite signs. ${size}${drag}`;
     const name = fieldResult.meta.fields[selectedField]?.components[0];
     if (name) fieldMap.setField(channels[`field${selectedField}/${name}/re`], channels[`field${selectedField}/${name}/im`]);
     fieldPlot.field = null;

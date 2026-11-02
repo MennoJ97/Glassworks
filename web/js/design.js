@@ -49,12 +49,14 @@ export function bendWarning(s) {
 }
 
 // What the plot needs, and each solve shares.
-export function bendGeometry(straight, scale) {
+export function bendGeometry(straight, scale, meeting) {
   const { x0, y0, size, width, domain, span } = BEND;
   const { x, y } = bendCentre;
   const far = domain + 3;
   const shapes = straight
     ? [rectangle(-3, y - width / 2, far, y + width / 2)]
+    : meeting
+    ? [rectangle(-3, y - width / 2, x + width / 2, y + width / 2), rectangle(x - width / 2, y - width / 2, x + width / 2, far)]
     : [rectangle(-3, y - width / 2, x0, y + width / 2), rectangle(x - width / 2, y0 + size, x + width / 2, far)];
   const end = domain - 0.4;
   return scaled({
@@ -66,9 +68,9 @@ export function bendGeometry(straight, scale) {
   }, scale);
 }
 
-function bendRequest(s, wavelength, straight, rho) {
+function bendRequest(s, wavelength, straight, rho, meeting) {
   const scale = bendScale(s);
-  const g = bendGeometry(straight, scale);
+  const g = bendGeometry(straight, scale, meeting);
   const n2 = BEND.n ** 2;
   return {
     width: g.size,
@@ -322,7 +324,10 @@ export function references(s) {
     }];
   }
   if (s.analysis === 'bend2d') {
-    return [{ name: 'Plain corner', requests: gradientRequests(s, new Float64Array(BEND.pixels ** 2)) }];
+    return [
+      { name: 'Empty region', requests: gradientRequests(s, new Float64Array(BEND.pixels ** 2)) },
+      { name: 'Sharp corner', requests: goalWavelengths(s).map((wavelength) => bendRequest(s, wavelength, false, undefined, true)) },
+    ];
   }
   const d = s.design[s.analysis];
   const quarter = (name, wavelength) => wavelength / (4 * material(name).n);
@@ -459,7 +464,7 @@ export async function optimize(s, solve, onStep) {
   let x = randomStart(n, d.seed);
   let iteration = 0;
   for (const beta of SHARPNESS) {
-    // Projection amplifies a change in x by about beta, so steps shrink to match.
+    // Projection amplifies a change in x by up to about beta / 2, so steps shrink to match.
     const mma = new Mma(Math.min(0.1, 0.2 / beta));
     for (let i = 0; i < stageLength(s); i++) {
       const { rho, slope } = project(filter.apply(x), beta);

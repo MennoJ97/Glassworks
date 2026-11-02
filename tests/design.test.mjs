@@ -115,12 +115,13 @@ test('a coating ends sharp, and beats both no coating and one quarter-wave layer
   assert.ok(seen.at(-1) < single && single < none, `${seen.at(-1)}, ${single}, ${none}`);
 });
 
-test('a bend ends sharp, and carries nearly all the light that a plain corner loses', async () => {
+test('a bend ends sharp, and beats both an empty region and a sharp corner', async () => {
   const s = state('bend2d');
   const { seen, grey } = await run(s);
   assert.ok(grey < 0.05, `grey ${grey}`);
-  const [plain] = await referenceValues(s);
-  assert.ok(plain < 0.1, `plain ${plain}`);
+  const [empty, corner] = await referenceValues(s);
+  assert.ok(empty < 0.1, `empty ${empty}`);
+  assert.ok(corner > 0.2 && corner < 0.5, `corner ${corner}`);
   // Three starts in plans/2d-solver.md reach 98.1 to 98.4%.
   assert.ok(seen.at(-1) > 0.97, `T ${seen.at(-1)}`);
 });

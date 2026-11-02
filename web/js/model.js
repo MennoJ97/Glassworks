@@ -226,6 +226,45 @@ export const toShape = (c) => ({
     : { type: 'rect', x0: c.x - c.w / 2, y0: c.y - c.h / 2, x1: c.x + c.w / 2, y1: c.y + c.h / 2 }),
 });
 
+// What a pointer at (x, y) would grab, with later shapes on top: an outline within `reach`
+// resizes, and inside moves. A small shape keeps a middle to hold it by.
+export function grabShape(shapes, x, y, reach) {
+  for (let index = shapes.length - 1; index >= 0; index--) {
+    const s = shapes[index];
+    const [dx, dy] = [x - s.x, y - s.y];
+    if (s.type === 'circle') {
+      const rim = Math.hypot(dx, dy) - s.w / 2;
+      if (rim < reach && rim > -Math.min(reach, s.w / 4)) return { index, part: 'rim' };
+      if (rim < 0) return { index, part: 'body', dx, dy };
+    } else {
+      const [ex, ey] = [Math.abs(dx) - s.w / 2, Math.abs(dy) - s.h / 2];
+      if (ex >= reach || ey >= reach) continue;
+      const sideX = ex > -Math.min(reach, s.w / 4) ? Math.sign(dx) : 0;
+      const sideY = ey > -Math.min(reach, s.h / 4) ? Math.sign(dy) : 0;
+      return sideX || sideY ? { index, part: 'edge', sideX, sideY } : { index, part: 'body', dx, dy };
+    }
+  }
+  return null;
+}
+
+// Applies a grab to its shape. Dragging a rectangle's edge leaves the opposite edge in place.
+export function dragShape(s, grab, x, y) {
+  const [snap, smallest] = [(v) => Math.round(v * 1000) / 1000, 0.005];
+  if (grab.part === 'body') {
+    [s.x, s.y] = [snap(x - grab.dx), snap(y - grab.dy)];
+  } else if (grab.part === 'rim') {
+    s.w = Math.max(smallest, snap(2 * Math.hypot(x - s.x, y - s.y)));
+  } else {
+    const resize = (centre, size, side, at) => {
+      const fixed = centre - (side * size) / 2;
+      const next = Math.max(smallest, snap(side * (at - fixed)));
+      return [+(fixed + (side * next) / 2).toFixed(6), next];
+    };
+    if (grab.sideX) [s.x, s.w] = resize(s.x, s.w, grab.sideX, x);
+    if (grab.sideY) [s.y, s.h] = resize(s.y, s.h, grab.sideY, y);
+  }
+}
+
 // A straight guide, then the bend. The same source in each gives the bend's transmission.
 function guideRequests(s) {
   const p = s.plane.guide2d;

@@ -55,7 +55,7 @@ this.
 
 ## When the browser isn't the right tool
 
-For large 3D problems, compute in the browser isn't the right tool. Use
+Large 3D problems don't fit in a browser. For those, use
 [Palace](https://github.com/awslabs/palace) (built on [MFEM](https://mfem.org), [Anderson et al. 2021](15-references.md#anderson-2021)), which
 runs natively on clusters and supports eigenmode and driven simulations in 3D.
 

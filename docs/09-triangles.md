@@ -129,7 +129,7 @@ unchanged.
 A **band diagram** repeats that eigenproblem for wavevectors around the edge of the irreducible
 Brillouin zone: from $\Gamma$ ($\mathbf{k} = 0$) to X to M and back to $\Gamma$. For a square lattice, the
 extremes of the bands are usually found on this path, though this isn't guaranteed
-([Joannopoulos et al. 2008](15-references.md#joannopoulos-2008)). Only the phases change between
+([Harrison et al. 2007](15-references.md#harrison-2007)). Only the phases change between
 wavevectors, so where the nonzeros are stays the same, which the next chapter exploits.
 
 ### Example: a lattice of rods

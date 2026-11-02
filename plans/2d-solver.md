@@ -109,8 +109,8 @@ high-index material will need refining, which the probe didn't test.
    [MPB tutorial](https://mpb.readthedocs.io/en/latest/Python_Tutorial/)'s 0.28262 to
    0.41933 is 0.5–0.7% higher. The likely cause is its coarse resolution of 32, but no
    MPB run has confirmed that, so it isn't used as a reference.
-3. **Band diagram speed.** Eigenproblems use the LU with a reused ordering, within 8% of `faer`'s
-   Cholesky. Warm-starting Lanczos from the previous k-point is the next speed-up to try.
+3. **Band diagram speed: settled for now.** Warm-starting Lanczos was measured and left out. Loosening
+   the tolerance took 15 to 23% off instead: see "Faster band diagrams" under "Done after milestone 6".
 4. **Transposed solves.** Bloch-periodic driven problems lose `Aᵀ = A`,
    so their adjoints need `Aᵀ` solves. Not needed before periodic gratings.
 
@@ -118,7 +118,6 @@ high-index material will need refining, which the probe didn't test.
 
 | Module | Change |
 |---|---|
-| Website, later | Dragging shapes |
 | Tutorial | Chapters 9 to 14 cover 2D |
 
 Milestone 1 added `Mesh::fitted_grid`, `H1Triangle`, many-tie `DofMap`, the `Factors` trait
@@ -621,15 +620,62 @@ should sample random edges too, or aim at what they do to Q, which step 2 needs 
 
 None of these is planned in detail.
 
-- **Tutorial clean-up.** Small, and best done first, whatever comes next: check the two citations written from
-  memory, test the two inferred explanations in chapters 10 and 13, and read chapters 9 to 14 line by line.
-- **Faster band diagrams.** Warm-start Lanczos from the previous k-point (open problem 3). Symmetric factors
-  don't help these, because Bloch phases make the matrix Hermitian.
-- **Dragging shapes.** The remaining website item, in JavaScript only.
 - **Periodic gratings.** A port plus Bloch ties, which needs open problem 4.
 - **Vector fields.** Full-vector waveguide cross-sections are the first real need for Nédélec elements, and
   the way to full polarization or 3D. This is the largest of these, and works against keeping the solver lean,
   so it needs a line estimate first.
+
+### Done after milestone 6
+
+**Tutorial clean-up.** Chapters 9 to 14 were read line by line, and the items flagged when they were written were tested.
+
+- **Joannopoulos, for band extremes on the zone's edge:** the book's text couldn't be reached, so chapter 9 now cites
+  Harrison et al. 2007, whose abstract says this directly.
+- **Davis 2006, for storage cost:** also unreachable, and not needed. George 1973's abstract states $O(n^3)$ operations and
+  $O(n^2 \log n)$ storage, and that no ordering beats $O(n^3)$. Davis 2006 stays in chapter 4, for compressed rows.
+- **Why eigenmode solves use the most memory: holds.** Counting allocations natively at 579,121 unknowns, for ten modes:
+  0.63 GiB for mesh and matrices, 1.18 GiB held by the factors, 1.85 GiB at the peak of factoring, then 0.97 GiB more for
+  Lanczos, whose 56 vectors each store $B$ times themselves. That ends at 2.78 GiB, or 2.50 GiB for four modes. At 160,801
+  unknowns it reads 0.72 GiB, matching the 0.7 GiB in WebAssembly.
+- **Why the plain corner reads 7.1% on the page and 5.4% in the table: holds.** On the same mesh, moving only the monitor from
+  2.1 to 2.85 takes it from 7.10% to 5.40%, and to the table's value at each wavelength.
+- **A real error, found while testing that.** The "plain corner" wasn't a corner. The guides stop at the design region, so it's
+  two guides ending at an empty square a wavelength wide. With guides that meet, at 72 cells per wavelength:
+
+| Width | Sharp corner, 0.95, 1, 1.05 | Empty square, 0.95, 1, 1.05 |
+|---:|---:|---:|
+| 0.06 | 57.4, 57.0, 56.6% | 6.3, 6.9, 7.6% |
+| 0.1 | 45.3, 48.9, 51.5% | 5.0, 5.4, 5.8% |
+| 0.125 | 23.0, 28.6, 34.2% | 5.4, 5.3, 5.5% |
+| 0.143 | 18.7, 17.2, 19.4% | 8.0, 6.7, 6.1% |
+| 0.17 | 46.1, 39.4, 29.0% | 9.6, 10.9, 10.7% |
+| 0.2 | 39.8, 43.6, 46.0% | 7.2, 8.1, 9.4% |
+
+  So the corner that chapter 13's bend replaces passes 23 to 34%, not 5%, and it now agrees with chapter 12's 18 to 23% at
+  0.143. The optimizer really starts from the empty square, and the page now shows both references. The sharp corner's dip
+  near 0.143 isn't explained.
+
+Smaller corrections: projection amplifies by up to about $\beta/2$, not $\beta$, in chapter 13 and a comment in `design.js`,
+though the step limit is unchanged. "At least 2.7 times" predated the factorization change, and is now 2.9.
+
+**Faster band diagrams: warm start measured, and left out.** The Lanczos starting from the sum of the previous k-point's modes,
+about 15 lines, over the path of 16 k-points with 6 bands, and solves per k-point:
+
+| Unknowns | Tolerance 1e-10, cold | 1e-10, warm | 1e-5, cold | 1e-5, warm |
+|---:|---:|---:|---:|---:|
+| 2,500 | 62.5 | 62.5 | 47.5 | 46.5 |
+| 10,000 | 62.0 | 62.5 | 46.5 | 45.5 |
+| 40,000 | 62.0 | 61.0 | 51.0 | 46.5 |
+
+With 12 bands at 10,000 unknowns, 88.8, 81.3, 70.8 and 66.2. Warm starts did no better on a path twice as fine. So band diagrams
+now use a tolerance of 1e-5, for 6 net lines, and solves that return fields keep 1e-10. A whole diagram in WebAssembly goes from 741 to 576 ms at 2,500 unknowns, 3,444 to 2,692 ms at 10,000 and
+16,827 to 14,383 ms at 40,000. The largest change in $k_0$ is 6e-11 away from $\Gamma$, and 9e-9 at $\Gamma$, where $k_0 = 0$ turns
+round-off into a square root. Tolerances down to 1e-3 didn't lose or repeat a band, so locking doesn't need the tighter one. Factoring is
+now about a third of what's left at 40,000 unknowns, and solves and Lanczos's own work are the rest.
+
+**Dragging shapes.** On views with shapes the visitor drew: drag inside to move, an edge or corner of a rectangle or a circle's
+rim to resize, and the source too. `grabShape` and `dragShape` are pure functions in `model.js`, tested in `tests/shapes.test.mjs`.
+Mouse drags were checked in a browser. Touch was checked only as far as which touches claim the gesture, not on a phone.
 
 ## Own sparse solver
 
@@ -675,8 +721,8 @@ nothing further left into the right part, about 10 lines, and shrinking leaves f
 did far more than Cholesky could, for every problem: it halved peak memory, and sped up the leaky
 13 x 13 by another 2×. Leaf sizes from 8 to 24 made little difference.
 
-If band diagrams ever need more, Lanczos itself costs about as much as the solves, so
-warm-starting it from the previous k-point is the next thing to try.
+Lanczos itself costs about as much as the solves. A warm start from the previous k-point didn't
+help, and a looser tolerance did: see "Faster band diagrams" under "Done after milestone 6".
 
 ### Measurements
 

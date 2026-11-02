@@ -1,7 +1,7 @@
 //! Shift-invert Lanczos for `A x = lambda B x`, with A Hermitian and B positive
 //! definite. Inverting `A - sigma B` maps the eigenvalues nearest `sigma` to the
-//! largest ones, which Lanczos finds first. In 2D this also skips the large
-//! null space of the curl-curl operator.
+//! largest ones, which Lanczos finds first. With vector fields, this would also
+//! skip the large null space of the curl-curl operator.
 
 use crate::assemble::Csr;
 use crate::banded::{BandedLu, Factors};

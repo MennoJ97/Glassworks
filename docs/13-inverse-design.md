@@ -71,7 +71,7 @@ structure sharpens gradually. The slope of $\hat\rho$ joins the chain rule.
 ([Svanberg 1987](15-references.md#svanberg-1987)) replaces the objective with a simple convex model for each variable,
 built from its slope and two asymptotes on either side, and minimizing that has a closed form. A variable that keeps
 oscillating gets tighter asymptotes, and a steady one gets looser ones. Since projection amplifies a change in density
-by about $\beta$, the largest step allowed shrinks as $\beta$ grows.
+by up to about $\beta/2$, the largest step allowed shrinks as $\beta$ grows.
 
 **Pixels on cells.** Each pixel should be a whole number of mesh cells, and the solver refuses anything else. If a pixel's
 edge runs through a cell, that cell's material depends on where its centre happens to fall. Optimizers are very good at
@@ -81,18 +81,19 @@ is exactly the same matrix as the same shapes drawn by hand.
 
 ### Example: a corner in a slab
 
-Take a slab of index 3.5 and width $0.125\lambda$, whose plain sharp corner passes about 5% of the light, through a monitor far
-along the output. Give the optimizer a square one wavelength wide at that corner, and three wavelengths to serve at once
+Take a slab of index 3.5 and width $0.125\lambda$, with a monitor far along the output. A plain sharp corner passes 23 to 34% of the
+light. Now cut out a square one wavelength wide at that corner, which leaves two guides ending at an empty region that passes about
+5%, and give that square to the optimizer, with three wavelengths to serve at once
 ([Jensen & Sigmund 2004](15-references.md#jensen-sigmund-2004) did this kind of thing for photonic crystal bends). A
 pattern from a longer run gives:
 
-| Wavelength | Plain corner | Optimized, 24 cells per $\lambda$ | Optimized, 48 cells per $\lambda$ |
-|---:|---:|---:|---:|
-| 0.95 | 5.4% | 97.8% | 97.6% |
-| 1.00 | 5.3% | 99.3% | 99.3% |
-| 1.05 | 5.5% | 99.4% | 99.6% |
+| Wavelength | Empty region | Sharp corner, 72 cells per $\lambda$ | Optimized, 24 cells per $\lambda$ | Optimized, 48 cells per $\lambda$ |
+|---:|---:|---:|---:|---:|
+| 0.95 | 5.4% | 23.0% | 97.8% | 97.6% |
+| 1.00 | 5.3% | 28.6% | 99.3% | 99.3% |
+| 1.05 | 5.5% | 34.2% | 99.4% | 99.6% |
 
-The page's monitor is closer to the corner, where its plain corner reads 7.1%. It also uses fewer iterations, 10 for each of 8 sharpness stages, and reaches a mean of 98.1% to 98.4% over three random starts.
+The page's monitor is closer to the corner, where it still catches some light radiated from the gap: moving only the monitor from there to the far position takes the empty region from 7.1% to 5.4%, and the page's sharp corner reads 35%. The page also uses fewer iterations, 10 for each of 8 sharpness stages, and reaches a mean of 98.1% to 98.4% over three random starts.
 Giving it 25 per stage reached 96.9% to 99.0%, so more iterations can reach higher but aren't more dependable. Skipping every
 other sharpness stage did worse than cutting iterations, reaching only 96.5% to 97.6%. How the design sharpens matters more
 than how long it runs.
@@ -155,8 +156,8 @@ Each step reads LDOS at the mode's current wavelength rather than at the target,
 The last stages of sharpening still shift it a little, because a pixel flip is a big step. Scale invariance takes out what's left exactly: resize the
 finished design by $\lambda_\text{target}/\lambda_\text{mode}$.
 
-It's worth measuring, because one good run proves little here: starts differ by far more than most of these choices. Over nine starts,
-at the bandwidths where a strong mode stands out. These runs read LDOS at the target, as the first version did.
+It's worth measuring, because one good run proves little here: starts differ by far more than most of these choices. This table covers nine
+starts, at a bandwidth narrow enough for a strong mode to stand out. These runs read LDOS at the target, as the first version did.
 
 | Version | Median LDOS at $Q = 10{,}000$ | Median mode $Q$ | Largest resizing |
 |---|---:|---:|---:|
@@ -176,7 +177,7 @@ We compare everything at $Q = 1000$, relative to vacuum, and each at its own res
 | Crystal of 7 × 7 rods | 299 | 1,680 | 0.093 |
 | 18 optimized starts | 886 to 1,075, median 1,014 | 9,120 to 5,859,698 | 0.008 to 0.010 |
 
-All 18 beat the crystal by at least 2.7 times. The crystal's $Q$ here is a little different from chapter 11's, because of its mesh and surroundings.
+All 18 beat the crystal by at least 2.9 times. The crystal's $Q$ here is a little different from chapter 11's, because of its mesh and surroundings.
 At $Q = 3000$, the page's default start reaches an LDOS of 3,193, and the crystal 508. On the earlier setup, raising $Q$ only as far as 500 while sharpening was the steadiest schedule: taking it
 to 2,000 reached only 269 on one start.
 
