@@ -150,11 +150,13 @@ The step now improves the cavity without moving it. MMA has bounds, so its step 
 correction moves along $c$ by just enough to aim half of the remaining frequency error back at the target. That makes "stay at this wavelength" a real
 constraint on the design, rather than something to hope for.
 
+Each step reads LDOS at the mode's current wavelength rather than at the target, for a reason the results below will show.
+
 The last stages of sharpening still shift it a little, because a pixel flip is a big step. Scale invariance takes out what's left exactly: resize the
 finished design by $\lambda_\text{target}/\lambda_\text{mode}$.
 
 It's worth measuring, because one good run proves little here: starts differ by far more than most of these choices. Over nine starts,
-at the bandwidths where a strong mode stands out:
+at the bandwidths where a strong mode stands out. These runs read LDOS at the target, as the first version did.
 
 | Version | Median LDOS at $Q = 10{,}000$ | Median mode $Q$ | Largest resizing |
 |---|---:|---:|---:|
@@ -172,26 +174,35 @@ We compare everything at $Q = 1000$, relative to vacuum, and each at its own res
 |---|---:|---:|---:|
 | 16 random symmetric patterns | 0 to 29 | | |
 | Crystal of 7 × 7 rods | 299 | 1,680 | 0.093 |
-| 9 optimized starts | 110 to 1,061, median 917 | 253 to 448,529 | 0.008 to 0.017 |
+| 18 optimized starts | 814 to 1,075, median 1,014 | 13,484 to 5,859,698 | 0.008 to 0.010 |
 
-Eight of nine beat the crystal by at least 1.5 times. The crystal's $Q$ here is a little different from chapter 11's, because of its mesh and surroundings.
-At $Q = 3000$, the page's default start reaches an LDOS of 3,162, and the crystal 508. On the earlier setup, raising $Q$ only as far as 500 while sharpening was the steadiest schedule: taking it
+All 18 beat the crystal by at least 2.7 times. The crystal's $Q$ here is a little different from chapter 11's, because of its mesh and surroundings.
+At $Q = 3000$, the page's default start reaches an LDOS of 3,193, and the crystal 508. On the earlier setup, raising $Q$ only as far as 500 while sharpening was the steadiest schedule: taking it
 to 2,000 reached only 269 on one start.
 
-Drawn as ordinary rectangles, and using the separate search for leaky modes from chapter 11, the default start has an LDOS of 1,061 at $Q = 1000$, $Q$ of about 328,000 and $V = 0.0080$ wavelengths². Those change by under 1% from cells of $\lambda/24$
-to $\lambda/72$. Its $Q$ stays within 0.5% for layers of 0.5 to 1.5 wavelengths, and with 0.25 to 1.5 wavelengths of air around it.
+Drawn as ordinary rectangles, and using the separate search for leaky modes from chapter 11, the default start has an LDOS of 1,066 at $Q = 1000$, $Q$ of about 1,512,000 and $V = 0.0079$ wavelengths². Those change by under 1% from cells of $\lambda/24$
+to $\lambda/72$. Its $Q$ stays within 0.3% for layers of 0.5 to 1.5 wavelengths, and within 0.7% with 0.25 to 1.5 wavelengths of air around it.
+
+### A goal that can work against itself
+
+Over nine starts, flipping the goal's sign and minimizing the LDOS appeared to beat maximizing it. Nine more starts reversed the median, 951 against 1,001, so most of that was chance. The lesson is the sample size. But the flipped goal did fail less often, and looking into why turned up something real.
+
+Near a pole, with detuning $D$, bandwidth $\Gamma$ and the mode's own decay $\gamma$,
+
+$$F \propto \frac{\Gamma + \gamma}{D^2 + (\Gamma + \gamma)^2}.$$
+
+Its slope along $\gamma$ changes sign at $|D| = \Gamma + \gamma$. Closer than that, raising $F$ raises $Q$. Further out, on the wing of the peak, raising $F$ lowers $Q$. Holding the frequency removes nearly all of the gradient, and the small remainder sets the step, so this matters. In 18 runs reading $F$ at the target, the remainder pointed towards more decay on 0.4% of iterations below half a linewidth, and 97% from one to three linewidths. Runs that spent more time past one linewidth also tended to finish weaker.
+
+So we read $F$ at the mode's own wavelength, which stays close to the peak. Over those 18 starts, the median mode $Q$ rose from 113,000 to 374,000, and the worst LDOS at $Q = 1000$ from 110 to 814. This isn't the whole story: other runs lost their $Q$ while sharpening, even when close to the peak.
 
 ### What we don't know
 
 These results deserve some caution.
 
-- **A $Q$ in the hundreds of thousands from a footprint this small has no explanation here.** Checks against the mesh, layer and surroundings all hold, so it isn't an obvious
-  numerical artifact, but we haven't found the physical cause. The default start is also the best of nine, and the worst reaches an LDOS of only 110.
+- **A $Q$ in the millions from a footprint this small has no explanation here.** Checks against the mesh, layer and surroundings all hold, so it isn't an obvious
+  numerical artifact, but we haven't found the physical cause.
 - **No fabrication tolerance has been checked.** A mode this sharp would be very sensitive. A real device would need the optimization to be robust against small
   changes, which this one isn't asked to be.
-- **Minimizing works better than maximizing, and we can't say why.** With the goal's sign flipped, the LDOS at the target correctly falls to nearly 0 through the grey stages: 0.2 to 0.4 at $Q = 100$, against 47 to 55
-  with the right sign. Yet nine starts then finish at 904 to 1,033 at $Q = 1000$, median 990, with a median mode $Q$ of 416,000 and a median of 9,483 at $Q = 10{,}000$. That beats the true goal on every median, and its worst start is far better. With no goal at all, the median is only 64, so the goal's presence matters, and its sign far less than it should.
-  We've kept the true goal, because it's the one that can be explained, and `tests/design.test.mjs` checks the early stages, where the sign does show. Any reader who explains this has learned something we haven't.
-- **Comparing these at $Q = 1000$ hides differences.** Once a mode's own $Q$ is far above the bandwidth, the LDOS stops growing with it, and is capped near 1,060 here by the mode's volume. That's why we also quote higher bandwidths.
+- **Comparing these at $Q = 1000$ hides differences.** Once a mode's own $Q$ is far above the bandwidth, the LDOS stops growing with it, and is capped near 1,070 here by the mode's volume. That's why we also quote higher bandwidths.
 
 Next: [beyond scalar fields](14-vector-fields.md).

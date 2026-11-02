@@ -179,13 +179,13 @@ test('a cavity beats the crystal in its footprint, on target, and as drawn recta
   });
   assert.equal(failure?.error, undefined);
   assert.equal(last.beta, Infinity);
-  // Minimizing finishes as well as maximizing, for a reason we don't know (see plans/2d-solver.md).
-  // So the goal's sign shows only here, at Q 100, where maximizing reaches 47 to 55 and minimizing 0.2 to 0.4.
+  // Minimizing can finish nearly as well as maximizing (see plans/2d-solver.md). So the goal's sign
+  // shows best here, at Q 100, where 18 starts reach 15 to 98 maximizing and 0.15 to 0.4 minimizing.
   assert.ok(early > 20, `early ${early}`);
   last.rho.forEach((v) => assert.ok(v === 0 || v === 1));
   const ldos = meanReflection(last.reply.results);
   const [crystal] = await referenceValues(s);
-  // In plans/2d-solver.md, the crystal reads about 300, and nine starts 110 to 1,061.
+  // In plans/2d-solver.md, the crystal reads about 300, and 18 starts 814 to 1,075.
   assert.ok(crystal > 250 && crystal < 350, `crystal ${crystal}`);
   assert.ok(ldos > 1.5 * crystal, `${ldos} against ${crystal}`);
   assert.ok(Math.abs(last.mode.wavelength - 1) < 2e-3, `mode at ${last.mode.wavelength}`);

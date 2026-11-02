@@ -199,6 +199,7 @@ function mirrored(n) {
 // high Q's peak is narrow, and a free step moves it further than its width, so each step here
 // has its slope along the frequency removed. A correction along that slope then keeps the
 // resonance on target, and scaling the finished design takes out what sharpening leaves.
+// LDOS is read at the mode's own wavelength: past one linewidth, raising it would lower Q.
 async function optimizeCavity(s, solve, onStep) {
   const n = CAVITY.pixels ** 2;
   const filter = coneFilter2d(CAVITY.pixels, CAVITY.pixels, CAVITY.radius);
@@ -207,14 +208,16 @@ async function optimizeCavity(s, solve, onStep) {
   const target = (2 * Math.PI) / s.wavelength;
   let x = randomStart(n, s.design.cavityDesign.seed);
   let iteration = 0;
+  let own = s.wavelength;
   for (const [Q, beta] of CAVITY.stages) {
     const reach = Math.min(0.1, 0.2 / beta);
     const mma = new Mma(reach);
     for (let i = 0; i < CAVITY.iterations; i++) {
       const { rho, slope } = project(filter.apply(symmetric(x)), beta);
-      const { reply, poleK, moves } = await findResonance(s, rho, Q, solve);
+      const { reply, poleK, moves } = await findResonance(s, rho, Q, solve, own);
       if (!reply || reply.error) return reply;
       if (!onStep({ rho, reply, iteration: ++iteration, beta, bandwidth: Q })) return null;
+      if (Math.abs((2 * Math.PI) / poleK - s.wavelength) < 0.04 * s.wavelength) own = (2 * Math.PI) / poleK;
       const goal = through(reply.results[0].channels.gradient.map((v) => (-2 * v) / target), slope);
       const frequency = through(moves, slope);
       const square = frequency.reduce((sum, v) => sum + v * v, 0);

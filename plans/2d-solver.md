@@ -340,11 +340,53 @@ So the page's choice costs about 45% less for the same median, but has the lowes
 Fifteen iterations per stage instead of 20 reached only 329 to 844 on three starts.
 
 Three cautions. Q in the hundreds of thousands from a footprint this small needs a cause, which we haven't
-found, and no fabrication tolerance has been checked: a mode this sharp would be very sensitive. Most
-of all, minimizing beats maximizing, as the table shows, and that isn't explained. The flipped goal falls to 0.2 to
-0.4 at Q 100 in the grey stages, against 47 to 55, and still finishes best. It's not the hold alone, since
-no goal at all does far worse. The page keeps the true goal, and `tests/design.test.mjs` checks the early
-stages, where the sign shows. What the flipped goal is really doing is the next thing to understand here.
+found, and no fabrication tolerance has been checked: a mode this sharp would be very sensitive. The
+table above also made minimizing look better than maximizing, which the next section corrects.
+
+### Why the flipped goal looked better
+
+Mostly it didn't: nine starts misled us. Over 18 starts, with 10 to 18 unseen by any earlier choice:
+
+| Version | LDOS at Q 1,000: worst, median, best | Below 900 | Median mode Q | Below Q 10,000 | Beats the page on |
+|---|---|---:|---:|---:|---:|
+| The page: maximize, correct half the error | 110, 985, 1,061 | 6 | 113,000 | 6 | |
+| Flipped goal | 708, 956, 1,033 | 3 | 172,000 | 3 | 7 of 18 |
+| Correct 0.75 of the error | 103, 1,002, 1,061 | 5 | 97,000 | 6 | 11 of 18 |
+| Correct all of the error | 342, 1,016, 1,064 | 3 | 268,000 | 3 | 13 of 18 |
+| LDOS read at the mode's own wavelength | 814, 1,014, 1,075 | 1 | 374,000 | 0 | 14 of 18 |
+
+The first nine alone gave flipped 990 against 917; the last nine give 951 against 1,001. So its lead in
+the median was chance. It does fail less often, and the wing of the resonance is a likely reason.
+
+Near a pole, with detuning D, bandwidth G and the mode's own decay g, LDOS goes as
+A (G + g) / (D² + (G + g)²). Its slope along g changes sign at |D| = G + g. Inside that, raising LDOS
+raises Q. Outside it, on the wing, raising LDOS lowers Q, and lowering LDOS raises it.
+
+The hold removes the frequency part of the goal, which is nearly all of it: what's left has a median share
+of 0.5% in the page's runs, and that remainder sets the step. It behaves as predicted. It points towards
+more decay on 0.4% of iterations below half a linewidth, 15% from a half to one, 97% from one to three and
+99% beyond. The flipped goal mirrors that, and spends 99% of its iterations outside one linewidth. Across the
+18 page runs, more iterations past one linewidth goes with a weaker result (Spearman -0.76, from Q 100 on).
+
+That's an association plus a confirmed sign, and these limits apply:
+
+- Q doesn't always follow on the very next iteration, because the correction and the sharpening also move
+  it. With full correction, Q rises on 61% of its wing iterations, opposite to the sign above.
+- Full correction's failures (starts 12, 16 and 18) lose their Q at the last sharpening stages. Start 16
+  starts falling while still at 0.05 linewidths, so the wing can't be the whole cause.
+- Flipped with full correction tests nothing: the correction is clamped far from the target, and eight of nine
+  starts reproduce the plain flipped result exactly.
+- Maximizing, then flipping (median 621), or flipping, then maximizing (803), over nine starts, both did
+  worse than either sign throughout. So building a blocking surround first isn't what helps. Without the hold, the
+  flipped goal drives LDOS to zero and no leaky mode remains.
+- Lowering decay as the only goal wasn't a usable comparison. As coded it raised decay, and Q collapsed to about 60.
+- Earlier tables in this file, and chapter 13 until it's corrected, describe the half-correction method read at the target.
+
+The page now reads LDOS at the mode's own wavelength, which needs the same solves and keeps the true goal.
+Its default start has LDOS 1,066 at Q 1,000, 3,193 at Q 3,000, Q of 1,512,000 and V of 0.0079. Drawn as
+rectangles, starts 1, 3, 5 and 16 change by about 1% or less in LDOS and under 2.7% in Q from 1/24 to 1/72. For the default, Q stays
+within 0.3% for layers of 0.5 to 1.5 wavelengths, and within 0.7% with 0.25 to 1.5 of air. No fabrication tolerance has been checked,
+so these Q values are numerical results, not achievable ones, and they still lack a physical explanation.
 
 One thread runs all of this in 28 s in Node, on battery. The page uses two workers, and paints only a few
 times a second. A hidden pane ran the older, longer schedule far slower, at 229 s, so timing it needs a visible page.

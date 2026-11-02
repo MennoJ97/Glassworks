@@ -1057,7 +1057,7 @@ function renderChart() {
     const yMin = Math.floor(Math.min(...y, ...levels.map((l) => l.y)));
     const yMax = Math.max(Math.ceil(Math.max(...y)), yMin + 1);
     $('chart-title').textContent = a === 'cavityDesign'
-      ? 'LDOS relative to vacuum at each iteration, higher is better, over a bandwidth that narrows as the design goes on. The crystal\'s line is at the finished design\'s bandwidth. Click to see any iteration.'
+      ? 'LDOS relative to vacuum at each iteration, at the mode\'s own wavelength, higher is better, over a bandwidth that narrows as the design goes on. The crystal\'s line is at the finished design\'s bandwidth. Click to see any iteration.'
       : a === 'bend2d'
       ? 'Light that doesn\'t get around the corner at each iteration, lower is better. It jumps where the pixels get sharper. Click to see any iteration.'
       : a === 'mirror' ? 'Light that gets through the mirror at each iteration, lower is better. It jumps where the pixels get sharper.'
