@@ -503,10 +503,55 @@ but crashed on its finer-mesh check, for exceeding the mesh limit, so it isn't v
 Only `E_z` has gradients, since `q = eps` is simple there. `H_z` would need `p = 1/eps` in the
 stiffness. The adjoint here needs `A^T = A`, so a Bloch-periodic structure would need open problem 4.
 
-### Later, not part of this plan
+### Milestone 6: would it work if you built it?
 
-Periodic gratings (a port plus Bloch ties, which needs open problem 4), and full-vector
-waveguide cross-sections, which are the first real need for Nédélec elements.
+The page reports Q values in the millions from a very small footprint, with no physical explanation
+and no check against fabrication errors. This milestone answers both, in that order, because
+step 1 decides how much of the rest is worth doing. Nothing goes on the website until its results have
+been seen and agreed.
+
+- [ ] **Measure tolerance, with no solver changes.** Grow and shrink the finished rectangles of nine
+      starts, the crystal and the bend, by 1, 2, 5 and 10 nm at a wavelength of 1 µm, and read Q, LDOS and the
+      mode's wavelength. Pixels are 42 nm there, so these moves are sub-pixel and must be drawn: grow by
+      enlarging each material rectangle, and shrink by drawing the square in material and enlarging
+      each air rectangle over it. The mesh has to resolve the move, so run this natively, beyond the page's limit if needed,
+      and check convergence with the mesh, as the rest of this plan does.
+- [ ] **Explain the high Q.** Look at the mode's field, where it radiates, and how Q changes with the
+      surrounding air and with the size of the design region. Compare the best starts with those that stay
+      below Q 10,000. Finding no cause is an acceptable result, as long as it's stated.
+- [ ] **Decide what robustness should mean.** A shifted edge moves the resonance, and at a bandwidth
+      of Q 1,000, likely by more than its width. So one wavelength may be unreachable for all versions of a
+      design. Read each version at its own wavelength, and report how far they spread as a separate
+      result, which is what a real device would have to tune away. Check this against step 1's numbers.
+- [ ] **Optimize for robustness, if step 1 shows a need.** Project the filtered densities at three
+      thresholds, for eroded, nominal and dilated designs ([Wang, Lazarov & Sigmund 2011], to be
+      checked before citing), and raise the weakest. This belongs in `design.js`, with no new Rust expected;
+      state the line cost if that changes. A threshold's shift in pixels sets the edge move, so measure that
+      against step 1. It takes six solves per iteration instead of two, so about three times as
+      much computing, for a run that now takes 11 s on the page. Nine starts aren't enough, as this
+      plan learned: use 18 at least, with unseen ones for any final comparison.
+- [ ] **Teach it.** A section in chapter 13, with a robust design beside the sharpest one, if there's a
+      difference to show. A negative result is worth teaching too.
+
+Done means the page can say what happens to its designs under a stated edge error, and either offers a
+robust one or explains why not.
+
+The check against a known answer: first-order perturbation theory, from the pole's slope with each density,
+should predict the resonance shift of a small drawn edge move. Add that as a test.
+
+### After milestone 6, not yet ordered
+
+None of these is planned in detail.
+
+- **Tutorial clean-up.** Small, and best done first, whatever comes next: check the two citations written from
+  memory, test the two inferred explanations in chapters 10 and 13, and read chapters 9 to 14 line by line.
+- **Faster band diagrams.** Warm-start Lanczos from the previous k-point (open problem 3). Symmetric factors
+  don't help these, because Bloch phases make the matrix Hermitian.
+- **Dragging shapes.** The remaining website item, in JavaScript only.
+- **Periodic gratings.** A port plus Bloch ties, which needs open problem 4.
+- **Vector fields.** Full-vector waveguide cross-sections are the first real need for Nédélec elements, and
+  the way to full polarization or 3D. This is the largest of these, and works against keeping the solver lean,
+  so it needs a line estimate first.
 
 ## Own sparse solver
 
