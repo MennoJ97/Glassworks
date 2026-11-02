@@ -68,6 +68,8 @@ is exactly the same matrix as the same shapes drawn by hand.
 
 ### Example: a corner in a slab
 
+One caution about every number from here on: this is a 2D model. Its index of 3.5 is close to bulk silicon, not the lower effective index of a real chip's thin slab, and it can't see light leaking out of the plane. So these results show the method, and they aren't device designs. Chapter 19 says more.
+
 Take a slab of index 3.5 and width $0.125\lambda$, with a monitor far along the output. A plain sharp corner passes 23 to 34% of the
 light. Now cut out a square one wavelength wide at that corner, which leaves two guides ending at an empty region that passes about
 5%, and give that square to the optimizer, with three wavelengths to serve at once

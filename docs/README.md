@@ -9,6 +9,8 @@ You need calculus (integration by parts) and basic linear algebra (matrices,
 eigenvalues). Knowing Maxwell's equations helps but isn't required, because
 chapter 1 reduces them to one ordinary differential equation.
 
+This teaches the method, and it doesn't design devices. Its 2D results use bulk-like indices rather than a real chip's effective index, and they can't see light leaking out of the plane.
+
 ## The essentials, in reading order
 
 These build on each other, and together they take you from Maxwell's equations to a solver that designs its own structures.

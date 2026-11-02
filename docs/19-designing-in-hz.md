@@ -65,6 +65,8 @@ Rods are no benchmark here, since they read about 1. The usual crystal for this 
 
 So the median beats the crystal by only 1.2 times, and four of the nine fall short of it. That's a far smaller margin than chapter 17's in $E_z$, which beats its own crystal by at least 2.9 times, though against a weaker kind of benchmark. On cells half the size, the median holds at 432, and the crystal reads 378. An $H_z$ LDOS and an $E_z$ one measure different emitters, so comparing them directly means little.
 
+<a id="what-this-doesnt-settle"></a>
+
 ## What this doesn't settle
 
 - **The index is still bulk.** These designs use 3.5 and $\varepsilon = 12$. A real 2D model of a silicon slab uses its effective index, about 2.86 for 220 nm ([Nikkhah et al. 2024](20-references.md#nikkhah-2024)), and the third dimension leaks light that none of this sees.
