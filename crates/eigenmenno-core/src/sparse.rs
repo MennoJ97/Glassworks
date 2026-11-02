@@ -41,7 +41,13 @@ pub struct Ordering {
 }
 
 /// Splits `ids` in two and recurses, pushing `(pivots, children)` with children first.
-fn dissect(ids: Vec<usize>, a: &Csr, pos: &[(f64, f64)], side: &mut [u8], nodes: &mut Vec<(Vec<usize>, Vec<usize>)>) -> usize {
+fn dissect(
+    ids: Vec<usize>,
+    a: &Csr,
+    pos: &[(f64, f64)],
+    side: &mut [u8],
+    nodes: &mut Vec<(Vec<usize>, Vec<usize>)>,
+) -> usize {
     if ids.len() <= LEAF {
         nodes.push((ids, vec![]));
         return nodes.len() - 1;
@@ -75,7 +81,11 @@ fn dissect(ids: Vec<usize>, a: &Csr, pos: &[(f64, f64)], side: &mut [u8], nodes:
         });
     }
     left.iter().chain(&right).for_each(|&d| side[d] = 0);
-    let children = [left, right].into_iter().filter(|p| !p.is_empty()).map(|p| dissect(p, a, pos, side, nodes)).collect();
+    let children = [left, right]
+        .into_iter()
+        .filter(|p| !p.is_empty())
+        .map(|p| dissect(p, a, pos, side, nodes))
+        .collect();
     nodes.push((separator, children));
     nodes.len() - 1
 }
@@ -96,7 +106,13 @@ impl Ordering {
                 owner[next] = i;
                 next += 1;
             }
-            nodes.push(Node { start, end: next, children: children.clone(), boundary: vec![], entries: vec![] });
+            nodes.push(Node {
+                start,
+                end: next,
+                children: children.clone(),
+                boundary: vec![],
+                entries: vec![],
+            });
         }
         // A front couples to its own entries' later unknowns, and to what its children left.
         let mut seen = vec![usize::MAX; n];
@@ -104,7 +120,10 @@ impl Ordering {
             let end = nodes[i].end;
             let own = raw[i].0.iter().flat_map(|&d| a.col[a.ptr[d]..a.ptr[d + 1]].iter().map(|&c| new[c]));
             let inherited = raw[i].1.iter().flat_map(|&c| nodes[c].boundary.iter().copied());
-            let mut boundary: Vec<usize> = own.chain(inherited).filter(|&g| g >= end && std::mem::replace(&mut seen[g], i) != i).collect();
+            let mut boundary: Vec<usize> = own
+                .chain(inherited)
+                .filter(|&g| g >= end && std::mem::replace(&mut seen[g], i) != i)
+                .collect();
             boundary.sort_unstable();
             nodes[i].boundary = boundary;
         }
@@ -113,7 +132,13 @@ impl Ordering {
             for k in a.ptr[r]..a.ptr[r + 1] {
                 let (i, j) = (new[r], new[a.col[k]]);
                 let node = &mut nodes[owner[i.min(j)]];
-                let local = |g: usize| if g < node.end { g - node.start } else { node.end - node.start + node.boundary.binary_search(&g).unwrap() };
+                let local = |g: usize| {
+                    if g < node.end {
+                        g - node.start
+                    } else {
+                        node.end - node.start + node.boundary.binary_search(&g).unwrap()
+                    }
+                };
                 let entry = (k as u32, local(i) as u32, local(j) as u32);
                 node.entries.push(entry);
             }
@@ -199,7 +224,13 @@ fn partial_lu(f: &mut [C64], m: usize, p: usize, scale: f64) -> (Vec<u32>, bool)
             let mut q = k;
             while q < e {
                 let take = (e - q).min(4);
-                let at = |o: usize| if o < take { &left[(q + o) * m + e..(q + o + 1) * m] } else { &left[q * m + e..(q + 1) * m] };
+                let at = |o: usize| {
+                    if o < take {
+                        &left[(q + o) * m + e..(q + o + 1) * m]
+                    } else {
+                        &left[q * m + e..(q + 1) * m]
+                    }
+                };
                 let coef = |o: usize| if o < take { head[q + o] } else { ZERO };
                 subtract(tail, [at(0), at(1), at(2), at(3)], [coef(0), coef(1), coef(2), coef(3)]);
                 q += take;
@@ -252,7 +283,8 @@ impl<'a> SparseLu<'a> {
             }
             let (swaps, front_weak) = partial_lu(&mut f, m, p, scale);
             weak |= front_weak;
-            let (mut upper, mut update) = (Vec::with_capacity(p * (m - p)), Vec::with_capacity((m - p) * (m - p)));
+            let (mut upper, mut update) =
+                (Vec::with_capacity(p * (m - p)), Vec::with_capacity((m - p) * (m - p)));
             for column in f[p * m..].chunks_exact(m) {
                 upper.extend_from_slice(&column[..p]);
                 update.extend_from_slice(&column[p..]);

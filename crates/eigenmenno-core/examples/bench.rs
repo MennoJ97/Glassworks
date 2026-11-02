@@ -1,8 +1,5 @@
 //! Native timings: `cargo run --release -p eigenmenno-core --example bench`.
 
-use faer::prelude::*;
-use faer::sparse::{SparseColMat, Triplet};
-use faer::Mat;
 use eigenmenno_core::assemble::{assemble, Csr, DofMap};
 use eigenmenno_core::banded::BandedLu;
 use eigenmenno_core::mesh::Mesh;
@@ -10,6 +7,9 @@ use eigenmenno_core::problem::{Analysis, Boundary, Layer, MeshSpec, Polarization
 use eigenmenno_core::solve::solve;
 use eigenmenno_core::space::{H1Line, Space};
 use eigenmenno_core::C64;
+use faer::prelude::*;
+use faer::sparse::{SparseColMat, Triplet};
+use faer::Mat;
 use std::time::Instant;
 
 fn main() {
@@ -19,10 +19,7 @@ fn main() {
         let space = H1Line::new(&mesh, order);
         let dofs = DofMap::new(space.n_dofs(), &[0, space.n_dofs() - 1], &[]);
         let k2 = C64::new(1.0e4, 10.0);
-        let a = Csr::from_triplets(
-            dofs.n_free,
-            assemble(&space, &dofs, |_| (C64::new(1.0, 0.0), -k2)),
-        );
+        let a = Csr::from_triplets(dofs.n_free, assemble(&space, &dofs, |_| (C64::new(1.0, 0.0), -k2)));
         let rhs: Vec<C64> = (0..a.n).map(|i| C64::new(1.0, (i % 7) as f64)).collect();
 
         let t = Instant::now();
@@ -57,12 +54,40 @@ fn main() {
             .collect()
     };
     let cases = [
-        ("cavity, 10 modes, 20 layers", Analysis::Cavity { n_modes: 10, target_k0: None, bloch_phase: 0.0 }, Boundary::Pec, Boundary::Pec, 20),
-        ("bands, 41 k x 6 bands", Analysis::Bands { n_bands: 6, n_k: 41 }, Boundary::Periodic, Boundary::Periodic, 2),
-        ("sweep, 500 wavelengths", Analysis::Sweep { wavelengths: (0..500).map(|i| 0.5 + 0.002 * i as f64).collect(), angle_deg: 0.0 }, Boundary::Port, Boundary::Absorbing, 20),
+        (
+            "cavity, 10 modes, 20 layers",
+            Analysis::Cavity { n_modes: 10, target_k0: None, bloch_phase: 0.0 },
+            Boundary::Pec,
+            Boundary::Pec,
+            20,
+        ),
+        (
+            "bands, 41 k x 6 bands",
+            Analysis::Bands { n_bands: 6, n_k: 41 },
+            Boundary::Periodic,
+            Boundary::Periodic,
+            2,
+        ),
+        (
+            "sweep, 500 wavelengths",
+            Analysis::Sweep {
+                wavelengths: (0..500).map(|i| 0.5 + 0.002 * i as f64).collect(),
+                angle_deg: 0.0,
+            },
+            Boundary::Port,
+            Boundary::Absorbing,
+            20,
+        ),
     ];
     for (name, analysis, left, right, n) in cases {
-        let r = Request { layers: layers(n), polarization: Polarization::Te, left, right, mesh: MeshSpec { order: 4, max_cell: 0.02 }, analysis };
+        let r = Request {
+            layers: layers(n),
+            polarization: Polarization::Te,
+            left,
+            right,
+            mesh: MeshSpec { order: 4, max_cell: 0.02 },
+            analysis,
+        };
         let t = Instant::now();
         let o = solve(&r).unwrap();
         println!("  {name:<30} dofs={:>6}  {:>8.1?}", o.meta.n_dofs, t.elapsed());

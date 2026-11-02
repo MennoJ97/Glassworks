@@ -88,7 +88,13 @@ crates/eigenmenno-core   The solver, with no browser dependencies
   eigen.rs               Shift-invert Lanczos
   problem.rs             The JSON problem description
   solve.rs               The physics: from a request to fields
-  solve2d.rs             The same for 2D problems
+  solve2d.rs             The same for 2D problems, sending each request on
+  solve2d/closed.rs      Walls and periodic cells: modes and band diagrams
+  solve2d/open.rs        The absorbing layer, shared by the next two
+  solve2d/driven.rs      Line sources, plane waves, ports and monitors
+  solve2d/resonance.rs   Leaky modes
+  solve2d/gradient.rs    The adjoint: each pixel's slope
+  solve2d/validate.rs    Checks on a request
 crates/eigenmenno-wasm   The thin browser interface
 web/                     The page
   worker.js              Runs the solver off the main thread

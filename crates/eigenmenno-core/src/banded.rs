@@ -21,7 +21,8 @@ pub fn rcm(a: &Csr) -> Vec<usize> {
         while head < perm.len() {
             let v = perm[head];
             head += 1;
-            let mut next: Vec<usize> = a.col[a.ptr[v]..a.ptr[v + 1]].iter().copied().filter(|&w| !seen[w]).collect();
+            let mut next: Vec<usize> =
+                a.col[a.ptr[v]..a.ptr[v + 1]].iter().copied().filter(|&w| !seen[w]).collect();
             next.sort_by_key(|&w| degree(w));
             for w in next {
                 seen[w] = true;
@@ -77,9 +78,13 @@ impl BandedLu {
             let below = b.min(n - 1 - j);
             let col = j * ld + diag;
             // Partial pivoting: the matrix is indefinite, so pick the largest entry.
-            let p = (0..=below).max_by(|&x, &y| ab[col + x].norm_sqr().total_cmp(&ab[col + y].norm_sqr())).unwrap();
+            let p = (0..=below)
+                .max_by(|&x, &y| ab[col + x].norm_sqr().total_cmp(&ab[col + y].norm_sqr()))
+                .unwrap();
             if ab[col + p] == ZERO {
-                return Err("singular matrix: this frequency hits an exact resonance of a lossless structure".into());
+                return Err(
+                    "singular matrix: this frequency hits an exact resonance of a lossless structure".into(),
+                );
             }
             piv[j] = j + p;
             last_col = last_col.max((j + p + b).min(n - 1));

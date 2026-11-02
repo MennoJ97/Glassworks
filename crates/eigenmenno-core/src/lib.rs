@@ -1,7 +1,7 @@
 //! A small finite element solver for Maxwell eigenmode and driven problems.
 //! See `docs/` for a tutorial that walks through these modules in order:
 //! `mesh`, `space`, `assemble`, `banded`, `eigen`, `problem`, `solve`. 2D adds
-//! `sparse` and `solve2d`.
+//! `sparse` and `solve2d`, whose jobs are in `solve2d/`.
 
 pub mod assemble;
 pub mod banded;

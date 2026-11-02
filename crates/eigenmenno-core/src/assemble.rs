@@ -50,7 +50,8 @@ impl Csr {
     }
 
     fn triplets(&self) -> impl Iterator<Item = (usize, usize, C64)> + '_ {
-        (0..self.n).flat_map(move |i| (self.ptr[i]..self.ptr[i + 1]).map(move |k| (i, self.col[k], self.val[k])))
+        (0..self.n)
+            .flat_map(move |i| (self.ptr[i]..self.ptr[i + 1]).map(move |k| (i, self.col[k], self.val[k])))
     }
 
     pub fn mul(&self, x: &[C64], y: &mut [C64]) {

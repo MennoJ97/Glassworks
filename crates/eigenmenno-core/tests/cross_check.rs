@@ -1,8 +1,5 @@
 //! Checks the handwritten linear algebra against faer on the same matrices.
 
-use faer::prelude::*;
-use faer::sparse::{SparseColMat, Triplet};
-use faer::Mat;
 use eigenmenno_core::assemble::{assemble, Csr, DofMap};
 use eigenmenno_core::banded::{rcm, BandedLu, Factors};
 use eigenmenno_core::eigen::eigs_near;
@@ -10,6 +7,9 @@ use eigenmenno_core::mesh::{Mesh, Outline};
 use eigenmenno_core::space::H1Triangle;
 use eigenmenno_core::sparse::{Ordering, SparseLu};
 use eigenmenno_core::C64;
+use faer::prelude::*;
+use faer::sparse::{SparseColMat, Triplet};
+use faer::Mat;
 
 fn ring(n: usize, shift: C64) -> Csr {
     let mut t = Vec::new();
@@ -110,10 +110,13 @@ fn helmholtz(shift: C64) -> (Csr, Vec<(f64, f64)>) {
     let mesh = Mesh::fitted_grid(30, 30, 1.0, 1.0, &[Outline::Circle { x: 0.6, y: 0.45, r: 0.2 }]);
     let space = H1Triangle::new(&mesh);
     let all = space.dof_positions();
-    let zero: Vec<usize> = (0..all.len()).filter(|&d| [all[d].0, all[d].1].iter().any(|v| *v < 1e-9 || *v > 1.0 - 1e-9)).collect();
+    let zero: Vec<usize> = (0..all.len())
+        .filter(|&d| [all[d].0, all[d].1].iter().any(|v| *v < 1e-9 || *v > 1.0 - 1e-9))
+        .collect();
     let dofs = DofMap::new(all.len(), &zero, &[]);
     let region = &mesh.region;
-    let t = assemble(&space, &dofs, |c| (C64::new(1.0, 0.0), -shift * if region[c] == 0 { 1.0 } else { 12.0 }));
+    let t =
+        assemble(&space, &dofs, |c| (C64::new(1.0, 0.0), -shift * if region[c] == 0 { 1.0 } else { 12.0 }));
     let free: Vec<(f64, f64)> = (0..all.len()).filter(|&d| dofs.map[d].is_some()).map(|d| all[d]).collect();
     (Csr::from_triplets(dofs.n_free, t), free)
 }
@@ -122,7 +125,8 @@ fn helmholtz(shift: C64) -> (Csr, Vec<(f64, f64)>) {
 fn sparse_lu_matches_faer_on_a_2d_matrix() {
     for shift in [C64::new(150.0, 0.0), C64::new(400.0, 3.0)] {
         let (a, pos) = helmholtz(shift);
-        let rhs: Vec<C64> = (0..a.n).map(|i| C64::new(((i * 7) % 11) as f64 - 5.0, ((i * 3) % 7) as f64)).collect();
+        let rhs: Vec<C64> =
+            (0..a.n).map(|i| C64::new(((i * 7) % 11) as f64 - 5.0, ((i * 3) % 7) as f64)).collect();
         let mut x = rhs.clone();
         SparseLu::factor(&a, &Ordering::new(&a, &pos)).solve(&mut x);
         let mut triplets = Vec::with_capacity(a.val.len());
@@ -135,7 +139,11 @@ fn sparse_lu_matches_faer_on_a_2d_matrix() {
         let b = Mat::<faer::c64>::from_fn(a.n, 1, |i, _| faer::c64::new(rhs[i].re, rhs[i].im));
         let reference = m.sp_lu().unwrap().solve(&b);
         for i in 0..a.n {
-            assert!((x[i] - C64::new(reference[(i, 0)].re, reference[(i, 0)].im)).norm() < 1e-8 * (1.0 + x[i].norm()), "unknown {i}");
+            assert!(
+                (x[i] - C64::new(reference[(i, 0)].re, reference[(i, 0)].im)).norm()
+                    < 1e-8 * (1.0 + x[i].norm()),
+                "unknown {i}"
+            );
         }
     }
 }

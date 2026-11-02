@@ -113,7 +113,15 @@ impl<'a> Setup<'a> {
 
     /// Samples the field and the components that follow from Maxwell's curl
     /// equations, appending them as channels and metadata.
-    fn push_field(&self, out: &mut Output, u: &[C64], k0: f64, kt: f64, n_eff: Option<f64>, power: Option<[f64; 3]>) {
+    fn push_field(
+        &self,
+        out: &mut Output,
+        u: &[C64],
+        k0: f64,
+        kt: f64,
+        n_eff: Option<f64>,
+        power: Option<[f64; 3]>,
+    ) {
         let mesh = self.space.mesh;
         let te = self.req.polarization == Polarization::Te;
         let per_cell = (2 * self.req.mesh.order).max(2);
@@ -146,7 +154,13 @@ impl<'a> Setup<'a> {
         for (k, d) in data.into_iter().enumerate() {
             out.channels.push((format!("field{i}/{}/{}", components[k / 2], ["re", "im"][k % 2]), d));
         }
-        out.meta.fields.push(FieldMeta { components: components.to_vec(), k0, n_eff, power, ..Default::default() });
+        out.meta.fields.push(FieldMeta {
+            components: components.to_vec(),
+            k0,
+            n_eff,
+            power,
+            ..Default::default()
+        });
     }
 }
 
@@ -180,7 +194,10 @@ fn validate(req: &Request) -> Result<(), String> {
     let ok_wl = |w: f64| w > 0.0 && w.is_finite();
     match &req.analysis {
         Analysis::Driven { wavelength, source, .. } => {
-            if !ok_wl(*wavelength) || periodic || (matches!(source, Source::PlaneWave) && req.left != Boundary::Port) {
+            if !ok_wl(*wavelength)
+                || periodic
+                || (matches!(source, Source::PlaneWave) && req.left != Boundary::Port)
+            {
                 return err("driven solves need a positive wavelength, no periodic walls, and a left port for a plane wave");
             }
         }
@@ -198,7 +215,11 @@ fn validate(req: &Request) -> Result<(), String> {
             if open {
                 return err("eigenmode analyses need closed boundaries: use PEC, PMC or periodic");
             }
-            if req.layers.iter().any(|l| l.eps[1] != 0.0 || l.mu[1] != 0.0 || l.eps[0] <= 0.0 || l.mu[0] <= 0.0) {
+            if req
+                .layers
+                .iter()
+                .any(|l| l.eps[1] != 0.0 || l.mu[1] != 0.0 || l.eps[0] <= 0.0 || l.mu[0] <= 0.0)
+            {
                 return err("eigenmode analyses support lossless materials only: use a driven solve for loss or metals");
             }
             let bad = match eigen {
@@ -230,7 +251,14 @@ pub fn solve(req: &Request) -> Result<Output, String> {
     match &req.analysis {
         Analysis::Cavity { n_modes, target_k0, .. } => {
             for (lambda, x) in cavity_modes(&s, *n_modes, *target_k0, length)? {
-                s.push_field(&mut out, &normalized(s.dofs.expand(&x)), lambda.max(0.0).sqrt(), 0.0, None, None);
+                s.push_field(
+                    &mut out,
+                    &normalized(s.dofs.expand(&x)),
+                    lambda.max(0.0).sqrt(),
+                    0.0,
+                    None,
+                    None,
+                );
             }
         }
         Analysis::Bands { n_bands, n_k } => bands(&s, *n_bands, *n_k, &mut out)?,
@@ -262,7 +290,12 @@ pub fn solve(req: &Request) -> Result<Output, String> {
 }
 
 /// `S u = k0^2 Q u`, with `Q` the mass matrix weighted by `q`.
-fn cavity_modes(s: &Setup, n: usize, target_k0: Option<f64>, length: f64) -> Result<Vec<(f64, Vec<C64>)>, String> {
+fn cavity_modes(
+    s: &Setup,
+    n: usize,
+    target_k0: Option<f64>,
+    length: f64,
+) -> Result<Vec<(f64, Vec<C64>)>, String> {
     let a = s.matrix(|p, _| (p, ZERO));
     let b = s.matrix(|_, q| (ZERO, q));
     // A negative shift keeps the operator definite when searching up from k0 = 0.
@@ -390,7 +423,8 @@ fn power_gradients(s: &Setup, k0: f64, d: &Driven, out: &mut Output) {
 /// TE has `q = ε` in `b = kt^2 p - k0^2 q`, and TM has `p = 1/ε` in both `a` and `b`.
 fn layer_sensitivity(s: &Setup, k0: f64, d: &Driven, lambda: &[C64]) -> Vec<C64> {
     let n = s.space.local_size();
-    let (mut stiff, mut unused, mut mass, mut dofs) = (vec![0.0; n * n], vec![0.0; n * n], vec![0.0; n * n], vec![0; n]);
+    let (mut stiff, mut unused, mut mass, mut dofs) =
+        (vec![0.0; n * n], vec![0.0; n * n], vec![0.0; n * n], vec![0; n]);
     let mut w = vec![ZERO; s.req.layers.len()];
     for cell in 0..s.space.n_cells() {
         s.space.cell_dofs(cell, &mut dofs);
@@ -402,7 +436,8 @@ fn layer_sensitivity(s: &Setup, k0: f64, d: &Driven, lambda: &[C64]) -> Vec<C64>
         };
         for i in 0..n {
             for j in 0..n {
-                w[s.space.mesh.region[cell]] += lambda[dofs[i]] * (a * stiff[i * n + j] + b * mass[i * n + j]) * d.u[dofs[j]];
+                w[s.space.mesh.region[cell]] +=
+                    lambda[dofs[i]] * (a * stiff[i * n + j] + b * mass[i * n + j]) * d.u[dofs[j]];
             }
         }
     }

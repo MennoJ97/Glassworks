@@ -37,7 +37,9 @@ fn tridiagonal_eigen(d: &[f64], e: &[f64]) -> (Vec<f64>, Vec<f64>) {
     (0..n).for_each(|i| z[i * n + i] = 1.0);
     for l in 0..n {
         for _ in 0..200 {
-            let m = (l..n - 1).find(|&m| e[m].abs() <= f64::EPSILON * (d[m].abs() + d[m + 1].abs())).unwrap_or(n - 1);
+            let m = (l..n - 1)
+                .find(|&m| e[m].abs() <= f64::EPSILON * (d[m].abs() + d[m + 1].abs()))
+                .unwrap_or(n - 1);
             if m == l {
                 break;
             }
@@ -125,13 +127,17 @@ fn lanczos(lu: &dyn Factors, b: &Csr, found: &[Mode], want: usize, tol: f64, see
         let coupling = dot(&u, &bu).re.max(0.0).sqrt();
         let converged = |i: usize| coupling * z[(m - 1) * m + i].abs() <= tol * theta[i].abs();
         if stop || order.iter().take(want).all(|&i| converged(i)) {
-            return order.into_iter().filter(|&i| converged(i)).map(|i| {
-                let mut x = vec![ZERO; n];
-                (0..m).for_each(|k| axpy(C64::new(z[k * m + i], 0.0), &v[k], &mut x));
-                let mut bx = vec![ZERO; n];
-                b.mul(&x, &mut bx);
-                Mode { theta: theta[i], x, bx }
-            }).collect();
+            return order
+                .into_iter()
+                .filter(|&i| converged(i))
+                .map(|i| {
+                    let mut x = vec![ZERO; n];
+                    (0..m).for_each(|k| axpy(C64::new(z[k * m + i], 0.0), &v[k], &mut x));
+                    let mut bx = vec![ZERO; n];
+                    b.mul(&x, &mut bx);
+                    Mode { theta: theta[i], x, bx }
+                })
+                .collect();
         }
     }
 }
@@ -147,7 +153,13 @@ pub fn eigs_near(a: &Csr, b: &Csr, sigma: f64, k: usize, tol: f64) -> Result<Vec
 }
 
 /// `eigs_near` for an `lu` that already factors `A - sigma B`.
-pub fn eigs_with(lu: &dyn Factors, b: &Csr, sigma: f64, k: usize, tol: f64) -> Result<Vec<(f64, Vec<C64>)>, String> {
+pub fn eigs_with(
+    lu: &dyn Factors,
+    b: &Csr,
+    sigma: f64,
+    k: usize,
+    tol: f64,
+) -> Result<Vec<(f64, Vec<C64>)>, String> {
     let k = k.min(b.n);
     let mut seed = 0x9E3779B97F4A7C15;
     let mut found: Vec<Mode> = vec![];

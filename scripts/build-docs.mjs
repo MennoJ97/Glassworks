@@ -23,7 +23,7 @@ const math = (tex, displayMode) =>
     .replace(/<mi mathvariant="bold">([A-Za-z]+)<\/mi>/g, (_, letters) => `<mi>${[...letters].map(boldLetter).join('')}</mi>`);
 
 const sources = [
-  ...['mesh', 'space', 'assemble', 'banded', 'eigen', 'problem', 'solve', 'sparse', 'solve2d'].map((n) => `crates/eigenmenno-core/src/${n}.rs`),
+  ...['mesh', 'space', 'assemble', 'banded', 'eigen', 'problem', 'solve', 'sparse', 'solve2d', 'solve2d/closed', 'solve2d/open', 'solve2d/driven', 'solve2d/gradient', 'solve2d/resonance', 'solve2d/validate'].map((n) => `crates/eigenmenno-core/src/${n}.rs`),
   ...['analytic', 'cross_check'].map((n) => `crates/eigenmenno-core/tests/${n}.rs`),
 ];
 

@@ -1,0 +1,127 @@
+//! Closed domains: PEC or PMC walls, or a periodic cell, where modes come from the eigensolver.
+
+use super::{coefficients, free_positions, grid_size, mode_volume, push_mesh};
+use crate::assemble::{assemble, Csr, DofMap};
+use crate::banded::Factors;
+use crate::eigen::eigs_with;
+use crate::mesh::Mesh;
+use crate::problem::{Analysis2d, Boundary, Polarization, Request2d};
+use crate::solve::{normalized, FieldMeta, Meta, Output};
+use crate::space::H1Triangle;
+use crate::sparse::{Ordering, SparseLu};
+use crate::{C64, ZERO};
+use std::collections::HashMap;
+use std::f64::consts::PI;
+
+const EIG_TOL: f64 = 1e-10;
+
+/// Dirichlet walls, or Bloch ties from the right and top edges to the left and
+/// bottom. Corners tie straight to the origin, carrying both phases.
+fn constraints(req: &Request2d, space: &H1Triangle, nx: usize, ny: usize, phase: [f64; 2]) -> DofMap {
+    let pos = space.dof_positions();
+    let (hx, hy) = (req.width / (2 * nx) as f64, req.height / (2 * ny) as f64);
+    let on_right = |p: (f64, f64)| (p.0 / hx).round() as usize == 2 * nx;
+    let on_top = |p: (f64, f64)| (p.1 / hy).round() as usize == 2 * ny;
+    let on_left = |p: (f64, f64)| (p.0 / hx).round() as usize == 0;
+    let on_bottom = |p: (f64, f64)| (p.1 / hy).round() as usize == 0;
+    if req.walls != Boundary::Periodic {
+        let wall = if req.polarization == Polarization::Te { Boundary::Pec } else { Boundary::Pmc };
+        let zero: Vec<usize> = if req.walls == wall {
+            (0..pos.len())
+                .filter(|&d| on_left(pos[d]) || on_right(pos[d]) || on_bottom(pos[d]) || on_top(pos[d]))
+                .collect()
+        } else {
+            vec![]
+        };
+        return DofMap::new(pos.len(), &zero, &[]);
+    }
+    let key =
+        |p: (f64, f64)| ((p.0 / hx).round() as usize % (2 * nx), (p.1 / hy).round() as usize % (2 * ny));
+    let masters: HashMap<_, _> = (0..pos.len())
+        .filter(|&d| !on_right(pos[d]) && !on_top(pos[d]) && (on_left(pos[d]) || on_bottom(pos[d])))
+        .map(|d| (key(pos[d]), d))
+        .collect();
+    let ties: Vec<_> = (0..pos.len())
+        .filter(|&d| on_right(pos[d]) || on_top(pos[d]))
+        .map(|d| {
+            let angle =
+                if on_right(pos[d]) { phase[0] } else { 0.0 } + if on_top(pos[d]) { phase[1] } else { 0.0 };
+            (d, masters[&key(pos[d])], C64::from_polar(1.0, angle))
+        })
+        .collect();
+    DofMap::new(pos.len(), &[], &ties)
+}
+
+/// The `n` values of `(k0^2, x)` nearest `sigma`, for one set of constraints.
+fn modes(
+    space: &H1Triangle,
+    dofs: &DofMap,
+    coef: &[(C64, C64)],
+    n: usize,
+    sigma: f64,
+) -> Result<Vec<(f64, Vec<C64>)>, String> {
+    let region = &space.mesh.region;
+    let a = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (coef[region[c]].0, ZERO)));
+    let b = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (ZERO, coef[region[c]].1)));
+    let shifted = a.sub_scaled(sigma, &b);
+    let ordering = Ordering::reused(&shifted, || free_positions(space, dofs));
+    eigs_with(&SparseLu::factor(&shifted, &ordering) as &dyn Factors, &b, sigma, n, EIG_TOL)
+}
+
+pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
+    let (nx, ny) = grid_size(req, req.width, req.height)?;
+    let outlines: Vec<_> = req.shapes.iter().map(|s| s.outline).collect();
+    let mesh = Mesh::fitted_grid(nx, ny, req.width, req.height, &outlines);
+    let space = H1Triangle::new(&mesh);
+    let coef = coefficients(req);
+    let length = req.width.max(req.height);
+    // A negative shift keeps the operator definite when searching up from k0 = 0.
+    let sigma = -(PI / length).powi(2);
+    let mut out = Output { meta: Meta { length: req.width, ..Default::default() }, channels: vec![] };
+    match &req.analysis {
+        Analysis2d::Cavity { n_modes, bloch, target_k0 } => {
+            let dofs = constraints(req, &space, nx, ny, *bloch);
+            out.meta.n_dofs = dofs.n_free;
+            push_mesh(&space, &mut out);
+            let field = if req.polarization == Polarization::Te { "Ez" } else { "Hz" };
+            for (lambda, x) in modes(&space, &dofs, &coef, *n_modes, target_k0.map_or(sigma, |k| k * k))? {
+                let i = out.meta.fields.len();
+                let u = normalized(dofs.expand(&x));
+                out.channels.push((format!("field{i}/{field}/re"), u.iter().map(|v| v.re).collect()));
+                out.channels.push((format!("field{i}/{field}/im"), u.iter().map(|v| v.im).collect()));
+                let volume = Some(mode_volume(&space, &coef, &u, |_| true));
+                out.meta.fields.push(FieldMeta {
+                    components: vec![field],
+                    k0: lambda.max(0.0).sqrt(),
+                    volume,
+                    ..Default::default()
+                });
+            }
+        }
+        Analysis2d::Driven { .. } | Analysis2d::Resonance { .. } => {
+            unreachable!("sent elsewhere by solve2d::solve")
+        }
+        Analysis2d::Bands { n_bands, n_k } => {
+            // Gamma to X to M to Gamma, with `s` running from 0 to 3 along the path.
+            let points = 3 * n_k + 1;
+            let phases = |s: f64| match s {
+                s if s <= 1.0 => [PI * s, 0.0],
+                s if s <= 2.0 => [PI, PI * (s - 1.0)],
+                s => [PI * (3.0 - s), PI * (3.0 - s)],
+            };
+            let path: Vec<f64> = (0..points).map(|i| i as f64 / *n_k as f64).collect();
+            let mut table = vec![vec![]; *n_bands];
+            for &s in &path {
+                let dofs = constraints(req, &space, nx, ny, phases(s));
+                out.meta.n_dofs = dofs.n_free;
+                for (band, (lambda, _)) in table.iter_mut().zip(modes(&space, &dofs, &coef, *n_bands, sigma)?)
+                {
+                    band.push(lambda.max(0.0).sqrt());
+                }
+            }
+            out.channels.push(("s".into(), path));
+            out.channels.extend(table.into_iter().enumerate().map(|(i, b)| (format!("band{i}"), b)));
+        }
+    }
+    Ok(out)
+}

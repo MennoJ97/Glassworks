@@ -107,7 +107,14 @@ const TRIANGLE_RULE: [([f64; 3], f64); 6] = [
 
 /// The six second-order basis functions, at barycentric coordinates.
 fn basis_values([l0, l1, l2]: [f64; 3]) -> [f64; 6] {
-    [l0 * (2.0 * l0 - 1.0), l1 * (2.0 * l1 - 1.0), l2 * (2.0 * l2 - 1.0), 4.0 * l0 * l1, 4.0 * l1 * l2, 4.0 * l2 * l0]
+    [
+        l0 * (2.0 * l0 - 1.0),
+        l1 * (2.0 * l1 - 1.0),
+        l2 * (2.0 * l2 - 1.0),
+        4.0 * l0 * l1,
+        4.0 * l1 * l2,
+        4.0 * l2 * l0,
+    ]
 }
 
 /// One derivative of the six second-order basis functions, given that derivative of each
@@ -135,9 +142,11 @@ pub struct H1Triangle<'a> {
 impl<'a> H1Triangle<'a> {
     pub fn new(mesh: &'a Mesh) -> Self {
         let edges = mesh.edges();
-        let index: std::collections::HashMap<[usize; 2], usize> = edges.iter().enumerate().map(|(i, e)| (*e, i)).collect();
+        let index: std::collections::HashMap<[usize; 2], usize> =
+            edges.iter().enumerate().map(|(i, e)| (*e, i)).collect();
         let id = |a: usize, b: usize| index[&[a.min(b), a.max(b)]];
-        let cell_edges = mesh.cells.chunks(3).map(|c| [id(c[0], c[1]), id(c[1], c[2]), id(c[2], c[0])]).collect();
+        let cell_edges =
+            mesh.cells.chunks(3).map(|c| [id(c[0], c[1]), id(c[1], c[2]), id(c[2], c[0])]).collect();
         Self { mesh, n_vertices: mesh.coords.len() / 2, edges, cell_edges }
     }
 
@@ -157,7 +166,11 @@ impl<'a> H1Triangle<'a> {
         let v = &self.mesh.cells[3 * cell..3 * cell + 3];
         let [p0, p1, p2] = [self.mesh.vertex(v[0]), self.mesh.vertex(v[1]), self.mesh.vertex(v[2])];
         let det = (p1.0 - p0.0) * (p2.1 - p0.1) - (p2.0 - p0.0) * (p1.1 - p0.1);
-        (det, [(p1.1 - p2.1) / det, (p2.1 - p0.1) / det, (p0.1 - p1.1) / det], [(p2.0 - p1.0) / det, (p0.0 - p2.0) / det, (p1.0 - p0.0) / det])
+        (
+            det,
+            [(p1.1 - p2.1) / det, (p2.1 - p0.1) / det, (p0.1 - p1.1) / det],
+            [(p2.0 - p1.0) / det, (p0.0 - p2.0) / det, (p1.0 - p0.0) / det],
+        )
     }
 
     /// Barycentric coordinates of a point, all in `[0, 1]` if it's inside the cell.

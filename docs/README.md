@@ -2,8 +2,8 @@
 
 This tutorial explains the finite element method (FEM) using Eigenmenno's own
 source code. Each chapter takes one idea, derives it, and points at the few lines
-that implement it. The whole solver is about 2,550 lines of Rust, so you can read
-all of it. The 1D chapters cover about 1,100 of those.
+that implement it. The whole solver is about 2,900 lines of Rust, so you can read
+all of it. The 1D chapters cover about 1,200 of those.
 
 You need calculus (integration by parts) and basic linear algebra (matrices,
 eigenvalues). Knowing Maxwell's equations helps but isn't required, because
@@ -40,5 +40,9 @@ The [references](15-references.md) list every source cited in the chapters.
 | 8 | [`tests/analytic.rs`](../crates/eigenmenno-core/tests/analytic.rs), [`tests/cross_check.rs`](../crates/eigenmenno-core/tests/cross_check.rs) |
 | 9 | [`mesh.rs`](../crates/eigenmenno-core/src/mesh.rs), [`space.rs`](../crates/eigenmenno-core/src/space.rs) |
 | 10 | [`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) |
-| 9, 11 to 13 | [`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs) |
+| 9 to 13 | [`solve2d.rs`](../crates/eigenmenno-core/src/solve2d.rs), which sends each request to one of the files below |
+| 9 | [`solve2d/closed.rs`](../crates/eigenmenno-core/src/solve2d/closed.rs) |
+| 11 | [`solve2d/open.rs`](../crates/eigenmenno-core/src/solve2d/open.rs), [`solve2d/resonance.rs`](../crates/eigenmenno-core/src/solve2d/resonance.rs) |
+| 12 | [`solve2d/driven.rs`](../crates/eigenmenno-core/src/solve2d/driven.rs) |
+| 13 | [`solve2d/gradient.rs`](../crates/eigenmenno-core/src/solve2d/gradient.rs) |
 | 13 | `web/js/design.js`, on the website rather than in the solver |

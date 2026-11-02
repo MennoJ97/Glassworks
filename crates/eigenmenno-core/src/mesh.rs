@@ -26,7 +26,9 @@ impl Outline {
     pub fn shifted(self, dx: f64, dy: f64) -> Self {
         match self {
             Outline::Circle { x, y, r } => Outline::Circle { x: x + dx, y: y + dy, r },
-            Outline::Rect { x0, y0, x1, y1 } => Outline::Rect { x0: x0 + dx, y0: y0 + dy, x1: x1 + dx, y1: y1 + dy },
+            Outline::Rect { x0, y0, x1, y1 } => {
+                Outline::Rect { x0: x0 + dx, y0: y0 + dy, x1: x1 + dx, y1: y1 + dy }
+            }
         }
     }
 
@@ -180,17 +182,28 @@ impl Mesh {
         // Outer nodes never need testing as a mover, but they still count as neighbours.
         let neighbours = |v: usize| {
             let (i, j) = (v % (nx + 1), v / (nx + 1));
-            [(i > 0).then(|| v - 1), (i < nx).then(|| v + 1), (j > 0).then(|| v - nx - 1), (j < ny).then(|| v + nx + 1)]
+            [
+                (i > 0).then(|| v - 1),
+                (i < nx).then(|| v + 1),
+                (j > 0).then(|| v - nx - 1),
+                (j < ny).then(|| v + nx + 1),
+            ]
         };
         let mut placed = vec![false; n];
         let (hx, hy) = (lx / nx as f64, ly / ny as f64);
         let close = 0.3 * hx.min(hy);
         // Grid lines one step past the range, the furthest a crossing or a close node can be.
-        let span = |low: f64, high: f64, h: f64, last: usize| ((low / h).floor() - 1.0).max(0.0) as usize..=(((high / h).ceil() + 1.0).max(0.0) as usize).min(last);
+        let span = |low: f64, high: f64, h: f64, last: usize| {
+            ((low / h).floor() - 1.0).max(0.0) as usize
+                ..=(((high / h).ceil() + 1.0).max(0.0) as usize).min(last)
+        };
         for o in outlines {
             for (x, y) in o.corners() {
                 // Halfway between two nodes goes to the lower one, whatever rounding noise says.
-                let (i, j) = ((x / lx * nx as f64 - 1e-9).round() as usize, (y / ly * ny as f64 - 1e-9).round() as usize);
+                let (i, j) = (
+                    (x / lx * nx as f64 - 1e-9).round() as usize,
+                    (y / ly * ny as f64 - 1e-9).round() as usize,
+                );
                 let v = i.min(nx) + j.min(ny) * (nx + 1);
                 if free(v) && !placed[v] {
                     (self.coords[2 * v], self.coords[2 * v + 1]) = (x, y);
@@ -203,13 +216,17 @@ impl Mesh {
             let mut order: Vec<usize> = rows.filter(|&v| free(v) && !placed[v]).collect();
             // A shape on a grid has many nodes at equal distances. Rounding keeps noise from
             // choosing among them, so the mesh is the same at any scale.
-            let level = |m: &Mesh, v: usize| (o.level(m.coords[2 * v], m.coords[2 * v + 1]) / hx * 1e9).round() * hx / 1e9;
+            let level = |m: &Mesh, v: usize| {
+                (o.level(m.coords[2 * v], m.coords[2 * v + 1]) / hx * 1e9).round() * hx / 1e9
+            };
             order.sort_by(|&a, &b| level(self, a).abs().total_cmp(&level(self, b).abs()));
             for v in order {
                 let lv = level(self, v);
-                let crossing = neighbours(v).into_iter().flatten().any(|w| !placed[w] && lv * level(self, w) < 0.0);
+                let crossing =
+                    neighbours(v).into_iter().flatten().any(|w| !placed[w] && lv * level(self, w) < 0.0);
                 if crossing || lv.abs() < close {
-                    (self.coords[2 * v], self.coords[2 * v + 1]) = o.project(self.coords[2 * v], self.coords[2 * v + 1]);
+                    (self.coords[2 * v], self.coords[2 * v + 1]) =
+                        o.project(self.coords[2 * v], self.coords[2 * v + 1]);
                     placed[v] = true;
                 }
             }
