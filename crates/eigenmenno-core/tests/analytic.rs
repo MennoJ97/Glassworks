@@ -1566,3 +1566,96 @@ fn symmetric_factors_fall_back_when_a_pivot_is_unusable() {
     // A hard matrix for pivoting too, which stays inside each front: falling back gives the same.
     assert!(ours == pivoted && ours < 1e-7, "{ours} against {pivoted}");
 }
+
+/// A crystal of square rods with the centre one removed, whose edges all sit on the grid at `d = 0`.
+fn square_rod_cavity(d: f64, cell: f64, target_k0: f64) -> Request2d {
+    let side = 1.0 / 3.0;
+    let shapes = (0..49)
+        .filter(|&i| i != 24)
+        .map(|i| {
+            let (x, y) = ((i % 7) as f64 + 1.0 / 3.0, (i / 7) as f64 + 1.0 / 3.0);
+            let outline = Outline::Rect { x0: x - d, y0: y - d, x1: x + side + d, y1: y + side + d };
+            Shape { outline, material: Material { eps: 12.0, mu: 1.0 } }
+        })
+        .collect();
+    Request2d {
+        width: 7.0,
+        height: 7.0,
+        cell,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes,
+        polarization: Polarization::Te,
+        walls: Boundary::Absorbing,
+        analysis: Analysis2d::Resonance { target_k0, x: 3.5, y: 3.5, pml: 1.0 },
+        monitors: vec![],
+        density: None,
+    }
+}
+
+#[test]
+fn moving_an_edge_shifts_a_resonance_as_perturbation_theory_says() {
+    // dk / k = -(deps / 2) sum(integral(u^2) along the edges) / integral(eps u^2) per unit of outward move.
+    let cell = 1.0 / 24.0;
+    let solve_at =
+        |d: f64, target: f64| eigenmenno_core::solve2d::solve(&square_rod_cavity(d, cell, target)).unwrap();
+    let o = solve_at(0.0, 2.0 * PI * 0.37);
+    let k = o.meta.fields[0].k0;
+    let channel = |name: &str| &o.channels.iter().find(|c| c.0 == name).unwrap().1;
+    let (x, y, re, im) = (channel("x"), channel("y"), channel("field0/Ez/re"), channel("field0/Ez/im"));
+    let square = |i: usize| C64::new(re[i], im[i]).powi(2);
+    let in_rod = |px: f64, py: f64| {
+        let (u, v) = (px - px.floor(), py - py.floor());
+        let centre = px.floor() == 3.0 && py.floor() == 3.0;
+        (0.0..7.0).contains(&px)
+            && (0.0..7.0).contains(&py)
+            && !centre
+            && (1.0 / 3.0..2.0 / 3.0).contains(&u)
+            && (1.0 / 3.0..2.0 / 3.0).contains(&v)
+    };
+    let triangles = channel("triangles");
+    let mut energy = C64::new(0.0, 0.0);
+    for t in triangles.chunks_exact(3) {
+        let [a, b, c] = [t[0] as usize, t[1] as usize, t[2] as usize];
+        let (gx, gy) = ((x[a] + x[b] + x[c]) / 3.0, (y[a] + y[b] + y[c]) / 3.0);
+        let area = ((x[b] - x[a]) * (y[c] - y[a]) - (x[c] - x[a]) * (y[b] - y[a])).abs() / 2.0;
+        energy +=
+            (square(a) + square(b) + square(c)) * (area / 3.0) * if in_rod(gx, gy) { 12.0 } else { 1.0 };
+    }
+    // Nodes lie every half cell, so Simpson's rule fits each cell of each edge.
+    let step = cell / 2.0;
+    let key = |px: f64, py: f64| ((px / step).round() as i64, (py / step).round() as i64);
+    let nodes: std::collections::HashMap<_, _> = (0..x.len()).map(|i| (key(x[i], y[i]), i)).collect();
+    let mut edges = C64::new(0.0, 0.0);
+    for i in (0..49).filter(|&i| i != 24) {
+        let (x0, y0) = ((i % 7) as f64 + 1.0 / 3.0, (i / 7) as f64 + 1.0 / 3.0);
+        let along = [
+            (x0, y0, 1.0, 0.0),
+            (x0, y0 + 1.0 / 3.0, 1.0, 0.0),
+            (x0, y0, 0.0, 1.0),
+            (x0 + 1.0 / 3.0, y0, 0.0, 1.0),
+        ];
+        for (px, py, dx, dy) in along {
+            for q in 0..=16 {
+                let weight = if q == 0 || q == 16 {
+                    1.0
+                } else if q % 2 == 1 {
+                    4.0
+                } else {
+                    2.0
+                };
+                let at = nodes[&key(px + dx * q as f64 * step, py + dy * q as f64 * step)];
+                edges += square(at) * (weight * step / 3.0);
+            }
+        }
+    }
+    let predicted = -(11.0 / 2.0) * (edges / energy).re * k;
+    let d = 0.002;
+    let (up, down) = (solve_at(d, k), solve_at(-d, k));
+    let measured = (up.meta.fields[0].k0 - down.meta.fields[0].k0) / (2.0 * d);
+    println!(
+        "dk/dd predicted {predicted}, measured {measured}, ratio {}, Q {:?}",
+        measured / predicted,
+        o.meta.fields[0].q
+    );
+    assert!((measured / predicted - 1.0).abs() < 0.01, "predicted {predicted}, measured {measured}");
+}

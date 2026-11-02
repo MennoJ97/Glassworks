@@ -516,14 +516,14 @@ been seen and agreed.
       enlarging each material rectangle, and shrink by drawing the square in material and enlarging
       each air rectangle over it. The mesh has to resolve the move, so run this natively, beyond the page's limit if needed,
       and check convergence with the mesh, as the rest of this plan does.
-- [ ] **Explain the high Q.** Look at the mode's field, where it radiates, and how Q changes with the
+- [x] **Explain the high Q.** Look at the mode's field, where it radiates, and how Q changes with the
       surrounding air and with the size of the design region. Compare the best starts with those that stay
       below Q 10,000. Finding no cause is an acceptable result, as long as it's stated.
-- [ ] **Decide what robustness should mean.** A shifted edge moves the resonance, and at a bandwidth
+- [x] **Decide what robustness should mean.** A shifted edge moves the resonance, and at a bandwidth
       of Q 1,000, likely by more than its width. So one wavelength may be unreachable for all versions of a
       design. Read each version at its own wavelength, and report how far they spread as a separate
       result, which is what a real device would have to tune away. Check this against step 1's numbers.
-- [ ] **Optimize for robustness, if step 1 shows a need.** Project the filtered densities at three
+- [x] **Optimize for robustness, if step 1 shows a need.** Prototype only, not on the page. Project the filtered densities at three
       thresholds, for eroded, nominal and dilated designs ([Wang, Lazarov & Sigmund 2011], to be
       checked before citing), and raise the weakest. This belongs in `design.js`, with no new Rust expected;
       state the line cost if that changes. A threshold's shift in pixels sets the edge move, so measure that
@@ -616,6 +616,145 @@ Limits on all of this:
 **What this changes for the next steps.** Three thresholds, as first planned, test uniform erosion and dilation, which
 is the milder of the two for Q, and a uniform error's main effect, the shift, can only be tuned away. So a robust goal
 should sample random edges too, or aim at what they do to Q, which step 2 needs to explain first.
+
+#### Step 2 results: why Q gets so high
+
+**The Q is real, at least within this 2D model.** On a circle in the air, the field splits into
+`u = sum a_m H_m(k r) exp(i m t)`, whose outgoing power gives `Q = k^2 integral(eps |u|^2) / (4 sum |a_m|^2)`. That
+uses only the field, and shares nothing with the search for the pole. It agrees within 0.5% unmoved, including at 5.9
+million, and within about 6% under disorder. The two circles tried give the same answer.
+
+**Only a few channels radiate, which is what makes this possible.** Eight-fold symmetry allows only `m = 0, 4, 8, 12, ...`.
+A footprint this small barely couples to higher `m`. Unmoved, the other channels carry under 0.1%, and `m >= 16` under 0.5%.
+So there are about four channels to quieten, with a few hundred free pixels.
+
+**The low channels are quiet by interference.** Each `a_m` is also an integral of the material's currents, so comparing its
+size with the sum of the sizes of its parts measures cancellation. Using the circle's `a_m`, for the default start and the crystal:
+
+| Channel | Default start | Crystal |
+|---:|---:|---:|
+| `m = 0` | 1.7e-4 | 5.7e-2 |
+| `m = 4` | 8.4e-4 | 3.1e-2 |
+| `m = 8` | 2.5e-3 | 2.5e-2 |
+| `m = 12` | 9.2e-2 | 4.2e-2 |
+
+So cancellation in the lowest channels is about 10 to 340 times stronger than the crystal's, while `m = 12` is just weak, with no
+special cancellation. The integral's own value at `m = 0` is 2 to 5 times off the circle's for high-Q designs, because so much
+cancels. The others agree within a few percent, and the crystal's `m = 0` within 5%.
+
+**It's also confinement.** Relative to the peak, the field at a radius of 1.2 wavelengths is 1.7e-3, against the crystal's 1.1e-2, and
+the outgoing field at 2.0 is 2.2e-4, against 8.3e-3. Those are about 38 times apart, or 1,400 in power, near the ratio of Q.
+Size helps too, over nine starts each:
+
+| Side, in wavelengths | Worst Q | Median Q | Best Q | Median LDOS | Median V |
+|---:|---:|---:|---:|---:|---:|
+| 1.67 | 7,800 | 38,000 | 93,000 | 986 | 0.0083 |
+| 2.00 | 461 | 47,000 | 310,000 | 994 | 0.0082 |
+| 2.67 (the page's) | 9,100 | 514,000 | 5.9 million | 1,015 | 0.0083 |
+| 3.33 | 688,000 | 4.6 million | 56 million | 1,009 | 0.0084 |
+| 4.00 | 377 | 1.9 million | 305 million | 1,021 | 0.0083 |
+
+Q grows quickly with size, up to 3.33 at least, but V and LDOS don't change at all. So the mode's size and the Q are nearly separate questions:
+the small region near the source sets V, and the rest controls leakage. Q above about 10 million hasn't been checked for numerical limits.
+
+**Why disorder hurts.** Random edges break the symmetry, and the forbidden channels then carry 29 to 91% of the power. The test of
+equal offsets on all eight images is less clear. It protected start 3's Q about 40 times at 2 nm, but barely helped starts 6 and 8, because those offsets also
+disturb the cancellation in the allowed channels, and shift the wavelength further. Those runs can show forbidden power too, since the mesh isn't quite
+symmetric once nodes move, which matters when Q is in the millions. So symmetry is part of the answer, not all of it.
+
+Which leaves, for step 3 and after:
+
+- **Q beyond the bandwidth buys little.** LDOS at Q 1,000 is close to its cap once a mode's Q passes about 10,000, and that survives 5 nm for most starts.
+- **What disorder really costs is the wavelength,** and no robust goal removes a uniform shift. Across these designs, shift per nm barely varies. It's 1.3%
+  at V 0.008 and 0.32% at the crystal's V 0.09, so a small mode may simply be a sensitive one. That's untested beyond these two groups.
+
+#### Step 3 results: a trade-off, and a cheap way to take it
+
+The optimizer always settles at the same mode, so these force others: an air disc around the source, a solid disc, or wider
+features, with six starts each at first. `V` isn't comparable between them, because it's measured against the peak of `q |u|^2`, which
+depends on what the source sits in. LDOS is the fair measure of how tightly a mode is held at the source. Medians:
+
+| Forced | LDOS, Q 1,000 | Shift per nm | Mode Q |
+|---|---:|---:|---:|
+| Nothing, 15 starts | 1,005 | 1.30% | 403,000 |
+| Air disc, radius 3 to 5 pixels | 154 to 325 | 0.38 to 1.50%, erratic | 1,300 to 4,200 |
+| **Air disc, radius 6 pixels (250 nm), 15 starts** | **611** | **0.26%** | **215,000** |
+| Air disc, radius 7 and 8 | 598, 589 | 0.27%, 0.26% | 110,000, 142,000 |
+| Air disc, radius 10 | 543 | 0.48% | 108,000 |
+| Air disc, radius 20 | 300 | 0.14% | 38,000 |
+| Solid disc, radius 3 | 352 | 0.56% | 18,000 |
+| Solid disc, radius 6, 10, 15, 20 | 245, 174, 134, 85 | 0.32, 0.24, 0.18, 0.14% | 814,000, 790,000, 254,000, 19,000 |
+| Features, filter radius 3 | 1,036 | 1.33% | 259,000 |
+| Features, filter radius 4, 6, 8 | 92, 190, 27 | 0.65, 0.23, 0.19% | 369, 2,600, 520 |
+| Crystal, for comparison | 289 | 0.32% | 1,552 |
+
+So a trade-off exists, but it isn't one law: at the same LDOS, an air disc is far less sensitive than a solid one, and from 1,005 to 611 costs 39% of
+LDOS for 5 times less shift. A clear disc of 6 pixels beats the crystal on LDOS, shift and Q at once. Smaller discs are unreliable, for a reason we haven't
+looked into. It held on nine unseen starts: LDOS 570 to 621 over all 15, shift 0.26 to 0.32%, Q 22,000 to 2.4 million, and none below Q 10,000.
+
+Random disorder, nine starts, six draws each, against the unconstrained designs from step 1:
+
+| Sigma | Spread of wavelength | LDOS at the original wavelength | LDOS, retuned | Mode Q |
+|---:|---|---|---|---|
+| 1 nm | 0.022% against 0.32% | **536** against 30, crystal 132 | 612 against 1,005 | 166,000 against 254,000 |
+| 2 nm | 0.045% against 0.62% | **420** against 34, crystal 62 | 599 against 992 | 55,000 against 118,000 |
+| 5 nm | 0.107% against 1.06% | **154** against 3, crystal 23 | 492 against 949 | 7,500 against 26,000 |
+
+- **At a fixed wavelength, it survives random disorder.** Its spread stays inside the 0.1% bandwidth up to about 5 nm, and the unconstrained designs miss it by 0.5 nm. The spread improves about 10 to 15 times, more than the 5 for
+  a uniform shift. Field spread around a ring averaging over many independent edges would explain that, but it hasn't been tested.
+- **If the wavelength can be retuned, the unconstrained design is still better,** with nearly twice the LDOS and a higher Q.
+- **A uniform bias still needs tuning.** At ±1 nm, LDOS at the original wavelength is about 20, like the crystal's 18, against 1.5.
+
+Checks. Theory predicts 0.287% per nm from the field, on all three meshes, and 1/72 measures 0.270%, within 6%. Between 1/48 and 1/72, wavelengths at ±2 nm agree within 0.03%, Q within 16%
+at worst and usually 7%, and random draws agree in shift within 0.01% absolute. At ±5 nm and beyond, wavelengths still agree within 0.4%, but Q doesn't always converge.
+
+**Where the source sits.** A fair question is why air would work, since the field normally concentrates in high index. Left alone, it does: every unconstrained
+design checked puts the source in a rod of 2 x 2 pixels, about 83 nm across, with 87% of the energy in material. LDOS follows `|E_0|^2 / integral(eps |E|^2)`:
+
+| Design | Source in | Energy in material | Peak per energy | Nearest edge | Edge field per energy | Shift per nm |
+|---|---|---:|---:|---:|---:|---:|
+| Unconstrained | Rod | 87% | 10.5 | 47 nm | 2.50 | 1.30% |
+| Solid disc, 3 pixels | Material | 95% | 3.9 | 178 nm | 1.14 | 0.56% |
+| Solid disc, 6 pixels | Material | 97% | 2.4 | 326 nm | 0.65 | 0.32% |
+| Air disc, 6 pixels | Air | 22% | 6.1 | 369 nm | 0.52 | 0.26% |
+
+So the rod wins on enhancement, and the air disc is a compromise, not a better design. Its broad peak is cheap because energy in air counts 12 times less. The rod's edge is
+47 nm from the peak, and the ratio of edge field, 4.8, matches the ratio of shift, 5. This is `E_z` only, which is continuous across edges. The other polarization has the slot effect and may behave differently. In 2D, a
+line source in uniform material reads LDOS 1.00 at any `eps`, so comparing sources in air and in material is fair here. A 3D emitter's baseline depends on its surroundings.
+
+#### Step 4 results: optimizing for robustness
+
+Each iteration adds three samples, with edges moved by fractions of a pixel, a Gaussian of 2 nm. The step follows their mean gradient, and the frequency hold stays on the unmoved design.
+All of it is judged afterwards by drawn edges, not by this model of them. In the scratchpad only, as `plans/probe-tolerance/robust-goal.patch`. On the first nine starts:
+
+| Goal | LDOS | Shift per nm | Mode Q, unmoved | Mode Q at 5 nm |
+|---|---:|---:|---:|---:|
+| None | 1,006 | 1.30% | 533,000 | 26,000 |
+| Samples at the target wavelength, 2 nm | 694 | 1.23% | 2,400 | 1,000 |
+| Samples at the target wavelength, 5 nm | 286 | 1.26% | 455 | 477 |
+| Eroded and dilated by 2 nm, at the target wavelength | 250 | 1.10% | 1,600 | 705 |
+| **Samples at their own wavelength** | 1,029 | 1.29% | 1.1 million | 39,000 |
+| The same, with a bandwidth 10 times sharper | 875 | 1.23% | 37,000 | 11,000 |
+
+Samples at the target sit on their resonance's wing, where raising LDOS lowers Q, as found above, so Q collapses. The three-threshold method first planned does the same. Reading
+each at its own wavelength, predicted from `moves`, avoids that. Eight variants, with and without the disc, were tried on those nine starts, so the two that looked best went to 18 unseen starts, each paired with a plain run from the same start:
+
+| | No disc | No disc, robust | Air disc | Air disc, robust |
+|---|---:|---:|---:|---:|
+| LDOS | 1,005 | 1,035 | 599 | 600 |
+| Lowest LDOS | 989 | 997 | 452 | 564 |
+| Shift per nm | 1.31% | 1.30% | 0.27% | 0.26% |
+| Mode Q, unmoved | 393,000 | 504,000 | 306,000 | 417,000 |
+| Mode Q, 1 nm | 216,000 | 437,000 | 87,000 | 276,000 |
+| Mode Q, 2 nm | 116,000 | 269,000 | 43,000 | 137,000 |
+| Mode Q, 5 nm | 22,000 | 43,000 | 12,000 | 40,000 |
+| LDOS retuned, 5 nm | 928 | 943 | 530 | 566 |
+| LDOS at the original wavelength, 1 nm | 38 | 42 | 525 | 551 |
+| LDOS at the original wavelength, 5 nm | 2 | 2 | 153 | 197 |
+
+Paired, the air disc's Q improves 1.9, 2.9 and 4.4 times at 1, 2 and 5 nm, on 12, 14 and 14 of 18 starts, with unmoved Q about level. Without the disc, Q doubles or so, but it also does
+when unmoved, so that looks more like a steadier optimization than robustness. Only the 14 of 18 are beyond what chance would readily give, at about 3% by a sign test, before allowing for how many things are compared. It doesn't remove the shift, as expected. At a fixed wavelength it
+changes little (at 2 nm, 0.96 times with the disc). So robustness helps Q and worst cases, and doesn't replace tuning. It takes five solves per iteration instead of two, about twice the time on one thread (77 s against 41 s).
 
 ### After milestone 6, not yet ordered
 

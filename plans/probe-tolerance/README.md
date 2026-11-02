@@ -9,3 +9,6 @@ Run these from a folder holding `pkg/` and `des/`, with `pkg/` a WebAssembly bui
 - `pix.mjs` draws each material pixel as its own rectangle, which is the method that works. See the plan for those that didn't.
 - `m1.mjs seed uniform 3` and `m1.mjs seed random 2 sigma draws` measure a design.
 - `m2.mjs` measures the crystal, and `b2.mjs seed` the bend.
+- `sym.mjs` compares free and symmetric disorder, `ch2.mjs` splits a mode's radiation into channels, and `where.mjs` shows where its field sits.
+- `sz.mjs` scales the design region, `tr.mjs` forces a disc around the source, and `m3.mjs` measures named designs.
+- `robust-goal.patch` is the prototype robust goal, against `web/js/design.js`. `rob.mjs` runs and judges it, and `sumr.py` summarizes.

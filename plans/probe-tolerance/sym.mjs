@@ -1,0 +1,9 @@
+import { load, reso, rng, gauss } from './pix.mjs';
+// The same disorder two ways: every exposed side independent, or equal on all eight images of a side.
+const [seed, sub, sigma, draws] = process.argv.slice(2).map(Number); const D = load(seed); const { n, h, m, mat } = D; const c = n / 2;
+const list = []; for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { if (!mat(i, j)) continue; for (const [a, b, dx, dy] of [[i - 1, j, -0.5, 0], [i + 1, j, 0.5, 0], [i, j - 1, 0, -0.5], [i, j + 1, 0, 0.5]]) { if (mat(a, b)) continue; const u = Math.abs(i + 0.5 + dx - c), v = Math.abs(j + 0.5 + dy - c); list.push(`${Math.max(u, v)},${Math.min(u, v)}`); } }
+const orbits = [...new Set(list)]; const index = new Map(orbits.map((k, q) => [k, q]));
+const draw = (off) => { const over = 1e-6 * h; const out = []; let side = 0; for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { if (!mat(i, j)) continue; const e = (a, b) => (mat(a, b) ? over : off(side++)); const [L, R, B, T] = [e(i - 1, j), e(i + 1, j), e(i, j - 1), e(i, j + 1)]; out.push({ type: 'rect', x0: m + i * h - L, x1: m + (i + 1) * h + R, y0: m + j * h - B, y1: m + (j + 1) * h + T, material: { eps: 12, mu: 1 } }); } return out; };
+const b = reso(D, draw(() => 0), sub, 1.0005);
+console.log(JSON.stringify({ seed, sigma, base: b.Q, sides: list.length, orbits: orbits.length }));
+for (let k = 1; k <= draws; k++) { const u = rng(104729 * k + seed + 17 * sigma); const free = list.map(() => (sigma / 1000) * gauss(u)); const orb = orbits.map(() => (sigma / 1000) * gauss(u)); for (const [kind, off] of [['free', (i) => free[i]], ['sym', (i) => orb[index.get(list[i])]]]) { try { const r = reso(D, draw(off), sub, b.w); console.log(JSON.stringify({ seed, sigma, draw: k, kind, Q: r.Q, w: r.w, V: r.V })); } catch (e) { console.log(JSON.stringify({ seed, sigma, draw: k, kind, fail: 1 })); } } }
