@@ -1,0 +1,19 @@
+import { readFileSync } from 'node:fs';
+const P = `${process.cwd()}/pkg`;
+const g = await import(`${P}/eigenmenno_wasm.js`);
+g.initSync({ module: readFileSync(`${P}/eigenmenno_wasm_bg.wasm`) });
+export const one = (r) => { const x = g.solve_2d(JSON.stringify(r)); const channels = {}; x.channel_names().forEach((n, i) => { channels[n] = x.channel(i); }); const meta = JSON.parse(x.meta()); x.free(); return { meta, channels }; };
+export const SIDE = 64 / 24, MARGIN = 0.25, PML = 0.25;
+const mul = (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];
+const div = (a, b) => { const d = b[0] * b[0] + b[1] * b[1]; return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; };
+const K = (w, q) => [(2 * Math.PI) / w, Math.PI / (w * q)];
+// Upsamples n x n binary pixels by f, with `pad` empty fine pixels around.
+export function upsample(rho, n, f, pad) { const N = n * f + 2 * pad; const out = new Float64Array(N * N); for (let j = 0; j < n * f; j++) for (let i = 0; i < n * f; i++) out[i + pad + (j + pad) * N] = rho[Math.floor(i / f) + Math.floor(j / f) * n] > 0.5 ? 1 : 0; return { grid: out, N }; }
+function dilate1(a, N) { const o = a.slice(); for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { if (a[i + j * N]) continue; let on = 0; for (let y = Math.max(0, j - 1); y <= Math.min(N - 1, j + 1); y++) for (let x = Math.max(0, i - 1); x <= Math.min(N - 1, i + 1); x++) on ||= a[x + y * N]; if (on) o[i + j * N] = 1; } return o; }
+function frac(a, N, t) { const o = Float64Array.from(a); if (t <= 0) return o; const at = (x, y) => (x >= 0 && y >= 0 && x < N && y < N ? a[x + y * N] : 0); for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { if (a[i + j * N]) continue; const fx = Math.min(1, t * (at(i - 1, j) + at(i + 1, j))), fy = Math.min(1, t * (at(i, j - 1) + at(i, j + 1))); const diag = at(i - 1, j - 1) + at(i + 1, j - 1) + at(i - 1, j + 1) + at(i + 1, j + 1); o[i + j * N] = fx || fy ? 1 - (1 - fx) * (1 - fy) : Math.min(1, diag * t * t); } return o; }
+// Moves every edge outward by `d` fine pixels, or inward if negative, leaving fractional density in the cell it ends in.
+export function moved(grid, N, d) { const neg = d < 0; let a = neg ? grid.map((v) => 1 - v) : grid.slice(); const m = Math.abs(d); const n = Math.floor(m + 1e-12); for (let i = 0; i < n; i++) a = dilate1(a, N); const o = frac(a, N, m - n < 1e-12 ? 0 : m - n); return neg ? o.map((v) => 1 - v) : o; }
+export function request(rho, N, h, offset, size, wavelength, q, pml) { return { width: size, height: size, cell: h, background: { eps: 1, mu: 1 }, shapes: [], polarization: 'te', walls: 'absorbing', monitors: [], analysis: { type: 'driven', wavelength, source: { type: 'line', x: size / 2, y: size / 2 }, pml, average_q: q }, density: { x0: offset, y0: offset, width: N * h, height: N * h, nx: N, ny: N, eps_low: 1, eps_high: 12, rho: Array.from(rho) } }; }
+export function pole(make, w0, levels = [1e3, 1e4, 1e5, 1e6]) { let w = w0, out; const seq = []; for (const q of levels) { const beside = w * (1 + 1 / (4 * q) + 1e-3 / Math.sqrt(q / 1e3)); const here = one(make(w, q)), there = one(make(beside, q)); const r = here.meta.fields[0].response, rb = there.meta.fields[0].response; const k = K(w, q), kb = K(beside, q); const g0 = div([1, 0], r), gb = div([1, 0], rb); const slope = div([kb[0] - k[0], kb[1] - k[1]], [gb[0] - g0[0], gb[1] - g0[1]]); const shift = mul(g0, slope); const p = [k[0] - shift[0], k[1] - shift[1]]; const factor = mul(slope, div([1, 0], mul(r, r))); out = { p, here, factor, w: (2 * Math.PI) / p[0], Q: p[0] / (2 * Math.abs(p[1])) }; seq.push(out.Q); const next = (2 * Math.PI) / p[0]; if (Math.abs(next - w) < 0.03 * w) w = next; } out.seq = seq; return out; }
+export const moves = (o) => Float64Array.from(o.here.channels.gradient, (re, i) => (o.factor[0] * re - o.factor[1] * o.here.channels.gradient_im[i]) / 2);
+export const ldos = (r) => (2 * r.meta.fields[0].ldos) / r.meta.fields[0].k0;

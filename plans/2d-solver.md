@@ -510,7 +510,7 @@ and no check against fabrication errors. This milestone answers both, in that or
 step 1 decides how much of the rest is worth doing. Nothing goes on the website until its results have
 been seen and agreed.
 
-- [ ] **Measure tolerance, with no solver changes.** Grow and shrink the finished rectangles of nine
+- [x] **Measure tolerance, with no solver changes.** Grow and shrink the finished rectangles of nine
       starts, the crystal and the bend, by 1, 2, 5 and 10 nm at a wavelength of 1 µm, and read Q, LDOS and the
       mode's wavelength. Pixels are 42 nm there, so these moves are sub-pixel and must be drawn: grow by
       enlarging each material rectangle, and shrink by drawing the square in material and enlarging
@@ -538,6 +538,84 @@ robust one or explains why not.
 
 The check against a known answer: first-order perturbation theory, from the pole's slope with each density,
 should predict the resonance shift of a small drawn edge move. Add that as a test.
+
+#### Step 1 results: tolerance, measured 2026-11-02
+
+Everything here is at a wavelength of 1 µm, with `eps` 12 and lossless, in 2D. It's scratch work, and none is
+on the website. The harness isn't in the repo yet.
+
+**How to move an edge by less than a cell.** Cells are 42 nm at the page's resolution, so 1 nm is 1/40 of
+one. What was tried:
+
+| Method | Result |
+|---|---|
+| Fractional density in the edge's cell | Rejected: its shift is off by 15 to 39%, and differs between growing and shrinking |
+| Whole runs of pixels, grown or shrunk | Good for uniform moves, but can't move edges independently |
+| Thin patches on each edge | Silently does nothing: `snap` places each node once, and the first shape takes it |
+| Each pixel its own rectangle, with exposed sides moved and others joined | Used: nodes move onto the true edge, and random offsets work |
+
+The last was checked on the default start. Unmoved, it gives Q 1,518,579 against 1,518,599. From 1/48 to 1/72,
+the wavelength at ±1 nm agrees within 0.03% and Q within 2%. Boundary perturbation theory, from the field alone,
+predicts a shift of 1.35% per nm, and this measures 1.33%. Random offsets, for the same draws on both meshes, mostly
+agree within 10% in Q, and at worst about 30%. Q at ±5 nm isn't converged (376,000 and 634,000 at +5 nm), so
+it's not quoted. At whole cells, moved runs reproduce an exact grid of 1/96 to every printed digit, on one mesh.
+
+**A uniform edge error moves the resonance far outside its bandwidth.**
+
+| Structure | Shift per nm | LDOS at the original wavelength, Q 1,000 |
+|---|---:|---|
+| 9 optimized starts | 1.30 to 1.34% | About 1,000 unmoved, 6 at ±0.5 nm, 1.5 at ±1 nm |
+| Crystal | 0.32% | 289 at its own wavelength, 18 at ±1 nm, 5 at ±2 nm |
+
+The bandwidth is 0.1%. So neither would work at a fixed wavelength without tuning, and the optimized
+designs are about 4 times as sensitive. That confirms the concern below about one wavelength for all versions.
+
+**Random disorder.** Each exposed pixel side moves independently, from a Gaussian, which makes the correlation
+length one pixel, 42 nm. Nine starts, six draws each, on a mesh of 1/48, with medians across starts of each
+start's median, and its range of those medians:
+
+| Sigma | Mode Q | Spread of wavelength | LDOS at own wavelength | At the original wavelength |
+|---:|---:|---:|---:|---:|
+| 0 | 533,000 (9,300 to 5.9 million) | | 1,006 | 1,006 |
+| 0.5 nm | 370,000 (10,700 to 1.4 million) | 0.14% | 1,006 | 171 |
+| 1 nm | 254,000 (8,100 to 816,000) | 0.32% | 1,005 | 30 |
+| 2 nm | 118,000 (12,000 to 259,000) | 0.62% | 992 | 34 |
+| 5 nm | 26,000 (2,800 to 56,000) | 1.06% | 949 (lowest 615) | 3 |
+
+So:
+
+- **Q in the millions doesn't survive.** At 5 nm, the median falls to about 26,000. It's still about 16 times the crystal's 1,552,
+  whose own Q hardly moves. The start with the highest Q loses the most, so ranking starts by unperturbed Q misleads.
+- **LDOS holds, if the wavelength can be retuned.** It depends mainly on the small mode volume, and stays at about 3 times the crystal's 270 at
+  5 nm. Without retuning, it's lost at under 1 nm.
+- **Random disorder costs more Q than the same uniform error.** Up to ±2 nm, a uniform move changes Q by 0.16 to 2.1 times, and
+  some designs improve. A uniform move keeps the eight-fold symmetry, and random ones don't. That suggests the
+  high Q relies on symmetry, but this doesn't test it.
+
+**The bend is far more tolerant.** Three starts, mean T over its band, with arms fixed, and about 1% mesh error:
+
+| Error | T, starting from 98% |
+|---|---:|
+| Random, 1 nm | 97.8 to 98.3% |
+| Random, 5 nm | 94.7 to 98.7% |
+| Random, 10 nm | 84.9 to 96.8% |
+| Uniform, ±5 nm | 96.7 to 97.6% |
+| Uniform, -20 nm and +20 nm | 58 to 79%, and 85 to 91% |
+
+Moving the arms as well gave a kink of about 2% at ±1 nm, likely because the port's 1D mode samples the guide in steps of 5 nm, far
+coarser than the move. So those runs aren't used, and a test that moves a port's guide by a sub-cell amount shouldn't be trusted.
+
+Limits on all of this:
+
+- **It's 2D.** A real slab also radiates out of the plane, and materials absorb. Either could cap Q well below these values.
+- **The disorder model is assumed.** Sigma and correlation length here are chosen, and not from a measured process. The crystal's random
+  case changes each rod's radius, a different model from the designs', so its comparison is rough.
+- **Few samples.** Six draws per start, and three on the finer mesh. Medians are indicative, and worst cases are understated.
+- **Feature size isn't checked.** Designs may hold features of about 42 nm that couldn't be made at all.
+
+**What this changes for the next steps.** Three thresholds, as first planned, test uniform erosion and dilation, which
+is the milder of the two for Q, and a uniform error's main effect, the shift, can only be tuned away. So a robust goal
+should sample random edges too, or aim at what they do to Q, which step 2 needs to explain first.
 
 ### After milestone 6, not yet ordered
 
