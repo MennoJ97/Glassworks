@@ -1,16 +1,16 @@
 //! Driven solves in an open domain: a line source, a plane wave or a port, and what monitors read.
 
-use super::gradient::density_gradient;
+use super::adjoint::density_gradient;
 use super::open::{
     cell_center, cell_load, line_response, open_dofs, open_matrix, open_mesh, open_output, point_load,
 };
 use super::{coefficients, free_positions, steps_in};
 use crate::assemble::DofMap;
 use crate::banded::Factors;
+use crate::output::{FieldMeta, Output};
 use crate::problem::{
     Analysis, Boundary, Layer, MeshSpec, Monitor, Polarization, Request, Request2d, Source2d,
 };
-use crate::solve::{FieldMeta, Output};
 use crate::space::{H1Triangle, Space};
 use crate::sparse::{Ordering, SparseLu};
 use crate::{C64, I, ZERO};
@@ -161,7 +161,7 @@ fn port_mode(req: &Request2d, k0: f64, x: f64, y0: f64, y1: f64) -> Result<Vec<(
         }
     }
     let wavelength = 2.0 * PI / k0;
-    let o = crate::solve::solve(&Request {
+    let o = crate::solve1d::solve(&Request {
         layers,
         polarization: req.polarization,
         left: Boundary::Pec,

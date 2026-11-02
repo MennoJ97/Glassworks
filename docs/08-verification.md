@@ -13,11 +13,11 @@ compares against an independently known answer:
 |---|---|
 | Cavity modes | $k_0 = m\pi/L$ |
 | Layered cavity | The transcendental equation from matching fields at the interface |
-| Bragg stack bands | The analytic Bloch dispersion relation ([Yeh et al. 1977](15-references.md#yeh-1977)) |
+| Bragg stack bands | The analytic Bloch dispersion relation ([Yeh et al. 1977](19-references.md#yeh-1977)) |
 | Degenerate Bloch modes | The double modes of a uniform medium |
-| Slab waveguide, TE and TM | The slab dispersion equations ([Yariv & Yeh 2007](15-references.md#yariv-yeh-2007)) |
-| Single interface at 40° | The Fresnel equations ([Born & Wolf 1999](15-references.md#born-wolf-1999)) |
-| Multilayer spectrum, lossy layers | A separately written transfer-matrix calculation ([Yeh 2005](15-references.md#yeh-2005)) |
+| Slab waveguide, TE and TM | The slab dispersion equations ([Yariv & Yeh 2007](19-references.md#yariv-yeh-2007)) |
+| Single interface at 40° | The Fresnel equations ([Born & Wolf 1999](19-references.md#born-wolf-1999)) |
+| Multilayer spectrum, lossy layers | A separately written transfer-matrix calculation ([Yeh 2005](19-references.md#yeh-2005)) |
 | Current sheet | The free-space solution |
 | $E$ and $H$ fields | $E_y = \sin\pi x$ and $\eta_0 H_z = -i\cos\pi x$ in a cavity |
 
@@ -28,8 +28,8 @@ reference.
 ## Test the convergence rate
 
 Testing one mesh can pass by luck. A much stronger check is that the error shrinks at
-the theoretically predicted **rate** ([Oberkampf & Roy 2010](15-references.md#oberkampf-roy-2010)).
-According to [Strang & Fix 2008](15-references.md#strang-fix-2008), eigenvalue error should scale as
+the theoretically predicted **rate** ([Oberkampf & Roy 2010](19-references.md#oberkampf-roy-2010)).
+According to [Strang & Fix 2008](19-references.md#strang-fix-2008), eigenvalue error should scale as
 
 $$|\lambda_h - \lambda| \propto h^{2p}.$$
 

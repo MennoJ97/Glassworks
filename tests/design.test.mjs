@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { defaultState } from '../web/js/model.js';
-import { Mma, coneFilter, coneFilter2d, findResonance, goalGradient, gradientRequests, meanReflection, optimize, pixelCount, prepareDesign, project, references, totalIterations } from '../web/js/design.js';
+import { findResonance } from '../web/js/cavity-design.js';
+import { goalGradient, gradientRequests, meanReflection, optimize, pixelCount, prepareDesign, references, totalIterations } from '../web/js/design.js';
+import { Mma, coneFilter, coneFilter2d, project } from '../web/js/optimizer.js';
 import { initSync, solve as solve1d, solve_2d } from '../web/pkg/eigenmenno_wasm.js';
 
 initSync({ module: readFileSync(new URL('../web/pkg/eigenmenno_wasm_bg.wasm', import.meta.url)) });

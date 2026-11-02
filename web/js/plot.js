@@ -1,6 +1,5 @@
-// Canvas drawing: the field drawn over its structure, and the line charts.
-// A 2D field view would replace FieldPlot with a WebGL triangle renderer that reads
-// the same channels; nothing outside this file draws anything.
+// Canvas drawing: a 1D field over its layers, a 2D field over its shapes, and the line charts.
+// Nothing outside this file draws anything.
 
 import { grabShape } from './model.js';
 
@@ -329,8 +328,9 @@ export class FieldMap {
   }
 
   // `marks` may hold `bloch`, the phase per period across x and y; `open` for edges that
-  // absorb; `source`, a point; `incident`, a direction of travel in degrees; and `monitor`,
-  // a line that power is measured across; and `density`, a rectangle of pixels with `rho`.
+  // absorb; `source`, a point; `incident`, a direction of travel in degrees; `monitor`, a line
+  // that power is measured across; `lines`, labelled heights; and `density`, a rectangle of
+  // pixels with `rho`.
   setMesh(mesh, shapes, marks) {
     this.mesh = mesh;
     this.shapes = shapes;
@@ -467,7 +467,7 @@ export class FieldMap {
       ctx.stroke();
     }
     ctx.restore();
-    const { bloch, open, source, incident, monitor } = this.marks;
+    const { bloch, open, source, incident, monitor, lines } = this.marks;
     if (bloch) this.drawBloch(ctx, a);
     else if (open) this.drawOpen(ctx, a);
     else ctx.strokeRect(a.left, a.top, a.right - a.left, a.bottom - a.top);
@@ -480,6 +480,17 @@ export class FieldMap {
       ctx.lineTo(sx(monitor.x1), sy(monitor.y1));
       ctx.stroke();
       this.drawLabel(ctx, 'Monitor', sx((monitor.x0 + monitor.x1) / 2), sy((monitor.y0 + monitor.y1) / 2) - 15);
+    }
+    for (const [y, name] of lines ?? []) {
+      ctx.strokeStyle = css('--ink');
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(a.left, sy(y));
+      ctx.lineTo(a.right, sy(y));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      this.drawLabel(ctx, name, (a.left + a.right) / 2, sy(y) - 10);
     }
     if (incident !== undefined) {
       const angle = (incident * Math.PI) / 180;

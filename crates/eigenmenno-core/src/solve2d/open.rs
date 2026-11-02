@@ -1,21 +1,22 @@
 //! An open domain: the structure surrounded by a perfectly matched layer, whose outer edge is a
 //! wall. Everything shared by driven solves and the search for leaky modes.
 
-use super::{grid_size, push_mesh};
+use super::{grid_size, push_mesh, side_layer};
 use crate::assemble::{assemble_split, Csr, DofMap};
 use crate::banded::Factors;
 use crate::mesh::Mesh;
+use crate::output::{FieldMeta, Meta, Output};
 use crate::problem::{Polarization, Request2d};
-use crate::solve::{FieldMeta, Meta, Output};
 use crate::space::{H1Triangle, Space};
 use crate::sparse::SparseLu;
 use crate::{C64, I, ONE, ZERO};
 
-/// A mesh extended by `pml` on every side, whose outer edge is a wall.
+/// A mesh extended by `pml` on every side that has a layer, whose outer edge is a wall.
 pub(super) fn open_mesh(req: &Request2d, pml: f64) -> Result<Mesh, String> {
-    let (width, height) = (req.width + 2.0 * pml, req.height + 2.0 * pml);
+    let side = side_layer(req, pml);
+    let (width, height) = (req.width + 2.0 * side, req.height + 2.0 * pml);
     let (nx, ny) = grid_size(req, width, height)?;
-    let outlines: Vec<_> = req.shapes.iter().map(|s| s.outline.shifted(pml, pml)).collect();
+    let outlines: Vec<_> = req.shapes.iter().map(|s| s.outline.shifted(side, pml)).collect();
     Ok(Mesh::fitted_grid(nx, ny, width, height, &outlines))
 }
 
@@ -37,7 +38,7 @@ pub(super) fn cell_center(mesh: &Mesh, c: usize) -> (f64, f64) {
 pub(super) fn pixel_of(req: &Request2d, mesh: &Mesh, pml: f64, c: usize) -> Option<usize> {
     let d = req.density.as_ref()?;
     let p = cell_center(mesh, c);
-    let (u, v) = ((p.0 - pml - d.x0) / d.width, (p.1 - pml - d.y0) / d.height);
+    let (u, v) = ((p.0 - side_layer(req, pml) - d.x0) / d.width, (p.1 - pml - d.y0) / d.height);
     ((0.0..1.0).contains(&u) && (0.0..1.0).contains(&v))
         .then(|| (v * d.ny as f64) as usize * d.nx + (u * d.nx as f64) as usize)
 }
@@ -57,13 +58,26 @@ pub(super) fn open_matrix(
     pml: f64,
     k0: C64,
 ) -> Csr {
+    stretched_matrix(req, space, dofs, coef, pml, k0, ONE)
+}
+
+/// `open_matrix` with its stretch multiplied by `strength`, which a grating tunes to its orders.
+pub(super) fn stretched_matrix(
+    req: &Request2d,
+    space: &H1Triangle,
+    dofs: &DofMap,
+    coef: &[(C64, C64)],
+    pml: f64,
+    k0: C64,
+    strength: C64,
+) -> Csr {
     let (pb, qb) = coef[0];
     // The background's wavenumber, from eps mu = q / p whichever polarization this is.
     let k = k0 * (qb.re / pb.re).sqrt();
     let sigma_max = -3.0 * (1e-4f64).ln() / (2.0 * pml);
-    let stretch = |d: f64, size: f64| {
-        let depth = (pml - d).max(d - pml - size).max(0.0) / pml;
-        C64::new(1.0, 0.0) + I * (sigma_max * depth * depth) / k
+    let stretch = |d: f64, size: f64, layer: f64| {
+        let depth = (layer - d).max(d - layer - size).max(0.0) / pml;
+        C64::new(1.0, 0.0) + I * strength * (sigma_max * depth * depth) / k
     };
     let t = assemble_split(space, dofs, |c| {
         let (mut p, mut q) = coef[space.mesh.region[c]];
@@ -72,7 +86,7 @@ pub(super) fn open_matrix(
             (p, q) = (ONE, C64::new(d.eps_low + d.rho[pixel] * (d.eps_high - d.eps_low), 0.0));
         }
         let (x, y) = cell_center(space.mesh, c);
-        let (sx, sy) = (stretch(x, req.width), stretch(y, req.height));
+        let (sx, sy) = (stretch(x, req.width, side_layer(req, pml)), stretch(y, req.height, pml));
         (p * sy / sx, p * sx / sy, -k0 * k0 * q * sx * sy)
     });
     Csr::from_triplets(dofs.n_free, t)
@@ -123,8 +137,8 @@ pub(super) fn open_output(
     };
     push_mesh(space, &mut out);
     // Back to the caller's coordinates, so the layer sits outside `[0, width]`.
-    for name in ["x", "y"] {
-        out.channels.iter_mut().find(|c| c.0 == name).unwrap().1.iter_mut().for_each(|v| *v -= pml);
+    for (name, layer) in [("x", side_layer(req, pml)), ("y", pml)] {
+        out.channels.iter_mut().find(|c| c.0 == name).unwrap().1.iter_mut().for_each(|v| *v -= layer);
     }
     let field = if req.polarization == Polarization::Te { "Ez" } else { "Hz" };
     out.channels.push((format!("field0/{field}/re"), u.iter().map(|v| v.re).collect()));

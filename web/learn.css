@@ -41,3 +41,4 @@ body.learn { max-width: 1120px; font-size: 16px; line-height: 1.6; }
   .learn nav { position: static; }
   .learn article h1 { font-size: 28px; }
 }
+.learn-layout nav .part { color: var(--muted); font-size: 0.85em; font-weight: 600; margin-top: 12px; list-style: none; }

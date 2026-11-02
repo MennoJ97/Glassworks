@@ -38,6 +38,19 @@ pub(super) fn density_gradient(
         lu.solve(&mut w);
         dofs.expand(&w)
     };
+    pixel_slopes(req, density, space, pml, k, &w, u)
+}
+
+/// `-2 w^T dA u` for each pixel, whose `dA` is `-k^2 deps M`. `w` and `u` are on all dofs.
+pub(super) fn pixel_slopes(
+    req: &Request2d,
+    density: &Density,
+    space: &H1Triangle,
+    pml: f64,
+    k: C64,
+    w: &[C64],
+    u: &[C64],
+) -> (Vec<f64>, Vec<f64>) {
     let (mut gradient, mut imaginary) = (vec![0.0; density.rho.len()], vec![0.0; density.rho.len()]);
     let (mut sx, mut sy, mut m, mut d) = (vec![0.0; 36], vec![0.0; 36], vec![0.0; 36], vec![0; 6]);
     for c in 0..space.n_cells() {

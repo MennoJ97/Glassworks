@@ -1,9 +1,10 @@
 // Connects the controls, the solver and the plots.
 
-import { GUIDES, MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeState, defaultState, dragShape, encodeState, guideCell, guideGeometry, guideResolved, guideScale, layer, problemOf, totalLength } from './model.js';
+import { GUIDES, MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeState, defaultState, dragShape, encodeState, gratingLines, guideCell, guideGeometry, guideResolved, guideScale, layer, problemOf, totalLength } from './model.js';
 import { EvolutionMap, FieldMap, FieldPlot, LineChart, drawDensity, seriesColors } from './plot.js';
 import { Solver } from './solver.js';
-import { CAVITY_Q, STAGES, bendWarning, designGeometry, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, prepareDesign, stageLength, totalIterations, references, sharpnessAt } from './design.js';
+import { CAVITY_Q } from './cavity-design.js';
+import { STAGES, bendWarning, designGeometry, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, prepareDesign, stageLength, totalIterations, references, sharpnessAt } from './design.js';
 
 const $ = (id) => document.getElementById(id);
 const THZ_MICRONS = 299.792458; // c, in THz times microns.
@@ -16,6 +17,7 @@ const VIEW_HELP = {
   bands: 'The waves that can travel through an endless repeat of this structure, and the gaps where none can.',
   waveguide: 'The modes that travel along the layers at a fixed wavelength, and how fast each one propagates.',
   scatter2d: 'The field around 2D shapes in open space, from a plane wave or a line source. An absorbing layer outside the plot takes what leaves.',
+  grating2d: 'A plane wave falling on one period of a grating, which repeats forever along x, so the left and right edges of the plot are tied. The table shows how much of its power goes into each diffraction order. Width sets the period.',
   guide2d: 'How much light gets around a sharp corner, compared with a straight guide fed by the same source. Light in a photonic crystal guide has nowhere else to go, for wavelengths from 2.26 to 3.2 times its rod spacing, because the crystal has a band gap. An ordinary waveguide radiates at the corner.',
   cavity2d: 'The modes of a 2D structure, uniform along the third direction, inside walls or leaking into open space. Open walls find one mode from a few driven solves, with its Q and how tightly it is confined.',
   bands2d: 'The waves that can travel through an endless lattice of this cell. Floquet boundaries tie each edge to the opposite one, with a phase set by the wavevector k.',
@@ -231,8 +233,8 @@ function renderSettings() {
   if (!planar()) $('field-note').textContent = text.field;
   const show = (id, on) => { $(id).hidden = !on; };
   const designing = problem === 'design';
-  show('wavelength-field', a === 'waveguide' || a === 'spectrum' || a === 'field' || a === 'mirror' || a === 'scatter2d' || a === 'guide2d' || a === 'cavityDesign');
-  show('angle-field', a === 'spectrum' || ((a === 'field' || a === 'scatter2d') && state.source === 'plane_wave') || (designing && !pixelDesign()));
+  show('wavelength-field', a === 'waveguide' || a === 'spectrum' || a === 'field' || a === 'mirror' || a === 'scatter2d' || a === 'guide2d' || a === 'grating2d' || a === 'cavityDesign');
+  show('angle-field', a === 'spectrum' || ((a === 'field' || a === 'scatter2d') && state.source === 'plane_wave') || a === 'grating2d' || (designing && !pixelDesign()));
   show('design-fields', designing && !pixelDesign());
   show('design-band', a === 'antireflection' || bend2d());
   show('design-run', designing);
@@ -271,7 +273,7 @@ function renderSettings() {
   fieldPlot.locked = designing;
   if (designing) renderDesignSettings();
   else fieldPlot.layers = state.layers;
-  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || (flat && a !== 'scatter2d' && a !== 'guide2d' && !pixelDesign() && !(a === 'cavity2d' && state.plane.cavity2d.walls === 'absorbing')));
+  show('modes-field', a === 'cavity' || a === 'bands' || a === 'waveguide' || (flat && a !== 'scatter2d' && a !== 'guide2d' && a !== 'grating2d' && !pixelDesign() && !(a === 'cavity2d' && state.plane.cavity2d.walls === 'absorbing')));
   show('source-field', a === 'field' || a === 'scatter2d');
   show('range-field', a === 'spectrum');
   $('polarization').value = state.polarization;
@@ -853,6 +855,10 @@ function fieldFrom(result, i) {
 // What the field map should mark, for the current view.
 function planeMarks(p) {
   const a = state.analysis;
+  if (a === 'grating2d') {
+    const { source, reflect, transmit } = gratingLines(state);
+    return { open: true, incident: state.angle - 90, lines: [[source, 'Source'], [reflect, 'Reflection'], [transmit, 'Transmission']] };
+  }
   if (a === 'scatter2d') {
     return state.source === 'line' ? { open: true, source: [p.sourceX, p.sourceY] } : { open: true, incident: state.angle };
   }
@@ -870,7 +876,8 @@ function planeMarks(p) {
 }
 
 // In words, what the edges and arrows on the field map mean.
-function planeNote({ bloch, open }) {
+function planeNote({ bloch, open, lines }) {
+  if (lines) return 'Waves leave through the top and bottom, into an absorbing layer outside the plot. The left and right edges repeat each other, with the phase of the incoming wave.';
   if (open) return 'Waves leave through the dotted edges, into an absorbing layer outside the plot.';
   if (!bloch) return 'The solid edges are walls.';
   const [x, y] = bloch.map((v) => Math.round((v * 180) / Math.PI));
@@ -895,7 +902,7 @@ function showResults() {
     const [width, height] = guide ? [guide.size, guide.size] : [p.width, p.height];
     fieldMap.setMesh({ x: channels.x, y: channels.y, triangles: channels.triangles, width, height }, guide ? guide.shapes : p.shapes, marks);
     fieldMap.editable = !guide;
-    const size = a === 'scatter2d' ? 'The total field is shown.' : a === 'cavityDesign' ? 'Shaded pixels are the high-index material.' : a === 'guide2d' || a === 'bend2d' ? `The source sends light both ways, and the half going left leaves through the layer.${a === 'bend2d' ? ' Shaded pixels are the slab\'s material.' : ''}` : 'Its overall size is arbitrary.';
+    const size = a === 'scatter2d' || a === 'grating2d' ? 'The total field is shown.' : a === 'cavityDesign' ? 'Shaded pixels are the high-index material.' : a === 'guide2d' || a === 'bend2d' ? `The source sends light both ways, and the half going left leaves through the layer.${a === 'bend2d' ? ' Shaded pixels are the slab\'s material.' : ''}` : 'Its overall size is arbitrary.';
     const drag = guide ? '' : ` Drag a shape to move it, or its edge to resize it.${marks.source ? ' The source can be dragged too.' : ''}`;
     $('field-note').textContent = `${planeNote(marks)} Colour shows the field at this moment, with red and blue as opposite signs. ${size}${drag}`;
     const name = fieldResult.meta.fields[selectedField]?.components[0];
@@ -951,6 +958,7 @@ function resultsTitle() {
     case 'field': return `Response at ${+state.wavelength.toFixed(3)} µm`;
     case 'waveguide': return `Guided modes at ${+state.wavelength.toFixed(3)} µm`;
     case 'bands': return `Modes at kL/π = ${state.bandPick.k.toFixed(2)}`;
+    case 'grating2d': return `Diffraction at ${+state.wavelength.toFixed(3)} µm`;
     case 'scatter2d':
     case 'guide2d': return `Field at ${+state.wavelength.toFixed(3)} µm`;
     case 'cavity2d': return state.plane.cavity2d.walls === 'absorbing' ? 'Leaky mode' : 'Resonant modes';
@@ -968,6 +976,18 @@ function resultsTitle() {
 
 // A plane wave has amplitude 1, so its largest field is how much the shapes concentrate it.
 // A line source has no such scale, and the field grows without limit right beside it.
+// One row per diffraction order. An order may carry power on only one side.
+function renderGratingTable({ channels }, addRow) {
+  const side = (name) => new Map(Array.from(channels[`${name}_orders`], (m, i) => [m, channels[name][i]]));
+  const [reflected, transmitted] = [side('reflected'), side('transmitted')];
+  const cell = (values, m) => (values.has(m) ? percent(values.get(m)) : '');
+  addRow(['Order', 'Reflected', 'Transmitted'], 'th');
+  [...new Set([...reflected.keys(), ...transmitted.keys()])].sort((a, b) => a - b)
+    .forEach((m) => addRow([m, cell(reflected, m), cell(transmitted, m)]));
+  const total = (values) => [...values.values()].reduce((sum, v) => sum + v, 0);
+  addRow(['Total', percent(total(reflected)), percent(total(transmitted))]);
+}
+
 function renderScatterTable(result, addRow) {
   const p = state.plane.scatter2d;
   if (state.source === 'line') {
@@ -1005,6 +1025,7 @@ function renderTable(result) {
   $('empty').hidden = fields.length > 0;
   if (problemOf(a) === 'design') return renderDesignTable(table, addRow);
   if (a === 'scatter2d') return renderScatterTable(result, addRow);
+  if (a === 'grating2d') return renderGratingTable(result, addRow);
   if (a === 'guide2d') return renderGuideTable(addRow);
   if (fields.length === 0) {
     $('empty').textContent = a === 'waveguide'

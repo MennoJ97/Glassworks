@@ -3,10 +3,10 @@
 use super::{coefficients, free_positions, grid_size, mode_volume, push_mesh};
 use crate::assemble::{assemble, Csr, DofMap};
 use crate::banded::Factors;
-use crate::eigen::eigs_with;
+use crate::eigen::eigs_factored;
 use crate::mesh::Mesh;
+use crate::output::{normalized, FieldMeta, Meta, Output};
 use crate::problem::{Analysis2d, Boundary, Polarization, Request2d};
-use crate::solve::{normalized, FieldMeta, Meta, Output};
 use crate::space::H1Triangle;
 use crate::sparse::{Ordering, SparseLu};
 use crate::{C64, ZERO};
@@ -69,7 +69,7 @@ fn modes(
     let b = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (ZERO, coef[region[c]].1)));
     let shifted = a.sub_scaled(sigma, &b);
     let ordering = Ordering::reused(&shifted, || free_positions(space, dofs));
-    eigs_with(&SparseLu::factor(&shifted, &ordering) as &dyn Factors, &b, sigma, n, tol)
+    eigs_factored(&SparseLu::factor(&shifted, &ordering) as &dyn Factors, &b, sigma, n, tol)
 }
 
 pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
@@ -104,7 +104,7 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
                 });
             }
         }
-        Analysis2d::Driven { .. } | Analysis2d::Resonance { .. } => {
+        Analysis2d::Driven { .. } | Analysis2d::Resonance { .. } | Analysis2d::Grating { .. } => {
             unreachable!("sent elsewhere by solve2d::solve")
         }
         Analysis2d::Bands { n_bands, n_k } => {

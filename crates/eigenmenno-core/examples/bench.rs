@@ -4,7 +4,7 @@ use eigenmenno_core::assemble::{assemble, Csr, DofMap};
 use eigenmenno_core::banded::BandedLu;
 use eigenmenno_core::mesh::Mesh;
 use eigenmenno_core::problem::{Analysis, Boundary, Layer, MeshSpec, Polarization, Request};
-use eigenmenno_core::solve::solve;
+use eigenmenno_core::solve1d::solve;
 use eigenmenno_core::space::{H1Line, Space};
 use eigenmenno_core::C64;
 use faer::prelude::*;

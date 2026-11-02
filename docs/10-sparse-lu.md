@@ -16,7 +16,7 @@ $N^{3/2}$ entries and costs about $N^2$ operations. At 40,000 unknowns it took 9
 ## Nested dissection
 
 The order of elimination decides the fill, so let's choose it from the geometry
-([George 1973](15-references.md#george-1973)).
+([George 1973](19-references.md#george-1973)).
 
 Cut the mesh in half with a line of nodes. Those nodes are a **separator**: nothing on the left
 touches anything on the right except through them. If we number the separator last, then eliminating
@@ -25,7 +25,7 @@ each half, and each quarter, and so on, which makes a tree of ever smaller separ
 
 Now the expensive part is only the separators, and most of them are small. For a 2D mesh, the
 factorization costs about $N^{3/2}$ operations rather than $N^2$, and storage about $N\log N$. No
-ordering of such a mesh can do better than $N^{3/2}$ ([George 1973](15-references.md#george-1973)).
+ordering of such a mesh can do better than $N^{3/2}$ ([George 1973](19-references.md#george-1973)).
 
 [`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) does this with a few decisions that keep it short:
 
@@ -65,33 +65,10 @@ refinement**: compute what the answer gets wrong, solve for that, and add it. Th
 `sparse_lu_recovers_when_a_part_sits_on_its_own_resonance` builds this case on purpose. The error is
 0.008 without refinement and $10^{-12}$ with it.
 
-## An optimization that didn't help
-
-A band diagram's matrix is Hermitian and positive definite after the shift, which allows Cholesky,
-with no pivoting and half the storage. It's the textbook move, so it was tried: it halved factoring
-but saved only 4 to 7% overall. A band diagram spends most of its time on back-substitutions and
-Lanczos, and $L$ has as many entries as $U$. So it was left out. Thinning the separators did far more,
-for every problem. Measure before you add.
-
-Warm-starting Lanczos from the previous wavevector looked just as obvious, and it did nothing: 62 solves per
-wavevector before and after. Lanczos gains digits geometrically, so a good start saves only the first one or
-two of the ten it was asked for. The better question was why ten. A band diagram reads only eigenvalues, whose
-error goes as the square of the residual, so a tolerance of $10^{-5}$ still gives $k_0$ to about $10^{-10}$.
-That takes 47 to 51 solves per wavevector and 15 to 23% off a diagram, for a few lines. Adding the warm start
-on top saved only 2 to 9% more of the solves, so it was left out too.
-
-## When the matrix is symmetric
-
-An absorbing layer's operator is complex symmetric, $A^T = A$, so half of every update to a front repeats the other half. Factoring it as $A = L D L^T$ updates only the lower triangle, which took 54 ms down to 30 ms on a cavity-sized matrix, and a whole cavity design from 16 s to 11 s on the page.
-
-The price is pivoting. Swapping rows alone would break the symmetry, so these factors don't pivot at all, and weak pivots become about three times as common. Solves are then refined against the matrix, as for pivoting inside fronts. Over 8,612 solves scanned through resonances, the worst residual was $1.1 \times 10^{-11}$, against $6.4 \times 10^{-12}$ with pivoting. If a pivot is too small to trust, the whole matrix is factored the pivoted way instead.
-
 ## How big can a mesh be?
 
-The limit in a browser is memory. WebAssembly can address at most 4 GiB per instance. An eigenmode
-solve is the heaviest, because Lanczos keeps its vectors alongside the factors, and it took 3.2 GiB at
-579,121 unknowns. Counting allocations natively for ten modes, the mesh and matrices hold 0.6 GiB, the
-factors 1.2 GiB, and the basis 1.0 GiB: 56 vectors, each stored with $B$ times it. So the solver refuses
-meshes above 400,000 unknowns, which leaves room to spare.
+The limit in a browser is memory, since WebAssembly can address at most 4 GiB per instance. So the solver
+refuses meshes above 400,000 unknowns. Chapter 16 shows where that number comes from, and what else was tried
+to make these solves faster.
 
 Next: [open boundaries and leaky modes](11-open-boundaries.md).

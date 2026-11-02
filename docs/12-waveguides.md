@@ -33,12 +33,12 @@ matches $F/4$, with the LDOS $F$ from chapter 11, within 0.3%.
 
 ### Example: a sharp bend
 
-[Mekis et al. 1996](15-references.md#mekis-1996) showed that a photonic crystal can steer light around a
+[Mekis et al. 1996](19-references.md#mekis-1996) showed that a photonic crystal can steer light around a
 corner of zero radius. Their crystal has rods of index 3.4 and radius $0.18a$ on a square lattice, with a row
 removed to make the guide. No extended mode exists in the band gap for light to radiate into, so what doesn't
 get through must come back.
 
-The page's **2D waveguide bend** view, under **Driven response**, does this. A line source in the guide excites
+The page's **2D waveguide bend** view, under **Driven response**, does this. Outside the band gap a ratio like this stops meaning anything, and chapter 18 shows how the page knows. A line source in the guide excites
 the one guided mode, and transmission is the power through a monitor, divided by the same source's power
 through a straight guide:
 
@@ -65,56 +65,9 @@ That small reflection formed a resonance with the bend, and gave a transmission 
 absorption also helps, because a steep layer reflects more. Close to the guide's cutoff, below about
 $\omega = 0.35$, light travels slowly enough that reflection returns, so these numbers shouldn't be trusted there.
 
-## When a transmission reads 465%
-
-Open that view at a wavelength of 1 µm with the crystal's rods 1 µm apart, far outside the band gap, and an
-early version of the page reported a transmission of 465%. No energy is being created. The number is a ratio of
-two separate solves, and it can't promise to stay below 100%, because its reference can fail.
-
-The two monitors read 0.156 and 0.0336. Dividing by the straight guide assumes that it delivers a steady, known
-power, and here it doesn't. There's a better reference: the power the source itself emits, which the LDOS gives,
-as $F/4$. Against that, energy is conserved in every case:
-
-| Wavelength | Cells per µm | Straight, share of source | Bend, share of source | The ratio |
-|---:|---:|---:|---:|---:|
-| 1 µm | 6 | 3% | 16% | 465% |
-| 1 µm | 9 | 16% | 12% | 91% |
-| 2 µm | fine enough | 5% | 15% | 336% |
-| 2.833 µm | 6 | 50% | 43% | 98% |
-| 2.833 µm | 9 | 50% | 47% | 98% |
-| 3.5 µm | 6 | 5% | 9% | 270% |
-
-Two different things go wrong outside the band. The first is physics: light isn't guided there. It leaks
-through the crystal, and each monitor catches whatever happens to cross its line, so the ratio means nothing.
-Its value at 2 µm goes from 336% to 418% on a finer mesh, while the bend's share of the source's power stays near
-14%. The share is meaningful, and the ratio isn't.
-
-The second is the mesh. At 1 µm, a wavelength inside a rod is 0.29 µm, and the first row's cells are 0.167 µm, so
-under 2 cells per wavelength. Nothing has converged, and the ratio there jumps from 465% to 55% to 91%.
-
-The 50% in the good rows is itself a check. A line source in a guide sends half its power each way, so a straight
-guide that really carries the light delivers about half of what's emitted, and it does: 41% to 50% from
-$\lambda = 2.3a$ to $3.2a$, collapsing just outside, to 16% at $2.26a$ and 1.4% at $3.3a$. That needs no knowledge of the band, and works for any
-structure. So the page tests it, and only shows a ratio when it's believable:
-
-| Situation | The page shows |
-|---|---|
-| Too few cells per wavelength in the densest material, even at the mesh limit | "Not resolved" |
-| The straight guide's output isn't near half of what's emitted | The bend's share of what's emitted |
-| The ratio is well above 100% | "Unreliable" |
-| Otherwise | The ratio |
-
-The mesh also adjusts itself to a short wavelength, as far as the limit on unknowns allows, and never gets
-coarser than was asked for. With up to 2.3 million unknowns, solved outside the browser, the crystal at 1 µm
-converges to about 19% through the straight guide and 11% through the bend. The page's own mesh reads 11.6%.
-
-A band diagram explains why: this crystal's complete gaps are at $a/\lambda$ of 0.304 to 0.446 and 0.741 to 0.766,
-and a wavelength of 1 µm, with $a = 1$ µm, lands in overlapping bands. The second gap does guide light, reaching 36%
-to 48% at 1.31 to 1.35 µm, but the sharp bend passes only about 4 to 9% of it at 1.33 and 1.35 µm.
-
 ## Scale invariance
 
-How do we get a working bend at 1 µm, then? Look at the equation again, away from any source. Multiply every
+This crystal guides light only near a wavelength of 2.8 times its rod spacing. How do we get a working bend at 1 µm, then? Look at the equation again, away from any source. Multiply every
 length by a number $s$, so $\nabla \to \nabla/s$, and every wavelength too, so $k_0 \to k_0/s$:
 
 $$-\frac{1}{s^2}\nabla\cdot(p\nabla u) - \frac{k_0^2}{s^2}\,q\,u = 0.$$
@@ -122,7 +75,7 @@ $$-\frac{1}{s^2}\nabla\cdot(p\nabla u) - \frac{k_0^2}{s^2}\,q\,u = 0.$$
 Both terms pick up the same factor. Maxwell's equations have no length of their own, so a structure scaled along
 with its wavelength behaves exactly as it did. A crystal with rods 0.353 µm apart reads the same 97.8% at 1 µm that
 the original reads at 2.833 µm, and at 0.55 µm and 10 µm too, to all the digits we printed. The mesh scales with it.
-The test `scaling_a_structure_with_its_wavelength_changes_nothing` holds this to $10^{-7}$. Chapter 9 told the story of
+The test `scaling_a_structure_with_its_wavelength_changes_nothing` holds this to $10^{-7}$. Chapter 18 tells the story of
 what it took to get there. Resizing is what the page offers when a wavelength doesn't suit a structure.
 
 This is a real design principle: a design for one wavelength is a design for any, so long as the materials' indices

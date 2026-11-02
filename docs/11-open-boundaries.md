@@ -2,14 +2,14 @@
 
 Chapter 7's open end was exact, because in 1D a wave has only one direction to go. In 2D, waves
 hit the edge of the domain at every angle at once, and no local boundary condition is reflectionless
-for all of them ([Engquist & Majda 1977](15-references.md#engquist-majda-1977); [Johnson 2021](15-references.md#johnson-2021)).
+for all of them ([Engquist & Majda 1977](19-references.md#engquist-majda-1977); [Johnson 2021](19-references.md#johnson-2021)).
 The way out also changes how we can find resonances.
 
 ## Perfectly matched layers
 
 A **perfectly matched layer** (PML) surrounds the domain with an absorbing region
-([Bérenger 1994](15-references.md#berenger-1994)). The neatest way to understand it is as a change of
-coordinates into the complex plane ([Chew & Weedon 1994](15-references.md#chew-weedon-1994)).
+([Bérenger 1994](19-references.md#berenger-1994)). The neatest way to understand it is as a change of
+coordinates into the complex plane ([Chew & Weedon 1994](19-references.md#chew-weedon-1994)).
 
 An outgoing wave $e^{ikx}$ is an analytic function of $x$. So it can be followed along a path that
 leaves the real axis. Replace $x$ by a complex coordinate, with $dx \to s\,dx$ and
@@ -28,7 +28,7 @@ element becomes $s_x s_y\,dA$. In the weak form, that's only a change of the wei
 $$a_x = p\,\frac{s_y}{s_x}, \qquad a_y = p\,\frac{s_x}{s_y}, \qquad b = -k_0^2\,q\,s_x s_y.$$
 
 So a PML looks like a complex, anisotropic *material*
-([Sacks et al. 1995](15-references.md#sacks-1995); [Johnson 2021](15-references.md#johnson-2021)).
+([Sacks et al. 1995](19-references.md#sacks-1995); [Johnson 2021](19-references.md#johnson-2021)).
 The stiffness had to split into separate $x$ and $y$ parts, which is `assemble_split`, and nothing else in
 assembly changes. The matrix isn't Hermitian any more, but it's still complex **symmetric**, since each
 weight only multiplies a symmetric local matrix. Chapter 13 will rely on that.
@@ -83,7 +83,7 @@ up there. For such a function, the value at $k + i\Gamma$ is exactly the Lorentz
 along the real axis, with half-width $\Gamma$.
 
 So one solve at $k_0(1 + i/2Q)$ gives the LDOS averaged over a bandwidth of $1/Q$, however sharp the
-resonances inside it ([Liang & Johnson 2013](15-references.md#liang-johnson-2013)). A real frequency would
+resonances inside it ([Liang & Johnson 2013](19-references.md#liang-johnson-2013)). A real frequency would
 need many solves to find a sharp peak, or miss it completely. On a fixed mesh this is an exact identity,
 which `complex_frequency_is_a_lorentzian_average_of_real_ones` checks.
 
@@ -96,7 +96,7 @@ resolve, so the test combines two widths to get a tail that falls off faster.
 ## Leaky modes, with no eigensolver
 
 The layer makes the eigenproblem non-Hermitian, and its coefficients depend on $k$. A general eigensolver
-such as Krylov-Schur could handle the first ([Stewart 2002](15-references.md#stewart-2002)). Driven solves
+such as Krylov-Schur could handle the first ([Stewart 2002](19-references.md#stewart-2002)). Driven solves
 turn out to be enough, with no new machinery at all.
 
 A leaky mode is a pole of that same response, at a complex $k_p$ below the real axis. Near it,
@@ -136,7 +136,7 @@ stays put:
 
 These use 12 cells per period, and finer meshes move $Q$ by about 4%. $Q$ is checked against the
 half-height of the real-frequency LDOS, not a published value, since we couldn't find one for this
-structure. So adding rods changes $Q/V$ only through $Q$. Chapter 13 asks what a free choice of shape
+structure. So adding rods changes $Q/V$ only through $Q$. Chapter 17 asks what a free choice of shape
 can do in the same footprint.
 
 Next: [waveguides and bends](12-waveguides.md).

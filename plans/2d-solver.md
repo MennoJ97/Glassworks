@@ -111,8 +111,8 @@ high-index material will need refining, which the probe didn't test.
    MPB run has confirmed that, so it isn't used as a reference.
 3. **Band diagram speed: settled for now.** Warm-starting Lanczos was measured and left out. Loosening
    the tolerance took 15 to 23% off instead: see "Faster band diagrams" under "Done after milestone 6".
-4. **Transposed solves.** Bloch-periodic driven problems lose `Aᵀ = A`,
-   so their adjoints need `Aᵀ` solves. Not needed before periodic gratings.
+4. **Transposed solves: done.** Bloch-periodic driven problems lose `Aᵀ = A`, and
+   `sparse/transposed.rs` solves `Aᵀ` with the same factors. See "Periodic gratings" below.
 
 ## Code changes
 
@@ -620,10 +620,9 @@ should sample random edges too, or aim at what they do to Q, which step 2 needs 
 
 None of these is planned in detail.
 
-- **Periodic gratings.** A port plus Bloch ties, which needs open problem 4.
-- **Vector fields.** Full-vector waveguide cross-sections are the first real need for Nédélec elements, and
-  the way to full polarization or 3D. This is the largest of these, and works against keeping the solver lean,
-  so it needs a line estimate first.
+- **Designing gratings on the page.** The solver returns each order's gradient, so this is JavaScript only.
+- **Vector fields.** Full-vector waveguide cross-sections are the first real need for Nédélec elements. See
+  "Vector fields: a line estimate" below, which recommends not starting yet.
 
 ### Done after milestone 6
 
@@ -676,6 +675,56 @@ now about a third of what's left at 40,000 unknowns, and solves and Lanczos's ow
 **Dragging shapes.** On views with shapes the visitor drew: drag inside to move, an edge or corner of a rectangle or a circle's
 rim to resize, and the source too. `grabShape` and `dragShape` are pure functions in `model.js`, tested in `tests/shapes.test.mjs`.
 Mouse drags were checked in a browser. Touch was checked only as far as which touches claim the gesture, not on a phone.
+
+**Periodic gratings.** `solve2d/grating.rs` ties one period along x, with absorbing layers above and below, launches a plane wave
+from a sheet, and reads each diffraction order's share of the power from lines of field values. There's a view on the page under
+**Driven response**, and chapter 15 teaches it. The estimate was about 190 lines, and it took 390 (2,965 to 3,355), so the estimate was
+low by a factor of 2: `grating.rs` 227, the transposed solve 50, and most of the rest generalizing `open.rs` and `validate.rs`.
+
+- **Reference:** `plans/probe-grating/rcwa.py`, an independent Fourier modal method with no mesh or layer, steady to 1e-6 at 320
+  orders. Both polarizations agree within 4e-5 at cells of λ/80, and power balances within 2e-5.
+- **Two absorbing-layer errors found by it, neither visible to mesh refinement.** A grazing order absorbs at a rate of `ky / k`, so
+  the layer's strength is set for the slowest one. An evanescent order just past cutoff isn't absorbed at all and returns from the wall,
+  so the stretch gets a real part, set the same way. A first guess, that the steep layer reflected into the transmission reading, was
+  wrong: measured directly, the up-going part was about 1e-5.
+- **Rayleigh anomalies:** about 1% off exactly on a cutoff, under 0.2% within 0.1% of it, and about 1e-4 at 7% away.
+- **A boundary off the grid is harmless.** Edge nodes can't move, so a layer crossing the periodic edge off a grid row is stepped in the
+  last column. It put under 4e-6 of the power in other orders.
+- **Moharam et al. 1995:** Crossref confirms the journal, volume, issue and first page. Its author order differs from the usual
+  citation's, which the references follow, and it gives no last page.
+
+**The tutorial and code now separate the essentials.** Chapters 1 to 13 read straight through, and 14 to 18 are "Going further", each
+standing alone: gratings are 15, and 16 to 18 hold what used to interrupt chapters 9, 10, 12 and 13. References are 19. So where this plan
+says chapter 13 about a cavity, read 17, and chapter 10 about speed, read 16. Essentials are about 3,000 lines of Rust, with 343 apart from them
+in `solve2d/grating.rs` and `sparse/`. Renames: `solve.rs` to `solve1d.rs` with `output.rs` split out, `gradient.rs` to `adjoint.rs`,
+`resonance.rs` to `leaky.rs`, `eigs_with` to `eigs_factored`, and in JavaScript `optimizer.js` and `cavity-design.js` out of `design.js`.
+Tests split the same way: `analytic.rs` for 1D, `analytic2d.rs` and `gratings.rs`.
+
+### Vector fields: a line estimate
+
+The target is the first real need: full-vector modes of a waveguide's cross-section, at a fixed wavelength, in closed walls.
+This is an estimate from reading the code, with no prototype behind it. Gratings ran at twice their estimate, so the right column allows for that.
+
+| Part | What it needs | First guess | Allowing for overrun |
+|---|---|---:|---:|
+| Nédélec triangles | Basis, curl, local matrices with signs. `local_matrices` assumes a scalar's x and y stiffness, so this needs its own form | 110 | 200 |
+| Signs in assembly | An edge's direction decides a dof's sign. Each caller of `cell_dofs` must honour it, or a new path must be added | 30 | 60 |
+| Mesh edges | Global edge directions, and ties for periodic walls if wanted | 15 | 30 |
+| Mode problem | The tangential and axial blocks, with the Lee transformation so that `B` stays positive semi-definite | 110 | 220 |
+| Eigensolver | `lanczos` assumes `B` is positive definite, and `B` here is singular on the axial block unless transformed. May need care | 20 | 60 |
+| Request, validation, output | A new analysis, and three field components each on two kinds of dof | 50 | 90 |
+| **Solver total** | | **335** | **660** |
+| Tests | A hollow metal guide's exact modes, no spurious modes in a uniform guide, and a dielectric guide against a reference | 150 | 300 |
+| Page | A new view, and drawing a vector field | 100 | 200 |
+
+So **about 350 to 650 lines of Rust**, or 10 to 20% on the solver, all of it in Going further files apart from the signs in assembly. That's
+modes only. Driven vector problems need ports and a tensor absorbing layer as well, for perhaps 200 to 400 more, and 3D is out of reach
+in a browser anyway, as chapter 14 says.
+
+Recommendation: **don't start yet.** It's real new capability, and chapter 14 would teach from working code, but it's the only item here that reaches into the
+essentials, through `Space` and `assemble`, which every reader goes through. Nothing else planned depends on it. If it's wanted,
+start with a throwaway probe of the element alone against a hollow guide, as `plans/probe-sparse/` did for the solver. It's about 150
+lines, and it would replace this table's guesses with a measurement.
 
 ## Own sparse solver
 

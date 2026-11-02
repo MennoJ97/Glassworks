@@ -61,6 +61,13 @@ impl Csr {
         }
     }
 
+    pub fn mul_transposed(&self, x: &[C64], y: &mut [C64]) {
+        y.fill(ZERO);
+        for (i, j, v) in self.triplets() {
+            y[j] += v * x[i];
+        }
+    }
+
     /// `self - sigma * other`.
     pub fn sub_scaled(&self, sigma: f64, other: &Csr) -> Csr {
         let scaled = other.triplets().map(|(i, j, v)| (i, j, v * -sigma));
