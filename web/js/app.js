@@ -652,6 +652,7 @@ async function startDesign() {
   setStatus('Starting.');
   const started = performance.now();
   let solving = 0;
+  let painted = 0;
   const failure = await optimize(state, (requests) => solver.run(requests), ({ rho, reply, iteration, beta, mode, bandwidth }) => {
     if (run !== design.run) return false;
     design.mode = mode ?? null;
@@ -669,7 +670,11 @@ async function startDesign() {
     setStatus(design.finished
       ? `Finished in ${elapsed.toFixed(1)} s, of which the solver took ${(solving / 1000).toFixed(1)} s.`
       : `Iteration ${iteration} of ${total}, sharpness ${beta}${left >= 2 ? `, about ${left} s left` : ''}.`);
-    showDesign(rho, reply);
+    // Painting a field takes time from the solver, and a few times a second looks the same.
+    if (design.finished || performance.now() - painted > 200) {
+      showDesign(rho, reply);
+      painted = performance.now();
+    }
     return true;
   });
   if (run !== design.run) return;

@@ -121,13 +121,13 @@ impl Ordering {
         Self { new, nodes }
     }
 
-    /// The last ordering made if this matrix has its nonzeros, which is cheap to check,
-    /// and otherwise a new one. Each iteration of a design has the same nonzeros.
-    pub fn reused(a: &Csr, pos: &[(f64, f64)]) -> Rc<Self> {
+    /// The last ordering made if this matrix has its nonzeros, which is cheap to check, and
+    /// otherwise a new one. A design's iterations and a band diagram's k-points all reuse it.
+    pub fn reused(a: &Csr, pos: impl FnOnce() -> Vec<(f64, f64)>) -> Rc<Self> {
         LAST.with_borrow_mut(|last| match last {
             Some((ptr, col, ordering)) if *ptr == a.ptr && *col == a.col => ordering.clone(),
             _ => {
-                let ordering = Rc::new(Self::new(a, pos));
+                let ordering = Rc::new(Self::new(a, &pos()));
                 *last = Some((a.ptr.clone(), a.col.clone(), ordering.clone()));
                 ordering
             }

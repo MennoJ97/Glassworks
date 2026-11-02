@@ -84,22 +84,14 @@ fn free_positions(space: &H1Triangle, dofs: &DofMap) -> Vec<(f64, f64)> {
     pos
 }
 
-/// The `n` values of `(k0^2, x)` nearest `sigma`, for one set of constraints. Bloch phases
-/// change only the matrix values, so a band diagram shares one `ordering` across its k-points.
-fn modes(
-    space: &H1Triangle,
-    dofs: &DofMap,
-    coef: &[(C64, C64)],
-    n: usize,
-    sigma: f64,
-    ordering: &mut Option<Ordering>,
-) -> Result<Vec<(f64, Vec<C64>)>, String> {
+/// The `n` values of `(k0^2, x)` nearest `sigma`, for one set of constraints.
+fn modes(space: &H1Triangle, dofs: &DofMap, coef: &[(C64, C64)], n: usize, sigma: f64) -> Result<Vec<(f64, Vec<C64>)>, String> {
     let region = &space.mesh.region;
     let a = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (coef[region[c]].0, ZERO)));
     let b = Csr::from_triplets(dofs.n_free, assemble(space, dofs, |c| (ZERO, coef[region[c]].1)));
     let shifted = a.sub_scaled(sigma, &b);
-    let ordering = ordering.get_or_insert_with(|| Ordering::new(&shifted, &free_positions(space, dofs)));
-    eigs_with(&SparseLu::factor(&shifted, ordering) as &dyn Factors, &b, sigma, n, EIG_TOL)
+    let ordering = Ordering::reused(&shifted, || free_positions(space, dofs));
+    eigs_with(&SparseLu::factor(&shifted, &ordering) as &dyn Factors, &b, sigma, n, EIG_TOL)
 }
 
 /// `V = integral(q |u|^2) / max(q |u|^2)` over the cells `keep` selects, an area here since
@@ -223,7 +215,7 @@ pub fn solve(req: &Request2d) -> Result<Output, String> {
             out.meta.n_dofs = dofs.n_free;
             push_mesh(&space, &mut out);
             let field = if req.polarization == Polarization::Te { "Ez" } else { "Hz" };
-            for (lambda, x) in modes(&space, &dofs, &coef, *n_modes, target_k0.map_or(sigma, |k| k * k), &mut None)? {
+            for (lambda, x) in modes(&space, &dofs, &coef, *n_modes, target_k0.map_or(sigma, |k| k * k))? {
                 let i = out.meta.fields.len();
                 let u = normalized(dofs.expand(&x));
                 out.channels.push((format!("field{i}/{field}/re"), u.iter().map(|v| v.re).collect()));
@@ -243,11 +235,10 @@ pub fn solve(req: &Request2d) -> Result<Output, String> {
             };
             let path: Vec<f64> = (0..points).map(|i| i as f64 / *n_k as f64).collect();
             let mut table = vec![vec![]; *n_bands];
-            let mut ordering = None;
             for &s in &path {
                 let dofs = constraints(req, &space, nx, ny, phases(s));
                 out.meta.n_dofs = dofs.n_free;
-                for (band, (lambda, _)) in table.iter_mut().zip(modes(&space, &dofs, &coef, *n_bands, sigma, &mut ordering)?) {
+                for (band, (lambda, _)) in table.iter_mut().zip(modes(&space, &dofs, &coef, *n_bands, sigma)?) {
                     band.push(lambda.max(0.0).sqrt());
                 }
             }
@@ -318,7 +309,7 @@ fn open_matrix(req: &Request2d, space: &H1Triangle, dofs: &DofMap, coef: &[(C64,
 }
 
 fn locate(space: &H1Triangle, x: f64, y: f64) -> Option<usize> {
-    (0..space.n_cells()).find(|&c| space.barycentric(c, x, y).iter().all(|&l| l >= -1e-9))
+    (0..space.n_cells()).find(|&c| space.contains(c, x, y))
 }
 
 /// `e_0`, which reads the field at a point as `sum(e_0 u)`, and loads it there as a source.
@@ -407,7 +398,7 @@ fn monitor_power(space: &H1Triangle, coef: &[(C64, C64)], u: &[C64], k0: f64, ce
                 let t = (i as f64 + 0.5) / steps as f64;
                 for offset in [-0.75, -0.25, 0.25, 0.75] {
                     let (x, y) = (m.x0 + t * dx + offset * cell * nx + pml, m.y0 + t * dy + offset * cell * ny + pml);
-                    let c = *near.iter().find(|&&c| space.barycentric(c, x, y).iter().all(|&l| l >= -1e-9)).ok_or("a monitor lies outside the mesh")?;
+                    let c = *near.iter().find(|&&c| space.contains(c, x, y)).ok_or("a monitor lies outside the mesh")?;
                     space.cell_dofs(c, &mut d);
                     let (val, (gx, gy)) = (space.basis_at(c, x, y), space.gradients_at(c, x, y));
                     let (mut v, mut dn) = (ZERO, ZERO);
@@ -440,7 +431,7 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_
     let k = C64::new(k0, average_q.map_or(0.0, |q| k0 / (2.0 * q)));
     let dofs = open_dofs(req, &space, pml);
     let a = open_matrix(req, &space, &dofs, &coef, pml, k);
-    let ordering = Ordering::reused(&a, &free_positions(&space, &dofs));
+    let ordering = Ordering::reused(&a, || free_positions(&space, &dofs));
     let lu = SparseLu::factor(&a, &ordering);
     let (pb, qb) = coef[0];
     let (mut ldos, mut measured) = (None, None);
@@ -487,7 +478,7 @@ fn driven(req: &Request2d, wavelength: f64, source: Source2d, pml: f64, average_
             let near: Vec<usize> = (0..space.n_cells()).filter(|&c| (cell_center(&mesh, c).0 - pml - x).abs() < 4.0 * req.cell).collect();
             for pair in profile.windows(2).filter(|w| w[1].0 > w[0].0) {
                 let y = (pair[0].0 + pair[1].0) / 2.0;
-                let c = *near.iter().find(|&&c| space.barycentric(c, x + pml, y + pml).iter().all(|&l| l >= -1e-9)).ok_or("the port lies outside the mesh")?;
+                let c = *near.iter().find(|&&c| space.contains(c, x + pml, y + pml)).ok_or("the port lies outside the mesh")?;
                 let weight = coef[mesh.region[c]].0 * (pair[0].1 + pair[1].1) / 2.0 * (pair[1].0 - pair[0].0);
                 for (r, v) in cell_load(&space, &dofs, c, x + pml, y + pml) {
                     rhs[r] += I * k * weight * v;
@@ -546,9 +537,9 @@ fn resonance(req: &Request2d, target_k0: f64, (x, y): (f64, f64), pml: f64) -> R
     let coef = coefficients(req);
     let dofs = open_dofs(req, &space, pml);
     let load = point_load(&space, &dofs, x + pml, y + pml)?;
-    let ordering = Ordering::new(&open_matrix(req, &space, &dofs, &coef, pml, C64::new(target_k0, 0.0)), &free_positions(&space, &dofs));
     let at = |k: C64| {
         let a = open_matrix(req, &space, &dofs, &coef, pml, k);
+        let ordering = Ordering::reused(&a, || free_positions(&space, &dofs));
         line_response(&SparseLu::factor(&a, &ordering), a.n, &load, k)
     };
     let mut prev = C64::new(target_k0, 0.0);

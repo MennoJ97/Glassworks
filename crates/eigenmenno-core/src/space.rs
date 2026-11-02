@@ -105,6 +105,11 @@ const TRIANGLE_RULE: [([f64; 3], f64); 6] = [
     ([0.091576213509771, 0.091576213509771, 0.816847572980459], 0.109951743655322),
 ];
 
+/// The six second-order basis functions, at barycentric coordinates.
+fn basis_values([l0, l1, l2]: [f64; 3]) -> [f64; 6] {
+    [l0 * (2.0 * l0 - 1.0), l1 * (2.0 * l1 - 1.0), l2 * (2.0 * l2 - 1.0), 4.0 * l0 * l1, 4.0 * l1 * l2, 4.0 * l2 * l0]
+}
+
 /// One derivative of the six second-order basis functions, given that derivative of each
 /// barycentric coordinate.
 fn basis_gradient([l0, l1, l2]: [f64; 3], g: &[f64; 3]) -> [f64; 6] {
@@ -138,8 +143,21 @@ impl<'a> H1Triangle<'a> {
 
     /// The six basis values at a point in a cell.
     pub fn basis_at(&self, cell: usize, x: f64, y: f64) -> [f64; 6] {
-        let [l0, l1, l2] = self.barycentric(cell, x, y);
-        [l0 * (2.0 * l0 - 1.0), l1 * (2.0 * l1 - 1.0), l2 * (2.0 * l2 - 1.0), 4.0 * l0 * l1, 4.0 * l1 * l2, 4.0 * l2 * l0]
+        basis_values(self.barycentric(cell, x, y))
+    }
+
+    /// Whether a point is in a cell, or on its edge.
+    pub fn contains(&self, cell: usize, x: f64, y: f64) -> bool {
+        self.barycentric(cell, x, y).iter().all(|&l| l >= -1e-9)
+    }
+
+    /// A cell's signed doubled area, and the x and y gradients of its barycentric
+    /// coordinates, which are constant on a straight triangle.
+    fn shape(&self, cell: usize) -> (f64, [f64; 3], [f64; 3]) {
+        let v = &self.mesh.cells[3 * cell..3 * cell + 3];
+        let [p0, p1, p2] = [self.mesh.vertex(v[0]), self.mesh.vertex(v[1]), self.mesh.vertex(v[2])];
+        let det = (p1.0 - p0.0) * (p2.1 - p0.1) - (p2.0 - p0.0) * (p1.1 - p0.1);
+        (det, [(p1.1 - p2.1) / det, (p2.1 - p0.1) / det, (p0.1 - p1.1) / det], [(p2.0 - p1.0) / det, (p0.0 - p2.0) / det, (p1.0 - p0.0) / det])
     }
 
     /// Barycentric coordinates of a point, all in `[0, 1]` if it's inside the cell.
@@ -154,11 +172,7 @@ impl<'a> H1Triangle<'a> {
 
     /// The six basis functions' x and y derivatives at a point in a cell.
     pub fn gradients_at(&self, cell: usize, x: f64, y: f64) -> ([f64; 6], [f64; 6]) {
-        let v = &self.mesh.cells[3 * cell..3 * cell + 3];
-        let [p0, p1, p2] = [self.mesh.vertex(v[0]), self.mesh.vertex(v[1]), self.mesh.vertex(v[2])];
-        let det = (p1.0 - p0.0) * (p2.1 - p0.1) - (p2.0 - p0.0) * (p1.1 - p0.1);
-        let gx = [(p1.1 - p2.1) / det, (p2.1 - p0.1) / det, (p0.1 - p1.1) / det];
-        let gy = [(p2.0 - p1.0) / det, (p0.0 - p2.0) / det, (p1.0 - p0.0) / det];
+        let (_, gx, gy) = self.shape(cell);
         let l = self.barycentric(cell, x, y);
         (basis_gradient(l, &gx), basis_gradient(l, &gy))
     }
@@ -190,18 +204,13 @@ impl Space for H1Triangle<'_> {
         }
     }
     fn local_matrices(&self, cell: usize, stiff_x: &mut [f64], stiff_y: &mut [f64], mass: &mut [f64]) {
-        let v = &self.mesh.cells[3 * cell..3 * cell + 3];
-        let [p0, p1, p2] = [self.mesh.vertex(v[0]), self.mesh.vertex(v[1]), self.mesh.vertex(v[2])];
-        let det = (p1.0 - p0.0) * (p2.1 - p0.1) - (p2.0 - p0.0) * (p1.1 - p0.1);
-        // Gradients of the barycentric coordinates are constant on a straight triangle.
-        let gx = [(p1.1 - p2.1) / det, (p2.1 - p0.1) / det, (p0.1 - p1.1) / det];
-        let gy = [(p2.0 - p1.0) / det, (p0.0 - p2.0) / det, (p1.0 - p0.0) / det];
+        let (det, gx, gy) = self.shape(cell);
         let area = det.abs() / 2.0;
         stiff_x.fill(0.0);
         stiff_y.fill(0.0);
         mass.fill(0.0);
         for ([l0, l1, l2], w) in TRIANGLE_RULE {
-            let val = [l0 * (2.0 * l0 - 1.0), l1 * (2.0 * l1 - 1.0), l2 * (2.0 * l2 - 1.0), 4.0 * l0 * l1, 4.0 * l1 * l2, 4.0 * l2 * l0];
+            let val = basis_values([l0, l1, l2]);
             let (dx, dy) = (basis_gradient([l0, l1, l2], &gx), basis_gradient([l0, l1, l2], &gy));
             for i in 0..6 {
                 for j in 0..6 {

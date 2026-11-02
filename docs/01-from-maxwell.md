@@ -9,7 +9,7 @@ field components to one unknown function of one variable.
 We assume every field oscillates at one angular frequency, as $e^{-i\omega t}$.
 This choice of sign matters later: with it, a wave moving toward $+x$ looks like
 $e^{+ikx}$, and a lossy material has a *positive* imaginary permittivity
-([Jackson 1999](10-references.md#jackson-1999)).
+([Jackson 1999](15-references.md#jackson-1999)).
 
 With no sources, the curl equations become
 
@@ -31,7 +31,7 @@ along $y$, so $\partial_y = 0$. Along $z$, the structure is uniform, so the fiel
 can only pick up a phase: it varies as $e^{ik_t z}$ for some constant $k_t$.
 
 Writing out the curl equations with those two facts, the six components split into
-two independent groups ([Yeh 2005](10-references.md#yeh-2005)):
+two independent groups ([Yeh 2005](15-references.md#yeh-2005)):
 
 | Polarization | Components | Solved for |
 |---|---|---|
@@ -53,7 +53,7 @@ These are exactly the lines in `Setup::push_field` in
 ## The one equation
 
 Eliminating the other components gives the same equation for both polarizations
-([Jin 2014](10-references.md#jin-2014)):
+([Jin 2014](15-references.md#jin-2014)):
 
 $$-\frac{d}{dx}\left(p\,\frac{du}{dx}\right) + k_t^2\,p\,u - k_0^2\,q\,u = f$$
 

@@ -22,7 +22,7 @@ These are settled. Reopen one only if a milestone's measurements contradict it.
 | Mesh | Structured grid, with nodes snapped onto shape boundaries, diagonals chosen afterwards, then constrained Delaunay flips | No dependency, periodic edges match, and it can serve 2D topology optimization. Worst angle over 200 random placements: 22° for circles, 16° for rectangles |
 | Mesh fallback | An unstructured mesher, such as [`spade`](https://github.com/Stoeoef/spade) (MIT/Apache) | Only if snapping can't be fixed. It makes periodic edges and own-solver separators harder |
 | Linear solver | Add a small factorization trait. 1D keeps `banded.rs`, 2D uses `sparse.rs` | See the measurements. Banded LU can't scale in 2D |
-| Open boundaries | PML | Exact local conditions don't exist in 2D (chapter 9) |
+| Open boundaries | PML | Exact local conditions don't exist in 2D (chapter 11) |
 | Leaky modes | No non-Hermitian eigensolver. One driven solve at complex frequency for LDOS, and a secant search on `1/u_0` for Q | Avoids Krylov-Schur. Gives LDOS directly, which is what Q/V is a proxy for. It took 6 or 7 solves, and found Q up to 680,000 |
 | Upper size | The page refuses above 400,000 unknowns | Measured below. 638,401 failed with `faer` LU, whose memory use was several times ours |
 | Size | The 300–400 line estimate was low: milestone 1 alone added about 600 lines of Rust, for about 1,700 at that point, about 1,900 after milestone 2, about 2,000 after milestone 3, about 2,150 after milestone 4, about 2,400 with our own sparse solver, about 2,460 after milestone 5, and about 2,530 after speeding up design runs and scaling, about 2,560 after the optimized cavity | State the cost before adding more, and keep the tutorial's line count current |
@@ -119,7 +119,7 @@ high-index material will need refining, which the probe didn't test.
 | Module | Change |
 |---|---|
 | Website, later | Dragging shapes |
-| Tutorial | Add 2D chapters as each milestone lands. Chapter 9 is current |
+| Tutorial | Chapters 9 to 14 cover 2D |
 
 Milestone 1 added `Mesh::fitted_grid`, `H1Triangle`, many-tie `DofMap`, the `Factors` trait
 with `SparseLu`, and `solve2d.rs`. 2D requests are a separate `Request2d`, sent to
@@ -237,7 +237,7 @@ frequency there. Download: 283 KB gzipped.
       in the solver, and keep `A` symmetric for PML problems. Checked against finite differences,
       to 7 digits. It took about 75 lines of Rust.
 - [x] **Example 6: topology-optimized bend.** Compared against the hand-designed bend from
-      example 5, in chapter 9. [Jensen & Sigmund 2004](https://doi.org/10.1063/1.1688450) is the
+      example 5, in chapter 13. [Jensen & Sigmund 2004](https://doi.org/10.1063/1.1688450) is the
       precedent, but this is a slab bend rather than a crystal one, so it isn't a repeat of theirs.
 - [x] Optimize the cavity from example 4 by raising the LDOS bandwidth's Q in stages, as in
       [Liang & Johnson 2013](https://doi.org/10.1364/OE.21.030812). See "A cavity, held on its frequency".
@@ -298,33 +298,56 @@ Following the resonance around helped less than holding it still, which was the 
 - Sharpening still leaves up to about 2%, because a pixel flip is a big step. Resizing the finished
   design takes it out exactly, by scale invariance.
 
-| Without | LDOS at Q 1,000, seed 1 |
-|---|---:|
-| Nothing removed | 1,059 |
-| The step's slope along the frequency | 55 |
-| That, and the correction | 66 |
+The hold's effect, over nine starts on the page's setup. Three starts leave more to chance, so only the
+first two rows settle anything. LDOS at Q 1,000 hides differences, because it saturates near 1,060 once a
+mode's own Q is far above that bandwidth, which is why this also reads it at Q 10,000:
+
+| Version | Starts | LDOS at Q 1,000 | Median at Q 10,000 | Median mode Q | Largest resizing |
+|---|---:|---|---:|---:|---:|
+| With the hold | 9 | 110 to 1,061, median 917 | 8,411 | 56,000 | 1.2% |
+| Without projection or correction | 9 | 114 to 888, median 765 | 3,304 | 5,900 | 4.4% |
+| Without the projection | 3 | 355 to 954 | | | |
+| Without the correction | 3 | 61 to 485 | | | |
+| With no goal, only holding | 9 | 27 to 372, median 64 | | | |
+| With the goal's sign flipped | 9 | 904 to 1,033, median 990 | 9,483 | 416,000 | 3.1% |
+
+An earlier claim here, of 55 against 1,059, came from one start on an older setup, with the projection
+removed. The commit that added this view repeats it, and it overstated the effect.
 
 LDOS at Q 1,000, after the same scan and resizing for each:
 
 | Structure | LDOS | Q | V (wavelengths²) |
 |---|---:|---:|---:|
 | 16 random symmetric patterns | 0 to 29 | | |
-| Crystal of 7 x 7 rods | 301 | 1,683 | 0.093 |
-| 9 optimized starts | 300 to 1,059, median 884 | 471 to 928,000 | 0.008 to 0.014 |
+| Crystal of 7 x 7 rods | 299 | 1,680 | 0.093 |
+| 9 optimized starts | 110 to 1,061, median 917 | 253 to 449,000 | 0.008 to 0.017 |
 
 Eight of nine beat the crystal by at least 1.5 times, and the page's default start is the best. As
-rectangles, the best design's LDOS and Q hold to under 1% from cells of 1/24 to 1/72 of a wavelength.
-On a mesh of 1/48, its Q is 919,000 at layers of 0.5, 1 and 1.5 wavelengths, and on 1/24, 928,000 with
-0.25 to 1.5 wavelengths of air around it. Its LDOS at Q 3,000 is 3,171, against the crystal's 517.
-Stopping Q at 500 while sharpening was the steadiest schedule: raising it to 2,000 reached 269 on one start.
+rectangles, its LDOS and Q hold to under 1% from cells of 1/24 to 1/72 of a wavelength. On a mesh of
+1/48, its Q is 328,000 at layers of 0.5, 1 and 1.5 wavelengths, and on 1/24, 329,000 with 0.25 to 1.5
+wavelengths of air around it. Its LDOS at Q 3,000 is 3,162, against the crystal's 508. Stopping Q at
+500 while sharpening was the steadiest schedule: raising it to 2,000 reached 269 on one start.
 
-Two cautions. Q of nearly a million from a footprint this small needs a cause, which we haven't found,
-and no fabrication tolerance has been checked: a mode this sharp would be very sensitive. And the
-goal's sign matters less than it should. With the goal flipped, LDOS at the target falls to 0 through
-the grey stages, as it should, but then reaches 832 to 1,005 on three starts, because the hold itself
-puts a pole at the source once pixels sharpen. So `tests/design.test.mjs` checks the early stages too.
+Scatter between starts is larger than these choices, so each was compared over nine:
 
-The page took 229 s for its 220 iterations, of which the solver took 166 s, with the pane hidden, on battery.
+| Stages, layer | Solves | Cost of one | LDOS at Q 1,000 | Median |
+|---|---:|---:|---|---:|
+| 11, 0.5 | 471 | 117 ms | 300 to 1,059 | 884 |
+| 8, 0.5 | 351 | 121 ms | 303 to 1,059 | 990 |
+| 8, 0.25 (the page's) | 351 | 87 ms | 110 to 1,061 | 917 |
+
+So the page's choice costs about 45% less for the same median, but has the lowest worst start.
+Fifteen iterations per stage instead of 20 reached only 329 to 844 on three starts.
+
+Three cautions. Q in the hundreds of thousands from a footprint this small needs a cause, which we haven't
+found, and no fabrication tolerance has been checked: a mode this sharp would be very sensitive. Most
+of all, minimizing beats maximizing, as the table shows, and that isn't explained. The flipped goal falls to 0.2 to
+0.4 at Q 100 in the grey stages, against 47 to 55, and still finishes best. It's not the hold alone, since
+no goal at all does far worse. The page keeps the true goal, and `tests/design.test.mjs` checks the early
+stages, where the sign shows. What the flipped goal is really doing is the next thing to understand here.
+
+One thread runs all of this in 28 s in Node, on battery. The page uses two workers, and paints only a few
+times a second. A hidden pane ran the older, longer schedule far slower, at 229 s, so timing it needs a visible page.
 
 ### A finer mesh, and the crystal at 1 µm
 
@@ -579,8 +602,8 @@ tuned this way remain untested, though the physics tests cover `H_z` in ordinary
 
 ## Tutorial changes
 
-Chapter 9, the README and `docs/README.md` were corrected in milestone 1. A proper 2D
-chapter, covering snapping and Bloch ties, is still to write.
+Chapters 9 to 14 now teach 2D: triangles and fitted meshes, sparse LU, open boundaries, waveguides,
+inverse design, and why vector fields are harder. They replaced one chapter that had grown into a list of results.
 
 ## Running the probe
 

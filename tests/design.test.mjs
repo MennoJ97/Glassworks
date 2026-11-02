@@ -179,13 +179,13 @@ test('a cavity beats the crystal in its footprint, on target, and as drawn recta
   });
   assert.equal(failure?.error, undefined);
   assert.equal(last.beta, Infinity);
-  // Holding the resonance on target raises the LDOS by itself once pixels sharpen. So the goal's
-  // own effect shows here, at Q 100, where maximizing reaches 36 to 70, and minimizing 0.
+  // Minimizing finishes as well as maximizing, for a reason we don't know (see plans/2d-solver.md).
+  // So the goal's sign shows only here, at Q 100, where maximizing reaches 47 to 55 and minimizing 0.2 to 0.4.
   assert.ok(early > 20, `early ${early}`);
   last.rho.forEach((v) => assert.ok(v === 0 || v === 1));
   const ldos = meanReflection(last.reply.results);
   const [crystal] = await referenceValues(s);
-  // In plans/2d-solver.md, the crystal reads about 300, and nine starts 300 to 1,059.
+  // In plans/2d-solver.md, the crystal reads about 300, and nine starts 110 to 1,061.
   assert.ok(crystal > 250 && crystal < 350, `crystal ${crystal}`);
   assert.ok(ldos > 1.5 * crystal, `${ldos} against ${crystal}`);
   assert.ok(Math.abs(last.mode.wavelength - 1) < 2e-3, `mode at ${last.mode.wavelength}`);

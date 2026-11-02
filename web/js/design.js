@@ -101,8 +101,8 @@ export async function prepareDesign(s, solve) {
 // `stages` raises the bandwidth's Q to a level a sharpening design can follow, then sharpens.
 export const CAVITY_Q = 1000;
 const CAVITY = {
-  pixels: 64, cellsPerPixel: 1, margin: 0.25, pml: 0.5, eps: 12, radius: 2, iterations: 20,
-  stages: [[10, 1], [20, 2], [50, 4], [100, 8], [200, 16], [300, 32], [500, 64], [500, 128], [500, 256], [500, 512], [500, 1024]],
+  pixels: 64, margin: 0.25, pml: 0.25, eps: 12, radius: 2, iterations: 20,
+  stages: [[10, 1], [20, 2], [50, 4], [100, 8], [200, 16], [300, 32], [500, 64], [500, 128]],
   // Measured at this Q once finished, and in the table.
   Q: CAVITY_Q,
 };
@@ -357,37 +357,9 @@ function randomStart(n, seed) {
 
 // A cone filter averages each pixel with its neighbours, which removes single-pixel
 // noise. `adjoint` carries gradients back through the same weights.
-export function coneFilter(n, radius) {
-  const reach = Math.ceil(radius) - 1;
-  const weight = (i, j) => radius - Math.abs(i - j);
-  const window = (i) => [Math.max(0, i - reach), Math.min(n - 1, i + reach)];
-  const total = Float64Array.from({ length: n }, (_, i) => {
-    const [a, b] = window(i);
-    let sum = 0;
-    for (let j = a; j <= b; j++) sum += weight(i, j);
-    return sum;
-  });
-  return {
-    apply(x) {
-      return Float64Array.from({ length: n }, (_, i) => {
-        const [a, b] = window(i);
-        let sum = 0;
-        for (let j = a; j <= b; j++) sum += weight(i, j) * x[j];
-        return sum / total[i];
-      });
-    },
-    adjoint(g) {
-      const out = new Float64Array(n);
-      for (let i = 0; i < n; i++) {
-        const [a, b] = window(i);
-        for (let j = a; j <= b; j++) out[j] += (weight(i, j) * g[i]) / total[i];
-      }
-      return out;
-    },
-  };
-}
+export const coneFilter = (n, radius) => coneFilter2d(n, 1, radius);
 
-// The same filter over a rectangle of pixels, stored by rows.
+// Over a rectangle of pixels, stored by rows.
 export function coneFilter2d(nx, ny, radius) {
   const reach = Math.ceil(radius) - 1;
   const neighbours = Array.from({ length: nx * ny }, (_, i) => {
