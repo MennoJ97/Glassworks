@@ -388,6 +388,30 @@ rectangles, starts 1, 3, 5 and 16 change by about 1% or less in LDOS and under 2
 within 0.3% for layers of 0.5 to 1.5 wavelengths, and within 0.7% with 0.25 to 1.5 of air. No fabrication tolerance has been checked,
 so these Q values are numerical results, not achievable ones, and they still lack a physical explanation.
 
+### Symmetric factors for open domains
+
+Factorization took 77% of a native cavity run. Other block and leaf sizes were slower, and an explicit
+SIMD kernel gained nothing, so the compiler was already vectorizing well. An absorbing layer's operator
+is complex symmetric, which `factor_symmetric` uses: `L D L^T` with no pivoting, for 72 lines of Rust.
+
+| Run, default start | Pivoted LU | Symmetric | Saved |
+|---|---:|---:|---:|
+| Cavity on the page, visible | 16.0 s | 10.95 s | 32% |
+| Cavity, one thread, WebAssembly | 28.35 s | 18.92 s | 33% |
+| Bend, one thread, WebAssembly | 18.4 s | 13.2 s | 28% |
+
+Across 8,612 line-source solves at real `k`, scanned through resonances, on coarse uniform meshes where a
+diagonal can land near zero, and with permittivities up to 1,000, the worst residual was 1.1e-11, against
+6.4e-12 pivoted, and solutions differed by at most 1.2e-11. Those ran before the fallback was added.
+Without pivoting, weak pivots are about 3 times as common overall, so more solves are refined. A pivot under
+1e-8 of its column, or 1e-14 of the matrix, now falls back to `factor`. Ports and plane waves are covered
+only by the test suite, not by this scan.
+
+Of 18 starts, 15 give the same design to the digits printed. Three change through round-off, because the
+optimizer amplifies differences near 1e-12: 5 from 814 to 886 at Q 1,000, with Q 13,484 to 9,120, 2 from
+1,011 to 996, and 12 from 1,017 to 1,011. The medians hold at 1,014 and 374,000, but one start now
+finishes below Q 10,000. The table above is from before this change.
+
 One thread runs all of this in 28 s in Node, on battery. The page uses two workers, and paints only a few
 times a second. A hidden pane ran the older, longer schedule far slower, at 229 s, so timing it needs a visible page.
 

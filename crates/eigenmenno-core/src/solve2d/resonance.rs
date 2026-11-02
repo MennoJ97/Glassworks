@@ -23,7 +23,7 @@ pub(super) fn solve(req: &Request2d, target_k0: f64, (x, y): (f64, f64), pml: f6
     let at = |k: C64| {
         let a = open_matrix(req, &space, &dofs, &coef, pml, k);
         let ordering = Ordering::reused(&a, || free_positions(&space, &dofs));
-        line_response(&SparseLu::factor(&a, &ordering), a.n, &load, k)
+        line_response(&SparseLu::factor_symmetric(&a, &ordering), a.n, &load, k)
     };
     let mut prev = C64::new(target_k0, 0.0);
     let mut k = prev * C64::new(1.0, -2e-3);

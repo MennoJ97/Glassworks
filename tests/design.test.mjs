@@ -185,7 +185,7 @@ test('a cavity beats the crystal in its footprint, on target, and as drawn recta
   last.rho.forEach((v) => assert.ok(v === 0 || v === 1));
   const ldos = meanReflection(last.reply.results);
   const [crystal] = await referenceValues(s);
-  // In plans/2d-solver.md, the crystal reads about 300, and 18 starts 814 to 1,075.
+  // In plans/2d-solver.md, the crystal reads about 300, and 18 starts 886 to 1,075.
   assert.ok(crystal > 250 && crystal < 350, `crystal ${crystal}`);
   assert.ok(ldos > 1.5 * crystal, `${ldos} against ${crystal}`);
   assert.ok(Math.abs(last.mode.wavelength - 1) < 2e-3, `mode at ${last.mode.wavelength}`);

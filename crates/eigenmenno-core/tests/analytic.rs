@@ -1,11 +1,14 @@
 //! Every test compares against an exact result, not against stored numbers.
 
+use eigenmenno_core::assemble::Csr;
+use eigenmenno_core::banded::Factors;
 use eigenmenno_core::mesh::{Mesh, Outline};
 use eigenmenno_core::problem::{
     Analysis, Analysis2d, Boundary, Density, Layer, Material, MeshSpec, Monitor, Polarization, Request,
     Request2d, Shape, Source, Source2d,
 };
 use eigenmenno_core::solve::{solve, Output};
+use eigenmenno_core::sparse::{Ordering, SparseLu};
 use eigenmenno_core::C64;
 use std::f64::consts::PI;
 
@@ -1514,4 +1517,52 @@ fn power_is_conserved_around_an_optimized_bend() {
     let largest = m.iter().fold(0f64, |x, v| x.max(v.abs()));
     eprintln!("around the bend: {m:?}, net {net:.2e}");
     assert!(net.abs() < 2e-3 * largest, "net {net} of {largest}");
+}
+
+/// A complex symmetric grid: five-point coupling, with diagonals set by `diagonal`.
+fn symmetric_grid(n: usize, diagonal: impl Fn(usize) -> C64) -> (Csr, Vec<(f64, f64)>) {
+    let mut t = vec![];
+    let coupling = C64::new(-1.0, 0.05);
+    for i in 0..n * n {
+        t.push((i, i, diagonal(i)));
+        if i % n + 1 < n {
+            t.extend([(i, i + 1, coupling), (i + 1, i, coupling)]);
+        }
+        if i + n < n * n {
+            t.extend([(i, i + n, coupling), (i + n, i, coupling)]);
+        }
+    }
+    let pos = (0..n * n).map(|i| ((i % n) as f64, (i / n) as f64)).collect();
+    (Csr::from_triplets(n * n, t), pos)
+}
+
+fn relative_residual(a: &Csr, lu: &SparseLu, b: &[C64]) -> f64 {
+    let (mut x, mut r) = (b.to_vec(), vec![C64::new(0.0, 0.0); a.n]);
+    lu.solve(&mut x);
+    a.mul(&x, &mut r);
+    let norm = |v: &[C64]| v.iter().map(|z| z.norm_sqr()).sum::<f64>().sqrt();
+    let difference: Vec<C64> = r.iter().zip(b).map(|(p, q)| p - q).collect();
+    norm(&difference) / norm(b)
+}
+
+#[test]
+fn symmetric_factors_solve_as_accurately_as_pivoted_ones() {
+    // These diagonals pass through zero and change sign, as a Helmholtz operator's do.
+    let (a, pos) = symmetric_grid(40, |i| C64::new(((i * 7 % 13) as f64 - 6.0) * 0.7, 0.01));
+    let ordering = Ordering::new(&a, &pos);
+    let b: Vec<C64> = (0..a.n).map(|i| C64::new((i % 5) as f64 - 2.0, (i % 3) as f64)).collect();
+    assert!(relative_residual(&a, &SparseLu::factor_symmetric(&a, &ordering), &b) < 1e-10);
+    assert!(relative_residual(&a, &SparseLu::factor(&a, &ordering), &b) < 1e-10);
+}
+
+#[test]
+fn symmetric_factors_fall_back_when_a_pivot_is_unusable() {
+    // Half the diagonals are zero, so eliminating without pivoting can't go far.
+    let (a, pos) = symmetric_grid(12, |i| C64::new(if i % 2 == 0 { 0.0 } else { 3.1 }, 0.0));
+    let ordering = Ordering::new(&a, &pos);
+    let b: Vec<C64> = (0..a.n).map(|i| C64::new(1.0 + (i % 4) as f64, 0.5)).collect();
+    let (ours, pivoted) = (&SparseLu::factor_symmetric(&a, &ordering), &SparseLu::factor(&a, &ordering));
+    let (ours, pivoted) = (relative_residual(&a, ours, &b), relative_residual(&a, pivoted, &b));
+    // A hard matrix for pivoting too, which stays inside each front: falling back gives the same.
+    assert!(ours == pivoted && ours < 1e-7, "{ours} against {pivoted}");
 }

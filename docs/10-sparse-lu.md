@@ -73,6 +73,12 @@ but saved only 4 to 7% overall. A band diagram spends most of its time on back-s
 Lanczos, and $L$ has as many entries as $U$. So it was left out. Thinning the separators did far more,
 for every problem. Measure before you add.
 
+## When the matrix is symmetric
+
+An absorbing layer's operator is complex symmetric, $A^T = A$, so half of every update to a front repeats the other half. Factoring it as $A = L D L^T$ updates only the lower triangle, which took 54 ms down to 30 ms on a cavity-sized matrix, and a whole cavity design from 16 s to 11 s on the page.
+
+The price is pivoting. Swapping rows alone would break the symmetry, so these factors don't pivot at all, and weak pivots become about three times as common. Solves are then refined against the matrix, as for pivoting inside fronts. Over 8,612 solves scanned through resonances, the worst residual was $1.1 \times 10^{-11}$, against $6.4 \times 10^{-12}$ with pivoting. If a pivot is too small to trust, the whole matrix is factored the pivoted way instead.
+
 ## How big can a mesh be?
 
 The limit in a browser is memory. WebAssembly can address at most 4 GiB per instance. An eigenmode

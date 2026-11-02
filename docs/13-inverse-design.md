@@ -174,7 +174,7 @@ We compare everything at $Q = 1000$, relative to vacuum, and each at its own res
 |---|---:|---:|---:|
 | 16 random symmetric patterns | 0 to 29 | | |
 | Crystal of 7 × 7 rods | 299 | 1,680 | 0.093 |
-| 18 optimized starts | 814 to 1,075, median 1,014 | 13,484 to 5,859,698 | 0.008 to 0.010 |
+| 18 optimized starts | 886 to 1,075, median 1,014 | 9,120 to 5,859,698 | 0.008 to 0.010 |
 
 All 18 beat the crystal by at least 2.7 times. The crystal's $Q$ here is a little different from chapter 11's, because of its mesh and surroundings.
 At $Q = 3000$, the page's default start reaches an LDOS of 3,193, and the crystal 508. On the earlier setup, raising $Q$ only as far as 500 while sharpening was the steadiest schedule: taking it
@@ -193,7 +193,7 @@ $$F \propto \frac{\Gamma + \gamma}{D^2 + (\Gamma + \gamma)^2}.$$
 
 Its slope along $\gamma$ changes sign at $|D| = \Gamma + \gamma$. Closer than that, raising $F$ raises $Q$. Further out, on the wing of the peak, raising $F$ lowers $Q$. Holding the frequency removes nearly all of the gradient, and the small remainder sets the step, so this matters. In 18 runs reading $F$ at the target, the remainder pointed towards more decay on 0.4% of iterations below half a linewidth, and 97% from one to three linewidths. Runs that spent more time past one linewidth also tended to finish weaker.
 
-So we read $F$ at the mode's own wavelength, which stays close to the peak. Over those 18 starts, the median mode $Q$ rose from 113,000 to 374,000, and the worst LDOS at $Q = 1000$ from 110 to 814. This isn't the whole story: other runs lost their $Q$ while sharpening, even when close to the peak.
+So we read $F$ at the mode's own wavelength, which stays close to the peak. Over those 18 starts, the median mode $Q$ rose from 113,000 to 374,000, and the worst LDOS at $Q = 1000$ from 110 to 886. These figures include a later change to the factorization, which moved three starts through round-off alone. This isn't the whole story: other runs lost their $Q$ while sharpening, even when close to the peak.
 
 ### What we don't know
 

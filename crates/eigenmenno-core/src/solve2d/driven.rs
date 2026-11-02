@@ -34,7 +34,7 @@ pub(super) fn solve(
     let dofs = open_dofs(req, &space, pml);
     let a = open_matrix(req, &space, &dofs, &coef, pml, k);
     let ordering = Ordering::reused(&a, || free_positions(&space, &dofs));
-    let lu = SparseLu::factor(&a, &ordering);
+    let lu = SparseLu::factor_symmetric(&a, &ordering);
     let (mut ldos, mut measured) = (None, None);
     let u = match source {
         Source2d::Line { x, y } => {
