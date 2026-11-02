@@ -1239,3 +1239,88 @@ fn moving_an_edge_shifts_a_resonance_as_perturbation_theory_says() {
     );
     assert!((measured / predicted - 1.0).abs() < 0.01, "predicted {predicted}, measured {measured}");
 }
+
+fn hz_square_rod(d: f64, cell: f64, target_k0: f64) -> Request2d {
+    let outline = Outline::Rect { x0: 0.25 - d, y0: 0.25 - d, x1: 0.75 + d, y1: 0.75 + d };
+    Request2d {
+        width: 1.0,
+        height: 1.0,
+        cell,
+        background: Material { eps: 1.0, mu: 1.0 },
+        shapes: vec![Shape { outline, material: Material { eps: 12.0, mu: 1.0 } }],
+        polarization: Polarization::Tm,
+        walls: Boundary::Pec,
+        analysis: Analysis2d::Cavity { n_modes: 1, bloch: [0.0, 0.0], target_k0: Some(target_k0) },
+        monitors: vec![],
+        density: None,
+    }
+}
+
+#[test]
+fn moving_an_edge_in_hz_shifts_a_mode_as_perturbation_theory_says() {
+    // dk / k = -(1 / 2) sum(integral(deps E_t^2 - d(1 / eps) D_n^2) along the edges) / integral(eps E^2)
+    // per unit of outward move. With E = curl(H) / (k eps), E_t = dH/dn / k in the air beside an edge,
+    // D_n = dH/dt / k along it, and integral(eps E^2) = integral(H^2) in a closed box.
+    let cell = 1.0 / 96.0;
+    let solve_at =
+        |d: f64, target: f64| eigenmenno_core::solve2d::solve(&hz_square_rod(d, cell, target)).unwrap();
+    let o = solve_at(0.0, 4.0);
+    let k = o.meta.fields[0].k0;
+    let channel = |name: &str| &o.channels.iter().find(|c| c.0 == name).unwrap().1;
+    let (x, y, u) = (channel("x"), channel("y"), channel("field0/Hz/re"));
+    let mut mass = 0.0;
+    for t in channel("triangles").chunks_exact(3) {
+        let [a, b, c] = [t[0] as usize, t[1] as usize, t[2] as usize];
+        let area = ((x[b] - x[a]) * (y[c] - y[a]) - (x[c] - x[a]) * (y[b] - y[a])).abs() / 2.0;
+        mass += (u[a] * u[a] + u[b] * u[b] + u[c] * u[c]) * (area / 3.0);
+    }
+    // Nodes lie every half cell, so Simpson's rule fits each cell of each edge.
+    let step = cell / 2.0;
+    let key = |px: f64, py: f64| ((px / step).round() as i64, (py / step).round() as i64);
+    let nodes: std::collections::HashMap<_, _> = (0..x.len()).map(|i| (key(x[i], y[i]), i)).collect();
+    let at = |px: f64, py: f64| u[nodes[&key(px, py)]];
+    // One-sided from (px, py) along (dx, dy).
+    let slope = |px: f64, py: f64, dx: f64, dy: f64| {
+        (-3.0 * at(px, py) + 4.0 * at(px + dx * step, py + dy * step)
+            - at(px + 2.0 * dx * step, py + 2.0 * dy * step))
+            / (2.0 * step)
+    };
+    // Each edge's start, its direction, and outward.
+    let edges = [
+        (0.25, 0.25, 0.0, 1.0, -1.0, 0.0),
+        (0.75, 0.25, 0.0, 1.0, 1.0, 0.0),
+        (0.25, 0.25, 1.0, 0.0, 0.0, -1.0),
+        (0.25, 0.75, 1.0, 0.0, 0.0, 1.0),
+    ];
+    let (mut tangential, mut normal) = (0.0, 0.0);
+    let steps = (0.5 / step).round() as usize;
+    for (x0, y0, dx, dy, ox, oy) in edges {
+        for q in 0..=steps {
+            let weight = if q == 0 || q == steps {
+                1.0
+            } else if q % 2 == 1 {
+                4.0
+            } else {
+                2.0
+            };
+            let (px, py) = (x0 + dx * q as f64 * step, y0 + dy * q as f64 * step);
+            let along = if q == steps { -slope(px, py, -dx, -dy) } else { slope(px, py, dx, dy) };
+            tangential += slope(px, py, ox, oy).powi(2) * weight * step / 3.0;
+            normal += along * along * weight * step / 3.0;
+        }
+    }
+    let shift = |top: f64| -(k / 2.0) * top / (k * k * mass);
+    let predicted = shift(11.0 * tangential + (11.0 / 12.0) * normal);
+    let d = 0.001;
+    let (up, down) = (solve_at(d, k), solve_at(-d, k));
+    let measured = (up.meta.fields[0].k0 - down.meta.fields[0].k0) / (2.0 * d);
+    println!(
+        "dk/dd predicted {predicted}, measured {measured}, without D_n {}, without E_t {}",
+        shift(11.0 * tangential),
+        shift((11.0 / 12.0) * normal)
+    );
+    assert!((measured / predicted - 1.0).abs() < 0.002, "predicted {predicted}, measured {measured}");
+    // Each term has to matter, or this tests only one of them.
+    assert!(shift((11.0 / 12.0) * normal).abs() > 0.05 * measured.abs());
+    assert!(shift(11.0 * tangential).abs() > 0.05 * measured.abs());
+}

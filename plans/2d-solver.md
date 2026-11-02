@@ -891,6 +891,40 @@ is requests and checks. The mirror and coating needed nothing, since their 1D gr
 - **Chaotic:** start 1 reads 681 in Node and 507 in the browser, and each repeats exactly. It isn't the workers, since three instances in Node still read 681. A single instance in the browser reads 507, and the engines' `Math.cosh(1.7)**2` differs in its last digit. `E_z`'s start 1 reads the same in both, so `H_z`'s path is more sensitive.
 - **Not done:** effective indices, robustness in `H_z`, a dipole along the other direction, and designing gratings on the page. The chapter on tolerance is `E_z` only.
 
+#### Tolerance in `H_z`, measured 2026-11-02
+
+18 starts from the page's optimizer in Node, against the air-hole crystal, on half cells (`h/2`). Scripts, designs and logs are in `plans/probe-tolerance/hz/`: `tol.mjs` and `summary.py` for uniform moves and independent disorder, `corr.mjs` and `summary_corr.py` for correlated disorder. LDOS is relative to vacuum at Q 1,000, for a dipole along x, read at its own best wavelength unless stated.
+
+| Disorder | Designs: median, best | Starts beating the crystal | Crystal |
+|---|---:|---:|---:|
+| None | 430, 661 | 10 of 18 | 382 |
+| 1 nm, independent per pixel side | 377, 574 | 10 of 18 | 329 |
+| 2 nm, independent | 368, 578 | 10 of 18 | 316 |
+| 2 nm, correlated over 100 nm | 331, 512 | 10 of 18 | 316 |
+| 5 nm, independent | 272, 476 | 8 of 18 | 286 |
+| 5 nm, correlated over 100 nm | 216, 364 | 2 of 18 | 286 |
+
+Medians are each start's own median over its draws: 6 for independent, 4 for correlated. The crystal's disorder is each hole's radius, drawn independently, over 6 draws of one structure, so it's the correlated rows that compare fairly. Its mean wavelength moves about as far, 0.41% against 0.64% at 2 nm, and 1.40% against 1.54% at 5 nm.
+
+- **So the small lead survives a few nanometres and goes by 5 nm.** The best starts keep a real lead up to 2 nm, at about 1.6 times the crystal.
+- **Shift:** a median of 0.91% per nm, 0.73 to 0.96 on 17 starts, against the crystal's 0.59. For comparison, `E_z` read 1.3 for its rods and 0.26 for an air disc. So in `H_z`, a source in air doesn't buy what it did in `E_z`. 17 of 18 starts already hold the source in air.
+- **Start 13 is the exception,** with its source in material and a shift of 0.45, but an LDOS of only 109. That's one design, so it only suggests a trade-off.
+- **On target:** a uniform 1 nm leaves about 1% of the LDOS at the old wavelength, 3 to 4 for designs, and about 3 for the crystal. Both need retuning, or nanometre control across a whole chip.
+- **Q:** the median design has a Q of 1,867, and 8 of 18 are under 1,000. Radiation limits these, not disorder: independent disorder leaves a median of 0.98, 0.96 and 0.93 of the Q at 1, 2 and 5 nm. Correlated disorder at 5 nm takes it to 0.54. The crystal stays at about 14,000 to 19,000 throughout.
+- **Mesh:** half cells under-read a design's shift. It rose by another 4 to 6% at `h/3` on three starts, and was still rising. The crystal's holds, 0.570, 0.585, 0.587. So the gap in shift is, if anything, larger than the table says.
+- **The split pair isn't the main loss.** Peaks along x and y sit a median 0.12 to 0.56% apart under independent disorder, more than the 0.1% bandwidth. But taking the better direction keeps only 3 to 9 percentage points more of the LDOS, so the split seems to be a minor part of the loss. Peaks along x and y needn't be the two members of the pair, so this bounds the split only loosely.
+
+Not measured: a robust goal in `H_z`, disorder in the hole positions, other correlation lengths, and more than one crystal. A few draws at 5 nm read an LDOS of about 2, so a mode may have left the sweep's window, which would lower those draws but not their medians much.
+
+Findings on the way:
+
+- **Measure on half cells or finer.** Pixel rectangles and the page's mesh agree within 0.3% on LDOS from half a cell down, but at the page's own cell the pixel drawing misreads a dipole along x, 559 against 681 on start 1. Along 45 degrees they agree.
+- **The solver's pole search fails on finer `H_z` meshes,** on all four starts tried, at half a cell and finer. `pole3` in `hz.mjs` uses the page's three-solve fit instead. The cause is assumed to be the dipole's near-field background, and wasn't tested.
+- **Mesh convergence, four starts:** at cells of `h/4`, the wavelength moves about 0.4 to 0.8%. LDOS holds within about 6% on three, and start 3 falls from 238 to 223 at 45 degrees, or 253 to 223 along x. Q falls by up to 35%, and on start 3 by 46%.
+- **The centre's mode is one of a pair.** A dipole at the centre of an eight-fold design excites a doubly degenerate mode. The split is about 1e-12% on the page's mesh. Random disorder should split it, unlike `E_z`'s single mode.
+- **Shift, three starts:** 0.79 to 0.95% per nm on start 1 as the cell halves and thirds, 0.84 to 1.00 on start 4, and 0.70 to 0.81 on start 5, with the source in air. It rises with refinement.
+- **Perturbation theory:** `moving_an_edge_in_hz_shifts_a_mode_as_perturbation_theory_says` passes, with a ratio of 1.00013 on a square rod with corners, in closed walls.
+
 ### Vector fields: a line estimate
 
 The target is the first real need: full-vector modes of a waveguide's cross-section, at a fixed wavelength, in closed walls.

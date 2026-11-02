@@ -70,7 +70,7 @@ So the median beats the crystal by only 1.2 times, and four of the nine fall sho
 ## What this doesn't settle
 
 - **The index is still bulk.** These designs use 3.5 and $\varepsilon = 12$. A real 2D model of a silicon slab uses its effective index, about 2.86 for 220 nm ([Nikkhah et al. 2024](20-references.md#nikkhah-2024)), and the third dimension leaks light that none of this sees.
-- **Tolerance is unmeasured here.** The results in chapter 17 are for $E_z$, whose field is continuous across an edge. $H_z$'s isn't, so they may not carry over.
+- **Tolerance favours the crystal more than the table above suggests.** Over 18 starts, with edges disturbed randomly and correlated over 100 nm, the median LDOS falls from 430 to 331 at 2 nm and 216 at 5 nm, against the crystal's 382, 316 and 286. At 5 nm only 2 of the 18 still beat it. The designs also shift further, 0.91% per nanometre against the crystal's 0.59. A source in air doesn't bring the gain here that it did in $E_z$, where it gave 0.26%, and 17 of these 18 already have one. The crystal is one structure with six draws, and its disorder is in each hole's radius, so this comparison is rough.
 - **The dipole's direction.** A design here is optimized and read along one in-plane direction. Its eight-fold symmetry should treat the other direction alike, but we haven't checked that.
 - **Few starts,** with spreads wide enough that small differences here shouldn't be trusted. A run is also chaotic: the same start reads 681 in Node and 507 in a browser, with mode $Q$ of 18,345 and 3,420, because their `Math.cosh` differs in the last digit. Each repeats exactly on its own engine. The numbers above are from Node, so the page's own may differ within that spread.
 

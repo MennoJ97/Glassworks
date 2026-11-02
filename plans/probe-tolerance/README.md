@@ -12,3 +12,5 @@ Run these from a folder holding `pkg/` and `des/`, with `pkg/` a WebAssembly bui
 - `sym.mjs` compares free and symmetric disorder, `ch2.mjs` splits a mode's radiation into channels, and `where.mjs` shows where its field sits.
 - `sz.mjs` scales the design region, `tr.mjs` forces a disc around the source, and `m3.mjs` measures named designs.
 - `robust-goal.patch` is the prototype robust goal, against `web/js/design.js`. `rob.mjs` runs and judges it, and `sumr.py` summarizes.
+
+`hz/` measures `H_z` designs against the air-hole crystal, for "Tolerance in `H_z`" in the plan. Run its scripts from a folder holding them with `lib.mjs`, `pix.mjs`, `des/`, `pkg/` and `src/`, a checkout of the repository. `genhz.mjs seed` optimizes, `tol.mjs seed draws` and `corr.mjs seed L draws` measure, and `summary.py` and `summary_corr.py` read the logs.
