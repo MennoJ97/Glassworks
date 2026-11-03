@@ -36,9 +36,9 @@ Measuring the incident amplitude this way means nothing depends on how exactly t
 
 The first version disagreed with its reference by far more than the mesh could explain, and refining the mesh changed nothing. There were two separate causes, and neither is a mesh error.
 
-A layer absorbs at a rate of $k_y/k$. So an order that's nearly grazing barely notices it: at $k_y/k = 0.13$, a layer tuned to lose $10^{-4}$ on a round trip at normal incidence loses only a factor of 0.3. A thicker layer doesn't help, since the absorption is set for its whole thickness. Here we know every order in advance, so the layer can be set for the slowest one.
+A layer absorbs at a rate of $k_y/k$ ([Johnson 2021](20-references.md#johnson-2021)). So an order that's nearly grazing barely notices it: at $k_y/k = 0.13$, a layer tuned to lose $10^{-4}$ on a round trip at normal incidence loses only a factor of 0.3. A thicker layer doesn't help, since the absorption is set for its whole thickness. Here we know every order in advance, so the layer can be set for the slowest one.
 
-The second is an order that doesn't propagate at all. Chapter 11's stretch $s = 1 + i\sigma/k$ only rotates an evanescent wave's phase, without adding any decay. So an order just past its cutoff decays slowly, passes through the layer untouched, and returns from the wall. That needs a real part in the stretch, which does speed up its decay, and which leaves a propagating wave alone apart from shortening its wavelength:
+The second is an order that doesn't propagate at all. Chapter 11's stretch $s = 1 + i\sigma/k$ only rotates an evanescent wave's phase, without adding any decay. So an order just past its cutoff decays slowly, passes through the layer untouched, and returns from the wall. That needs a real part in the stretch ([Johnson 2021](20-references.md#johnson-2021)), which does speed up its decay, and which leaves a propagating wave alone apart from shortening its wavelength:
 
 $$s = 1 + \left(\frac{k}{\kappa_{\min}} + i\,\frac{k}{k_{y,\min}}\right)\frac{\sigma}{k}.$$
 <!-- code: stretched_matrix "let stretch" .. "I * strength" -->
@@ -48,7 +48,7 @@ Here $k_{y,\min}$ belongs to the most grazing propagating order and $\kappa_{\mi
 
 ## Checking it
 
-The reference is the Fourier modal method ([Moharam et al. 1995](20-references.md#moharam-1995)), in `plans/probe-grating/rcwa.py`. It expands fields in plane waves, with no mesh and no absorbing layer, so it shares nothing with this solver. For a ridge of index 2.5 on glass, with $L = 1.5\lambda$ at $20°$, on cells of $\lambda/80$ and one wavelength of layer:
+The reference is the Fourier modal method ([Moharam et al. 1995](20-references.md#moharam-1995)), with Li's rule for $H_z$ ([Li 1996](20-references.md#li-1996)), in `plans/probe-grating/rcwa.py`. It expands fields in plane waves, with no mesh and no absorbing layer, so it shares nothing with this solver. For a ridge of index 2.5 on glass, with $L = 1.5\lambda$ at $20°$, on cells of $\lambda/80$ and one wavelength of layer:
 
 | Order | $E_z$ here | $E_z$ reference | $H_z$ here | $H_z$ reference |
 |---:|---:|---:|---:|---:|

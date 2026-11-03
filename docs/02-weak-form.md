@@ -76,7 +76,7 @@ gets $S$ with $(a_c, b_c) = (p, 0)$ and $Q$ with $(0, q)$.
 
 ## Why Galerkin is a good choice
 
-When the problem is real and symmetric, Galerkin's method has a strong property. The
+When the problem is real, symmetric and positive definite, Galerkin's method has a strong property. The
 error $u - u_h$ is orthogonal to the whole basis, so the solution is the *best
 possible* approximation available in that basis, measured in the problem's natural
 energy norm ([Céa 1964](20-references.md#cea-1964)).

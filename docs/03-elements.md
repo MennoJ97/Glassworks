@@ -87,7 +87,7 @@ and
 
 $$k_0 = \sqrt{12} \approx 3.4641.$$
 
-A single unknown gets within 10% of the exact answer, and it comes out above it, as
+A single unknown gets within about 10% of the exact answer, and it comes out above it, as
 chapter 2 predicted. The solver returns exactly this value for this mesh:
 `3.4641016151`. With four cells it returns `3.2228`, which is 2.6% too high.
 

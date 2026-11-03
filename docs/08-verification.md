@@ -71,7 +71,7 @@ The square root amplified it. *Fix: compare $k_0^2$, the quantity actually solve
 Doubling the cladding width shrank the error about 100 times. That pointed at the
 walls: the near-cutoff mode decays so slowly that its tail reaches the conductor at
 the domain's edge, with an error scaling as $e^{-2\gamma d}$ for decay rate $\gamma$
-and cladding width $d$. This is a real modelling error, and **no mesh refinement will
+and cladding width $d$ ([Yariv & Yeh 2007](20-references.md#yariv-yeh-2007)). This is a real modelling error, and **no mesh refinement will
 ever fix it**. *Fix: wider cladding, and a bound in the test based on that exponential.*
 <!-- code: slab_waveguide_te_and_tm_satisfy_dispersion "Wide cladding" .. "vec![layer" -->
 <!-- code: slab_waveguide_te_and_tm_satisfy_dispersion "Modes near cutoff" .. "close(res" -->

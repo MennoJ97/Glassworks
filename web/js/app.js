@@ -23,7 +23,7 @@ const VIEW_HELP = {
   bands2d: 'The waves that can travel through an endless lattice of this cell. Floquet boundaries tie each edge to the opposite one, with a phase set by the wavevector k.',
   mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
   antireflection: 'Find the coating that reflects the least light, averaged across a band of wavelengths.',
-  cavityDesign: 'Find the pattern of material around an emitter that holds light for longest in the smallest space, in a square as big as 7 x 7 rods of the crystal it\'s compared with. It measures the local density of states, which a cavity raises in proportion to Q / V, over a bandwidth that narrows as the pixels sharpen. The structure and its mesh scale with the wavelength.',
+  cavityDesign: 'Find the pattern of material around an emitter that holds light for longest in the smallest space, in a square as big as 7 x 7 rods of the crystal it\'s compared with. It measures the local density of states over a bandwidth that narrows as the pixels sharpen. A cavity raises it roughly in proportion to Q / V, while the mode is broader than that bandwidth and the emitter sits at the field\'s peak. The structure and its mesh scale with the wavelength.',
   bend2d: 'Find the pattern of material that carries light around a corner in a slab waveguide, within a square one wavelength wide. It stays in the slab instead of radiating away at the corner. The structure and its mesh scale with the middle of the band.',
 };
 // What a 2D design isn't, whichever polarization it's in.

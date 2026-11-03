@@ -1,7 +1,7 @@
 # 13. Inverse design
 
 So far we've analysed structures that someone drew. Instead, we can ask for the structure: state what the light
-should do, and let the solver find the shape. This is **topology optimization**, and it works because a solver can
+should do, and let the solver find the shape. This is **topology optimization** ([Bendsøe & Sigmund 2003](20-references.md#bendsoe-sigmund-2003); [Jensen & Sigmund 2011](20-references.md#jensen-sigmund-2011)), and it works because a solver can
 report not only an answer, but how that answer changes with every part of the structure, at almost no extra cost.
 
 ## Densities
@@ -21,7 +21,7 @@ view under **Inverse design**. Chapter 17 designs a cavity the same way.
 ## The adjoint method
 
 Hundreds of pixels would take hundreds of solves by finite differences. The **adjoint method** needs one more,
-however many pixels there are.
+however many pixels there are ([Jensen & Sigmund 2011](20-references.md#jensen-sigmund-2011)).
 
 A monitor's power from chapter 12 is a quadratic form, $P = u^H B\,u$, with $B$ Hermitian. A change to the matrix
 changes the field by $A\,\delta u = -\delta A\,u$, so
@@ -47,12 +47,12 @@ All of this lives in [`web/js/optimizer.js`](../web/js/optimizer.js), outside th
 
 **Filter.** If every pixel were free, the optimizer would make patterns at the scale of a single pixel, relying on
 the mesh's errors. A **cone filter** replaces each density by a weighted average of its neighbours, with a weight
-falling linearly to zero at a chosen radius. That sets a smallest feature size. It's linear, so its gradient
+falling linearly to zero at a chosen radius ([Andreassen et al. 2011](20-references.md#andreassen-2011)). That sets a smallest feature size. It's linear, so its gradient
 is its transpose: the same weights, carrying slopes the other way.
 <!-- code: coneFilter2d "const weight" .. "w / total" -->
 <!-- code: coneFilter2d "adjoint(g)" .. "return out" -->
 
-**Projection.** Then push the filtered densities toward 0 or 1:
+**Projection.** Then push the filtered densities toward 0 or 1 ([Wang et al. 2011](20-references.md#wang-2011)):
 
 $$\hat\rho = \frac{\tanh(\beta/2) + \tanh\big(\beta(\tilde\rho - \tfrac12)\big)}{2\tanh(\beta/2)}.$$
 <!-- code: project -->
@@ -100,7 +100,7 @@ other sharpness stage did worse than cutting iterations, reaching only 96.5% to 
 than how long it runs.
 <!-- code: design.js "const SHARPNESS" .. "const bendIterations" -->
 
-For comparison, chapter 12's crystal bend reaches 97.9% to 95.8% over a much wider band, about 13%, in a crystal several periods
+For comparison, chapter 12's crystal bend reaches 97.8% to 95.8% over a much wider band, about 13%, in a crystal several periods
 across. So neither wins outright: this pattern is compact and needs no band gap, while the crystal gets its bandwidth from having
 nowhere else for light to go. We only optimized over 10% here, and over 0.85 to 1.15 this reached about 80 to 85%.
 

@@ -26,7 +26,7 @@ each half, and each quarter, and so on, which makes a tree of ever smaller separ
 
 Now the expensive part is only the separators, and most of them are small. For a 2D mesh, the
 factorization costs about $N^{3/2}$ operations rather than $N^2$, and storage about $N\log N$. No
-ordering of such a mesh can do better than $N^{3/2}$ ([George 1973](20-references.md#george-1973)).
+ordering of such a mesh can do better than $N^{3/2}$ ([Hoffman et al. 1973](20-references.md#hoffman-1973)).
 
 [`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) does this with a few decisions that keep it short:
 
@@ -44,7 +44,7 @@ ordering of such a mesh can do better than $N^{3/2}$ ([George 1973](20-reference
 ## The multifrontal method
 
 Eliminating a separator's unknowns is a dense problem, because by then they're all coupled to each
-other. The **multifrontal** method makes this explicit. Each separator gets a dense matrix, its
+other. The **multifrontal** method makes this explicit ([Duff & Reid 1983](20-references.md#duff-reid-1983)). Each separator gets a dense matrix, its
 **front**, for its own unknowns and whatever they couple to later. It starts from the matrix entries
 that first appear there, and adds the block that each of its two children left behind. Eliminating the
 separator's unknowns from its front leaves a smaller dense block, which it passes up to its parent.
@@ -67,7 +67,7 @@ even when the whole matrix is fine.
 <!-- code: partial_lu "for i in j..p" .. "weak |=" -->
 
 So `sparse.rs` notes any weak pivot, and then corrects each solve with two steps of **iterative
-refinement**: compute what the answer gets wrong, solve for that, and add it. The test
+refinement**: compute what the answer gets wrong, solve for that, and add it ([Golub & Van Loan 2013](20-references.md#golub-van-loan-2013)). The test
 `sparse_lu_recovers_when_a_part_sits_on_its_own_resonance` builds this case on purpose. The error is
 0.008 without refinement and $10^{-12}$ with it.
 <!-- code: SparseLu::refined "if self.weak" .. "rhs.iter_mut().zip(&r)" -->

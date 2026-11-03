@@ -153,8 +153,8 @@ as a test in `crates/eigenmenno-core/tests/analytic.rs` before calling it done.
 - [x] Decide on the own sparse solver: keep `faer` for now, and revisit after milestone 4.
 
 The page defaults to about 2,500 unknowns per k-point, accurate to about 0.3–0.5%.
-The plane-wave script wasn't kept: it's about 30 lines
-of numpy, using `eps(G) = delta eps_b + f (eps_a - eps_b) 2 J1(Gr) / (Gr)`, and the inverse
+The plane-wave script was lost and later rewritten as `probe-2d/planewave.py`, which reproduces
+these values. It's about 60 lines of numpy, using `eps(G) = delta eps_b + f (eps_a - eps_b) 2 J1(Gr) / (Gr)`, and the inverse
 rule for Hz.
 
 ### Milestone 2: open structures

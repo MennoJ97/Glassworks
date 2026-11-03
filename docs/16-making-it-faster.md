@@ -36,7 +36,7 @@ The code is in [`sparse/symmetric.rs`](../crates/eigenmenno-core/src/sparse/symm
 Warm-starting Lanczos from the previous wavevector looked just as obvious as Cholesky, and it did nothing: 62 solves per
 wavevector before and after. Lanczos gains digits geometrically, so a good start saves only the first one or two of the ten it
 was asked for. The better question was why ten. A band diagram reads only eigenvalues, whose error goes as the square of the
-residual, so a tolerance of $10^{-5}$ still gives $k_0$ to about $10^{-10}$. That takes 47 to 51 solves per wavevector and 15 to 23%
+residual ([Parlett 1998](20-references.md#parlett-1998)), so a tolerance of $10^{-5}$ still gives $k_0$ to about $10^{-10}$. That takes 47 to 51 solves per wavevector and 15 to 23%
 off a diagram, for a few lines. Adding the warm start on top saved only 2 to 9% more of the solves, so it was left out too.
 <!-- code: BAND_TOL -->
 

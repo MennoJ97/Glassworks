@@ -1,7 +1,8 @@
 // Getting from grey to sharp, with no physics in it: a filter, a projection and the method of
 // moving asymptotes. Chapter 13 of the tutorial explains each one.
 
-// Mulberry32: the same state always gives the same numbers, from 0 up to 1.
+// Mulberry32, a public-domain generator by Tommy Ettinger: the same state always gives the
+// same numbers, from 0 up to 1.
 export function randomNumbers(state) {
   let a = state;
   return () => {

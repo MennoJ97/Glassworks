@@ -97,8 +97,8 @@ actual eigenvector ([Parlett 1998](20-references.md#parlett-1998)).
 
 A Krylov space started from one vector contains only one direction per eigenspace.
 So when two modes share an eigenvalue, Lanczos can only find one of them. This
-actually happens: a uniform periodic structure has two modes at each frequency, for
-waves going left and right.
+actually happens: a uniform periodic structure has pairs of modes at the same frequency, such as
+waves going left and right at $k = 0$.
 
 `eigs_near` handles this by **locking** ([Bai et al. 2000](20-references.md#bai-2000)). Its loop, in `eigs_factored`, runs Lanczos, keeps the converged modes,
 then runs it again from a fresh random vector that's kept orthogonal to them. The

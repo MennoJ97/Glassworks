@@ -77,7 +77,7 @@ The mesh also adjusts itself to a short wavelength, as far as the limit on unkno
 coarser than was asked for. With up to 2.3 million unknowns, solved outside the browser, the crystal at 1 µm
 converges to about 19% through the straight guide and 11% through the bend. The page's own mesh reads 11.6%.
 
-A band diagram explains why: this crystal's complete gaps are at $a/\lambda$ of 0.304 to 0.446 and 0.741 to 0.766,
+A band diagram explains why: this crystal's $E_z$ gaps are at $a/\lambda$ of 0.304 to 0.446 and 0.741 to 0.766,
 and a wavelength of 1 µm, with $a = 1$ µm, lands in overlapping bands. The second gap does guide light, reaching 36%
 to 48% at 1.31 to 1.35 µm, but the sharp bend passes only about 4 to 9% of it at 1.33 and 1.35 µm.
 

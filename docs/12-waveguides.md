@@ -51,10 +51,10 @@ through a straight guide:
 |---|---:|---:|
 | Guided band at $k = 0$ | 0.312 | 0.312 |
 | Top of the gap, reached at $k = 0.38$ | 0.443 | 0.445 |
-| Sharp bend at $\omega = 0.353$ | 98% at most | 97.9% |
+| Sharp bend at $\omega = 0.353$ | 98% at most | 97.8% |
 | Sharp bend at $\omega = 0.392$ | over 95% | 96.6% |
 | Sharp bend at $\omega = 0.403$ | about 95% | 95.8% |
-| Sharp bend at $\omega = 0.42$, read from their figure | about 90% | 90.8% |
+| Sharp bend at $\omega = 0.42$, read from their figure | about 90% | 90.7% |
 | Stepped bend at $\omega = 0.353$ | 100% | 99.8% |
 | Slab of index 3.5, sharp bend | 30% at most | 23% |
 <!-- code: guided_band_matches_mekis "band(0.0, 0.312)" .. "band(0.38, 0.443)" -->
@@ -82,7 +82,7 @@ length by a number $s$, so $\nabla \to \nabla/s$, and every wavelength too, so $
 $$-\frac{1}{s^2}\nabla\cdot(p\nabla u) - \frac{k_0^2}{s^2}\,q\,u = 0.$$
 
 Both terms pick up the same factor. Maxwell's equations have no length of their own, so a structure scaled along
-with its wavelength behaves exactly as it did. A crystal with rods 0.353 µm apart reads the same 97.8% at 1 µm that
+with its wavelength behaves exactly as it did ([Joannopoulos et al. 2008](20-references.md#joannopoulos-2008)). A crystal with rods 0.353 µm apart reads the same 97.8% at 1 µm that
 the original reads at 2.833 µm, and at 0.55 µm and 10 µm too, to all the digits we printed. The mesh scales with it, since `steps_in` divides each length into the same number of cells at any size.
 The test `scaling_a_structure_with_its_wavelength_changes_nothing` holds this to $10^{-7}$. Chapter 18 tells the story of
 what it took to get there. Resizing is what the page offers when a wavelength doesn't suit a structure.

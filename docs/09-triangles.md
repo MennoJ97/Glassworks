@@ -43,7 +43,7 @@ continuous across it with nothing else to enforce.
 
 On a straight triangle, the gradients of the $\lambda_i$ are constant, so the stiffness integrand
 is a polynomial of degree 2, and the mass integrand has degree 4. Chapter 3's quadrature idea
-applies directly, with a small rule on the triangle.
+applies directly, with a small rule on the triangle ([Dunavant 1985](20-references.md#dunavant-1985)).
 [`space.rs`](../crates/eigenmenno-core/src/space.rs) has all of this in `H1Triangle`.
 <!-- code: H1Triangle::shape -->
 <!-- code: H1Triangle::local_matrices "let (det" .. "mass[i * 6 + j]" -->
@@ -79,7 +79,7 @@ These are errors in a rod lattice's band edges, explained below. `Mesh::fitted_g
    across a curve onto almost the same point.
 3. **Flip to Delaunay** (`Mesh::flip_to_delaunay`). Snapping still leaves some thin triangles along
    curves. Two triangles sharing an edge form a quadrilateral with two possible diagonals, and the
-   better one is where the angles opposite the edge add up to less than 180°. Repeating this removes
+   better one is where the angles opposite the edge add up to less than 180° ([Shewchuk 1996](20-references.md#shewchuk-1996)). Repeating this removes
    slivers, and a flip that would cross an outline is refused, so every triangle stays in one material.
 <!-- code: Mesh::fitted_grid "m.snap" .. "flip_to_delaunay" -->
 
@@ -120,7 +120,8 @@ wavevectors, so where the nonzeros are stays the same, which the next chapter ex
 ### Example: a lattice of rods
 
 Take a square lattice of rods with $\varepsilon = 12$ and radius $r = 0.2a$, on the **2D band diagram**
-view. This is checked against an independent plane-wave expansion. Frequencies are in units of $a/\lambda$,
+view. This is checked against a plane-wave expansion ([Ho et al. 1990](20-references.md#ho-1990)), in
+`plans/probe-2d/planewave.py`, which shares nothing with this solver. Frequencies are in units of $a/\lambda$,
 and M1 and X2 mean the first band at M and the second at X:
 
 | Grid (unknowns) | $E_z$ M1 | $E_z$ X2 | $H_z$ M1 | $H_z$ X2 |
@@ -131,8 +132,12 @@ and M1 and X2 mean the first band at M and the second at X:
 | 96 × 96 (36,864) | 0.28071 | 0.41724 | 0.49600 | 0.44135 |
 | Plane waves | 0.28066 | 0.41716 | 0.49588 | 0.44109, still rising |
 
+The [MPB tutorial](https://mpb.readthedocs.io/en/latest/Python_Tutorial/) gives 0.28262 and 0.41933 for this
+lattice's $E_z$ gap, at a resolution of 32 ([Johnson & Joannopoulos 2001](20-references.md#johnson-joannopoulos-2001)). That's 0.5 to 0.7% above
+both of these. Its coarse grid may explain it, but we haven't run MPB to check.
+
 The solver comes down from above, as chapter 2 predicts. For $E_z$, this lattice has a **band gap**
-from 0.281 to 0.417: no wave at those frequencies can travel through it in any direction. That gap
+from 0.281 to 0.417: no $E_z$ wave at those frequencies can travel through it, in any direction in the plane. That gap
 is what makes the guides and cavities of the following chapters work.
 
 Next: [solving on a 2D mesh](10-sparse-lu.md).

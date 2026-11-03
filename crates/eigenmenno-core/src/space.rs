@@ -95,7 +95,7 @@ impl<'a> H1Line<'a> {
     }
 }
 
-/// A degree-4 rule on triangles: barycentric coordinates and a weight, summing to 1.
+/// A degree-4 rule on triangles ([Dunavant 1985]): barycentric coordinates and a weight, summing to 1.
 const TRIANGLE_RULE: [([f64; 3], f64); 6] = [
     ([0.108103018168070, 0.445948490915965, 0.445948490915965], 0.223381589678011),
     ([0.445948490915965, 0.108103018168070, 0.445948490915965], 0.223381589678011),

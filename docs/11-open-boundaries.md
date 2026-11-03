@@ -20,7 +20,7 @@ $$s = 1 + \frac{i\sigma(x)}{k}.$$
 Then $e^{ikx}$ becomes $e^{ikx}\,e^{-\int\sigma\,dx}$: the same wave, decaying exponentially. Where
 $\sigma = 0$ nothing has changed, and the solution inside the domain is still the exact solution of
 the original equation. So the join is free of reflection at every angle and frequency, which no
-absorbing material could manage. Dividing by $k$ makes the decay rate the same at every frequency.
+ordinary absorbing material could manage. Dividing by $k$ makes the decay rate the same at every frequency.
 A wall at the far side of the layer reflects what's left, which has been reduced by the round trip.
 
 To get the equations, each derivative along $x$ becomes $\frac{1}{s_x}\partial_x$, and the area
@@ -59,7 +59,7 @@ thick it has to be.
 ### Plane waves
 
 A plane wave never decays, so it can't simply be a source inside the layer. It enters through the
-**scattered-field** form. The incident wave $u_i$ already solves the background problem, so writing the
+**scattered-field** form ([Jin 2014](20-references.md#jin-2014)). The incident wave $u_i$ already solves the background problem, so writing the
 total as $u = u_i + u_s$ leaves
 
 $$L\,u_s = -(L - L_b)\,u_i,$$
@@ -68,7 +68,7 @@ $$L\,u_s = -(L - L_b)\,u_i,$$
 where $L_b$ is the background's operator. The right side is zero everywhere except inside the shapes,
 and $u_s$ is purely outgoing, so the layer absorbs it. The **2D scattering** view does this, and
 `dielectric_cylinder_matches_the_mie_series` checks it against the exact series solution for a
-cylinder, within 1%.
+cylinder ([Bohren & Huffman 1983](20-references.md#bohren-huffman-1983)), within 1%.
 
 ## LDOS, at complex frequency
 
@@ -112,7 +112,7 @@ $$u_0 \approx \frac{R}{k - k_p},$$
 
 so $1/u_0$ is nearly a straight line in $k$, crossing zero at $k_p$. A **secant iteration** finds that zero:
 evaluate $1/u_0$ at two points, follow the straight line through them, and repeat. It takes 6 or 7 driven
-solves. The mode's sharpness and size then follow:
+solves. The mode's sharpness and size then follow ([Joannopoulos et al. 2008](20-references.md#joannopoulos-2008)):
 <!-- code: leaky.rs "let mut prev" .. "g = response.inv()" -->
 
 $$Q = \frac{\mathrm{Re}\,k_p}{2\,|\mathrm{Im}\,k_p|}, \qquad
@@ -133,7 +133,7 @@ and reports a plausible-looking $Q$.
 ### Example: one rod missing
 
 Remove one rod from the lattice in chapter 9, and try it on the **2D resonances** view. One mode moves
-into the gap. Plane waves put it at $a/\lambda = 0.3746$ in a periodic 5 × 5 supercell, and this solver
+into the gap. Chapter 9's plane-wave expansion puts it at $a/\lambda = 0.3746$ in a periodic 5 × 5 supercell, and this solver
 converges to that from above. With open walls, more crystal blocks more leakage, while the mode's shape
 stays put:
 

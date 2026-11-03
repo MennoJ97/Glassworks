@@ -2,7 +2,7 @@
 
 *Going further. This builds on chapters 11, 12 and 13, and on chapter 17 for the cavity. Try it by choosing $H_z$ on the **2D waveguide bend** and **2D cavity** views.*
 
-Chapters 13 and 17 design for $E_z$, the electric field out of the plane. But chips usually carry the other one. A silicon-on-insulator waveguide normally runs on its TE-like mode, with the electric field in the plane of the chip, and in a top-down 2D model that's $H_z$. So how well does a design for one serve the other?
+Chapters 13 and 17 design for $E_z$, the electric field out of the plane. But chips usually carry the other one. A silicon-on-insulator waveguide normally runs on its TE-like mode, with the electric field in the plane of the chip, and in a top-down 2D model that's $H_z$ ([Nikkhah et al. 2024](20-references.md#nikkhah-2024)). So how well does a design for one serve the other?
 
 Not well. Here's a bend optimized for $E_z$, read in both, on cells of $\lambda/72$:
 
@@ -69,7 +69,7 @@ So in $H_z$ the frequency is held inside the step. MMA's step for a goal $g$ has
 <!-- code: HeldMma "const stepFor" .. "const next = choose" -->
 <!-- code: holdingStep -->
 
-Others have found the same difficulty. The LDOS's sharpest curvature lies along the frequency's slope, so a high $Q$ makes the goal stiff in just that direction ([Shaker et al. 2025](20-references.md#shaker-2025)). They follow the mode with an eigensolve at each step instead, which costs about twice the solves.
+Others have found the same difficulty. The LDOS's sharpest curvature lies along the frequency's slope, so a high $Q$ makes the goal stiff in just that direction ([Shaker et al. 2026](20-references.md#shaker-2026)). They follow the mode with an eigensolve at each step instead, which costs about twice the solves.
 
 A prediction through the projection is only as good as the projection's slope, and a $\tanh$ projection's slope grows without limit as it sharpens. A subpixel-smoothed projection ([Hammond et al. 2025](20-references.md#hammond-2025)) instead works out from the filtered field's value and slope how far an edge lies through each pixel. So an edge stays about a pixel wide at any sharpness, and its slope stays finite. Its second-order form ([Romano et al. 2026](20-references.md#romano-2026)) adds the curvature, which keeps it smooth where two edges meet. `smoothProject` and `holdingStep` in `web/js/hz-design.js` do both.
 <!-- code: smoothProject "const gx" .. "rho[k] = smoothed" -->
@@ -79,7 +79,7 @@ Each change helps alone. Over nine starts with disorder sampled as below, the me
 
 ## The result
 
-Rods are no benchmark here, since they read about 1. The usual crystal for this polarization is a triangular lattice of air holes, with the middle one filled. We scanned its period and hole size, in the same square, and the best is $a = 0.276\lambda$, $r = 0.4a$. All are at $Q = 1000$, relative to vacuum:
+Rods are no benchmark here, since they read about 1. The usual crystal for this polarization is a triangular lattice of air holes ([Joannopoulos et al. 2008](20-references.md#joannopoulos-2008)), with the middle one filled. We scanned its period and hole size, in the same square, and the best is $a = 0.276\lambda$, $r = 0.4a$. All are at $Q = 1000$, relative to vacuum:
 <!-- code: holeCrystal "const a" .. "if ((i || j) && inside)" -->
 
 | Structure | LDOS | Mode $Q$ |
@@ -94,10 +94,10 @@ So the median beats the crystal by 3.6 times, and the weakest start by 2.4. Chap
 
 ## What this doesn't settle
 
-- **The index is still bulk.** These designs use 3.5 and $\varepsilon = 12$. A real 2D model of a silicon slab uses its effective index, about 2.86 for 220 nm ([Nikkhah et al. 2024](20-references.md#nikkhah-2024)), and the third dimension leaks light that none of this sees.
+- **The index is still bulk.** These designs use 3.5 and $\varepsilon = 12$. A real 2D model of a silicon slab uses its effective index, about 2.86 for 220 nm of silicon in oxide at a wavelength of 1.525 µm ([Nikkhah et al. 2024](20-references.md#nikkhah-2024)), and the third dimension leaks light that none of this sees.
 - **These designs are better, not sturdier.** Over 18 starts, on half cells, with edges disturbed randomly and correlated over 100 nm, the median LDOS falls from 1,370 to 1,137 at 2 nm, and to 639 at 5 nm, against the crystal's 382, 335 and 269. At 5 nm, 17 of the 18 still beat it. But they keep less of their LDOS than the crystal does, 0.47 at 5 nm against 0.70, and they shift further, 0.96% per nanometre against 0.59, so they would still need tuning. They also tend to form slots: air channels about 87 nm wide crossing at the source, where $H_z$'s electric field is strongest. That's narrow for lithography, and minimum features weren't measured. The crystal is one structure with 18 draws, and its disorder is in each hole's radius, so this comparison is rough.
 - **Sampling disorder while optimizing helped the earlier step, mostly as a better search.** The page takes three samples per iteration, with edges moved by 2 nm and correlated over 100 nm. With chapter 17's step, over 18 starts, it raised the median LDOS from 417 to 664 with no disorder, and from 197 to 363 at 5 nm. But the share kept at 5 nm only rose from 0.43 to 0.51. Whether it still helps with the held step wasn't measured. It makes a run take about twice as long.
-- **The dipole's direction.** Without disorder, a design's eight-fold symmetry treats both in-plane directions alike: over 18 starts they agree within 1 part in 100,000. Disorder breaks that. With independent disorder on each edge, the two directions differ by a median of 6% at 2 nm, and 18% at 5 nm, and in the worst draws by 38% and 79%.
+- **The dipole's direction.** Without disorder, a design's square symmetry treats both in-plane directions alike: over 18 starts they agree within 1 part in 100,000. Disorder breaks that. With independent disorder on each edge, the two directions differ by a median of 6% at 2 nm, and 18% at 5 nm, and in the worst draws by 38% and 79%.
 - **Few starts,** with spreads wide enough that small differences here shouldn't be trusted. A run is also chaotic, since one pixel flipping changes the path. Changing a gradient in its last digit, by adding its terms in another order, moved one start from 1,395 to 719. The same start reads 1,323 in Node and 1,333 in a browser, because their maths functions differ in the last digit. Each repeats exactly on its own engine. The numbers above are from Node, so the page's own will differ within that spread.
 
 Next: [references](20-references.md).

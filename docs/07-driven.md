@@ -97,7 +97,7 @@ functions evaluated at $x_0$. See `add_point_load` in
 
 The exact solution in free space is $u = -\tfrac12 e^{ik_0|x - x_0|}$. Note the minus
 sign: the field opposes the current at the sheet, which is exactly what lets the
-source do work on the field. An earlier version of this project's test had the sign
+source do work on the field ([Jackson 1999](20-references.md#jackson-1999)). An earlier version of this project's test had the sign
 wrong, and the solver was right. Chapter 8 tells that story.
 <!-- code: line_source_radiates_the_free_space_green_function "-u'' - k^2 u" .. "let exact" -->
 

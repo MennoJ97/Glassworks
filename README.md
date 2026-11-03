@@ -88,22 +88,33 @@ crates/eigenmenno-core   The solver, with no browser dependencies
   assemble.rs            Sparse matrices and boundary constraints
   banded.rs              Banded LU and RCM reordering, for 1D
   sparse.rs              Multifrontal sparse LU with nested dissection, for 2D
+  sparse/blocked.rs      A faster update of each front, with the same result
+  sparse/symmetric.rs    A faster factorization when the matrix is symmetric
+  sparse/transposed.rs   Transposed solves, which Bloch adjoints need
   eigen.rs               Shift-invert Lanczos
   problem.rs             The JSON problem description
-  solve.rs               The physics: from a request to fields
+  output.rs              What a solve returns
+  solve1d.rs             The physics: from a request to fields, in 1D
+  solve1d/gradient.rs    The adjoint for layer designs
+  solve1d/validate.rs    Checks on a 1D request
   solve2d.rs             The same for 2D problems, sending each request on
   solve2d/closed.rs      Walls and periodic cells: modes and band diagrams
   solve2d/open.rs        The absorbing layer, shared by the next two
   solve2d/driven.rs      Line sources, plane waves, ports and monitors
-  solve2d/resonance.rs   Leaky modes
-  solve2d/gradient.rs    The adjoint: each pixel's slope
+  solve2d/leaky.rs       Leaky modes
+  solve2d/adjoint.rs     The adjoint: each pixel's slope
+  solve2d/grating.rs     Periodic gratings and their diffraction orders
+  solve2d/dipole.rs      An in-plane electric dipole, for H_z cavities
   solve2d/validate.rs    Checks on a request
 crates/eigenmenno-wasm   The thin browser interface
 web/                     The page
   worker.js              Runs the solver off the main thread
   js/model.js            Geometry, examples, and building solver requests
   js/plot.js             Canvas drawing (the only code that draws)
-  js/design.js           Inverse design: filter, projection and optimizer
+  js/design.js           Inverse design of layers and bends
+  js/optimizer.js        Filter, projection and the method of moving asymptotes
+  js/cavity-design.js    Cavity design, with the frequency held on target
+  js/hz-design.js        What H_z cavities add: smoothed projection and a held step
   js/solver.js           Worker client; drops stale solves
   js/app.js              Connects the controls
   learn/                 Tutorial pages, generated from docs/
@@ -138,5 +149,5 @@ Cholesky on band diagrams. `faer` is a dependency of the tests only, as an indep
 - Guided modes near cutoff feel the walls at the domain's edge unless the cladding is
   wide, and wide cladding slows the eigensolver. See
   [chapter 6](docs/06-eigenproblems.md) and [chapter 8](docs/08-verification.md).
-- Very large problems are limited by the visitor's memory: requests over 2 million
-  unknowns are refused.
+- Very large problems are limited by the visitor's memory: 1D requests over 2 million
+  unknowns, and 2D requests over 400,000, are refused.
