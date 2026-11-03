@@ -1011,7 +1011,126 @@ On 18 unseen starts, 101 to 118, on half cells, with drawn disorder correlated o
 - **Cost:** about the same run time as the robust goal, with no extra solves. In the probe, `hz/variants-optimizer.js` and `hz/variants-cavity-design.js`, about 60 lines of JavaScript and no Rust.
 - **Not tested:** `E_z`, the bend, and whether robust sampling is still needed with this step.
 - **On the page, 2026-11-03,** for `H_z` only: `holdingStep` and `smoothProject` in `optimizer.js`, and a `held` branch in `optimizeCavity`, about 110 lines with comments, where the probe's was about 60 packed. `E_z` keeps its old step. In Node it repeats the probe's designs bit for bit, so the tables above are the page's. That needed `back` to add its terms in the probe's order: added in another order, which changes the gradient by 2e-16, starts 1 to 4 read 1,039, 719, 1,165 and 1,073 rather than 1,323, 1,395, 1,348 and 948. So a single start says almost nothing, and only the 18-start statistics should be quoted. The step is a bisection over a staircase, since each pixel flips between its limits as its slope changes sign, so one flipped pixel changes the path.
-- **Literature:** [held-step-literature.md](held-step-literature.md). It's OC's bisected volume multiplier and MMA's one-constraint dual, aimed at a frequency, relaxed to half the gap. The staircase comes from mixing gradients, `g + λf`, where MMA mixes each pixel's `p` and `q`, which would give an interior optimum moving smoothly with `λ`. Untested: that change, and predicting the shift across a stage change, where the chart still drops for one iteration (61, 81, 101 and 121 on start 1).
+- **Literature:** [held-step-literature.md](held-step-literature.md). It's OC's bisected volume multiplier and MMA's one-constraint dual, aimed at a frequency, relaxed to half the gap. The staircase comes from mixing gradients, `g + λf`, where MMA mixes each pixel's `p` and `q`, which would give an interior optimum moving smoothly with `λ`. Tested below.
+
+#### Mixing coefficients, and predicting across a stage, measured 2026-11-03
+
+Two fixes for what the literature note found, on starts 1 to 9 on the page's mesh, with the page's own code as the baseline. It repeats the page's results exactly. `MIX` mixes the multiplier's part into each pixel's `p` and `q`, as MMA's dual does, rather than into the gradient. `STAGE` predicts a stage's last step through the next stage's sharper projection, so the first solve of a stage starts where the mode will be. In `hz/`, `variants3-*.js` go in `rob3/web/js/`, run by `runmix.sh` and `runmix2.sh`, and summed up by `summix.py`.
+
+| Variant | LDOS, median (range) | Beat the crystal | Median Q | Median V | Hold left over | Worst drop at a stage's start |
+|---|---:|---:|---:|---:|---:|---:|
+| Page | 1,348 (908 to 1,660) | 9 | 10,753 | 0.086 | 0.34 bandwidths | 0.005 times |
+| `STAGE` | 1,308 (85 to 1,399) | 8 | 9,171 | 0.085 | 0.41 | 0.057 |
+| `MIX` | 704 (662 to 746) | 9 | 27,282 | 0.048 | 0 | 0.049 |
+| `MIX`, `STAGE` | 717 (592 to 745) | 9 | 27,825 | 0.050 | 0 | 0.78 |
+| `MIX`, twice the move | 722 (330 to 1,788) | 8 | 10,341 | 0.074 | 0 | 0.008 |
+| `MIX`, four times the move | 1,352 (127 to 2,140) | 5 | 2,174 | 0.080 | 0 | 0.013 |
+
+- **Mixing works as theory says, and searches worse.** The hold is exact, and runs barely differ, at 662 to 746 over nine starts against the page's 908 to 1,660. But the LDOS falls behind from the fourth stage on, with medians at the stage ends of 101, 199, 295 and 491 against 152, 347, 514 and 862. Pixels that the goal and the frequency pull opposite ways now stop inside their bounds, so steps are smaller. Larger moves bring the median back, but with failures, and only 5 of 9 beat the crystal. The page's staircase acts as useful noise.
+- **Predicting across a stage only works with an exact hold.** Alone it makes the worst drop about 10 times milder and changes little else, apart from one start that failed, at 85. With mixing the drop nearly vanishes, but mixing loses half the LDOS.
+- **Kept as it is.** Neither beats the page on these starts, so the 18 unseen starts weren't run. The drops at a stage's start are only in the chart, and the run recovers on the next iteration.
+
+#### Adapting the move, measured 2026-11-03
+
+To win back mixing's search. `TRUST` sets the move limit from the ratio of each step's actual LDOS gain, read by the next iteration's solve, to the gain predicted in `ρ` by the solver's slope. It's smoothed over iterations and reset each stage, multiplied by 1.5 above 0.75 and halved below 0.25, and kept between a quarter and four times the page's. `SCHEDULE` multiplies the move by 1, 1, 4, 4, 4, 4, 2 and 1 in the eight stages, from where four times the move helped. `FINISH` projects whole pixels in the last two stages, as the finished design will be. Starts 1 to 9 again, run by `runtrust.sh`, `runsched.sh` and `runfinish.sh`:
+
+| Variant | LDOS, median (range) | Beat the crystal |
+|---|---:|---:|
+| Page | 1,348 (908 to 1,660) | 9 |
+| `MIX`, `TRUST` | 870 (451 to 1,822) | 9 |
+| `TRUST` | 970 (276 to 1,665) | 7 |
+| `MIX`, `SCHEDULE` | 705 (373 to 1,540) | 9 |
+| `SCHEDULE` | 401 (78 to 1,047) | 5 |
+| `FINISH` | 479 (369 to 1,416) | 8 |
+| `MIX`, four times the move, `FINISH` | 808 (149 to 1,896) | 8 |
+
+None beats the page. Two things were learned:
+
+- **The search isn't what fails with larger moves; the finish is.** With mixing and four times the move, the median LDOS at the last iteration is 961, against the page's 867. But some designs lose most of it when finished. `diag3.mjs` reads the last optimized design, with its grey sub-pixel edges, at its own peak. Start 8 reads 1,347 there and 127 finished, with Q 160, though the snap to whole pixels flips only 8 pixels. Start 4 reads 862 and 305. The page's start 1 reads 1,671 and 1,323. About 350 pixels in each design are between 0.2 and 0.8, the smoothed projection's sub-pixel edges. Snapping them moves edges by up to half a pixel, about 22 nm, which `H_z` feels strongly, and the grey edges overstate their effect by about twice anyway.
+- **Projecting whole pixels to finish brings back the swings,** to 971 times, since the prediction through a sharp `tanh` fails again. So that can't close the gap either.
+
+GCMMA's retries weren't tried: they'd make the search more careful at about twice the solves, and the search isn't what fails. What might work is a finish that keeps the sub-pixel edges, drawing the filtered field's level set more finely than the pixels. Tried next.
+
+#### A sub-pixel finish, measured 2026-11-03
+
+`SUBPIXEL=2` draws the finished design from the filtered field's 0.5 contour, interpolated bilinearly between pixel centres, on a grid twice as fine as the pixels. That needs cells half a pixel wide, since the solver's pixels must line up with its mesh. Up to the finish, a run is identical to its baseline. `eval3.mjs` reads every finished design at its own peak on the same cells, half a pixel wide, at Q 1000. Starts 1 to 9, run by `runsub.sh`:
+
+| Start | Page | `MIX`, four times the move | Page, sub-pixel | **`MIX`, four times, sub-pixel** |
+|---|---:|---:|---:|---:|
+| 1 | 1,279 | 1,937 | 1,307 | 1,563 |
+| 2 | 1,391 | 1,740 | 1,288 | 1,882 |
+| 3 | 1,332 | 2,145 | 350 | 2,221 |
+| 4 | 889 | 311 | 691 | 403 |
+| 5 | 974 | 222 | 729 | failed |
+| 6 | 1,661 | 1,386 | 1,560 | 1,754 |
+| 7 | 1,505 | 387 | 1,808 | 297 |
+| 8 | 1,423 | 129 | 650 | 1,138 |
+| 9 | 891 | 1,532 | 826 | 2,214 |
+| Median | 1,332 | 1,386 | 826 | 1,563 |
+| Beat the crystal | 9 | 6 | 8 | 7 |
+
+Start 5 failed in the final mode search, the solver's known trouble with `H_z` on finer meshes. Its loop was poor anyway.
+
+- **The sub-pixel finish rescues designs whose search went well.** With mixing at four times the move, start 8 goes from 129 to 1,138, and the median rises to 1,563, the highest yet. It beats the page on 5 of 9 starts.
+- **It doesn't rescue a failed search.** Starts 4, 5 and 7 were already low inside the loop, at 435, 128 and 482 against the page's 853 to 926, and they stay below the page. So four times the move remains unreliable, and the page's worst start, 889, is far safer than this one's.
+- **Drawn sub-pixel, the page's own designs get worse,** with a median of 826, and start 3 falls from 1,332 to 350. Neither drawing is what the optimizer saw. It saw grey pixels whose permittivity mixes linearly, which overstates an edge's effect in `H_z` by about twice. Which drawing comes closer is down to luck.
+- **Not adopted.** A higher median with three failures in nine isn't better for a page that runs one start. The 18 unseen starts weren't run.
+
+The gap underneath all of this is the grey pixel's physics. In `H_z`, an edge pixel's correct effective medium is anisotropic: across the edge it's the harmonic mean of `ε`, and along it the arithmetic mean. That's the subpixel smoothing that Farjadpour et al. 2006 use in FDTD. With that in the solver, what the optimizer sees would match a drawn edge, and both the snap and the ×0.5 `grey` factor in `DISORDER` might go. It would need a 2×2 tensor for `p` in each edge pixel, with its normal from the filtered field's slope, in the stiffness and in the adjoint. It's a Rust change, scoped below.
+
+#### Scope: anisotropic averaging for `H_z` pixels, 2026-11-03
+
+An estimate from reading the code, with no prototype behind it.
+
+**The physics.** In `H_z`, `E = (i/k) η R∇H`, with `η = ε⁻¹` and `R` a quarter turn. So the stiffness carries `P = Rᵀ η R`. For a pixel a fraction `φ` filled, with an edge of unit normal `n` and tangent `t`, smoothing as in Farjadpour et al. 2006 averages `ε` for the field along the edge and `1/ε` for the field across it: `η = n nᵀ ⟨1/ε⟩ + t tᵀ / ⟨ε⟩`. After the quarter turn, `P = t tᵀ ⟨1/ε⟩ + n nᵀ / ⟨ε⟩`. Today it's `P = I / ⟨ε⟩` in both directions. Since `⟨1/ε⟩ ≥ 1/⟨ε⟩`, today's pixel is too soft along its edge. Its slope by `ρ` is also spread wrongly. Along the edge it's `-Δε/⟨ε⟩²`, where the tensor's is `1/ε_high − 1/ε_low`. Between 1 and 12, that's 12 times too steep in a nearly empty pixel, and 12 times too shallow in a nearly full one, though both add up to the same change over a whole pixel. That could explain why grey edges misjudge shifts, but the measured ×2 hasn't been derived from it. `E_z` needs nothing, since `q = ⟨ε⟩` is already right for a field along every edge.
+
+**Where it goes.** The normal is the filtered field's slope direction, which only the page knows. So the page would send an angle per pixel, and the solver would build `P` from `ρ` and that angle. The averaging rule is physics, so it belongs in the solver, while the angle's chain rule through the filter and SSP stays in JS, like the rest of the chain.
+
+| Part | What it needs | Lines | Allowing for overrun |
+|---|---|---:|---:|
+| `problem.rs`, `validate.rs` | An optional `normal` angle per pixel, `H_z` only, and its length checked | 10 | 15 |
+| `space.rs` | The cross stiffness `∫ ∂x w ∂y u` for a triangle, as a new method so the `Space` trait and its six callers stay as they are | 15 | 25 |
+| `assemble.rs`, `open.rs` | A cross coefficient in `assemble_split`, which has two callers. `cell_material` builds `P` for a pixel with a normal, and the absorbing layer leaves the cross term alone, since pixels never reach it | 25 | 45 |
+| `adjoint.rs` | The slope by `ρ` through `dP/dφ = t tᵀ Δ⟨1/ε⟩ + n nᵀ Δ(1/⟨ε⟩)`, and a second channel by angle, through `dP/dθ` | 25 | 50 |
+| `dipole.rs` | The emitter reads `η_xx ∂yH − η_xy ∂xH`, which is two more points if an edge crosses the emitter's pixel, and the same in its source slope | 15 | 35 |
+| `driven.rs` | Returning the angle's channel | 5 | 10 |
+| **Solver total** | | **95** | **180** |
+| Tests, Rust | Finite differences for both channels. A straight edge at a fractional position should shift a mode as the drawn edge does, which `moving_an_edge_in_hz_shifts_a_mode_as_perturbation_theory_says` can be extended to check, against today's scalar | 70 | 140 |
+| JS | Each pixel's angle from SSP's own slope, and the chain rule back through its central differences into `x`. Nearly uniform pixels need a smooth fallback to isotropic, so the slope stays continuous | 40 | 70 |
+
+So **about 100 to 180 lines of Rust**, all in the `solve2d` files that the essentials don't read, plus tests, and 40 to 70 of JS. Gratings ran at twice their estimate, which the right column allows for.
+
+**What could make it not pay off.** The averaging is exact to second order only for a flat edge through a pixel. These designs have slots two pixels wide and corners, where it's weaker. Near-uniform grey pixels have no clear normal. And the `H_z` mode search fails on some finer meshes already, which this doesn't touch.
+
+**Recommendation: measure before building.** The averaging alone, with no gradient, is about 40 lines in a throwaway copy of the crate, as `probe-sparse/` did for the solver: `cell_material`, the cross stiffness and the angle field. That answers the real question without changing the optimizer. Rerun the kept designs with `KEEP` storing `x`, then read each optimized design three ways: grey with today's scalar, grey with the tensor, and drawn. If the tensor's reading lands within about 10% of the drawn one, where the scalar's is off by up to 10 times as for start 8, then optimizing with it should close the finish gap, and the rest is worth building. If it doesn't, we've spent about 40 lines finding out. The same probe would check whether `DISORDER`'s `grey: 0.5` becomes 1.
+
+#### The probe, measured 2026-11-03: don't build it
+
+`hz/aniso/tensor.patch` holds the averaging, with no gradient, at 60 added lines against the 40 guessed. It applies to a copy of the crate, with `MAX_DOFS` raised for finer meshes. With no normals given, the solver repeats today's readings exactly.
+
+**On a moved edge, the tensor helps but doesn't match.** `greyedge2.mjs` grows every edge of a finished design by 1 or 2 nm as grey pixels and fits the mode's shift, in % per nm, against the drawn shift measured before:
+
+| Design | Grey, scalar | Grey, tensor | Drawn |
+|---|---:|---:|---:|
+| 1 | 1.65 | 1.07 | 0.79 |
+| 5 | 1.30 | 0.92 | 0.70 |
+
+So it removes about two thirds of the excess, and still overstates by about 1.3 times. Design 4's scalar fit landed on a different mode from before, reading 0.91 rather than 1.69, so it isn't counted.
+
+**On optimized designs, it misses the 10% test.** `aniso3.mjs` reads the last optimized design of each of 18 runs, starts 1 to 9 with the page's step and with mixing at four times the move, kept by `runkeep.sh`. Each is read at its own peak on cells half a pixel wide, four ways: grey with today's scalar, grey with the tensor, the filtered field's 0.5 contour drawn twice as finely, and the page's snapped pixels. The ratios, to the drawn design:
+
+| | Grey, scalar | Grey, tensor |
+|---|---:|---:|
+| LDOS within 10% of drawn | 5 of 18 | 6 of 18 |
+| LDOS within 20% | 7 of 18 | 10 of 18 |
+| Worst ratios | 5.7, 5.1, 4.1 | 4.4, 3.0, 0.21 |
+| Median distance from the drawn peak | 2.5% | 1.2% |
+
+The tensor does halve the error in where the mode sits, which is what the resize after snapping corrects. But that's still about 12 bandwidths at Q 1000, and the LDOS agrees no better than half the time.
+
+**Why: these designs depend on detail finer than any pixel model holds.** Drawings of one grey design disagree with each other. Start 3 of the page's step reads 1,317 snapped, 329 drawn twice as finely, and 272 drawn four times as finely. Drawing twice and four times as finely agree within about 10% on the four designs checked (1,263 and 1,355, 1,054 and 1,033, 2,223 and 2,048), so the finer drawing is near convergence, and it's the grey models that are off, not the drawing. A mode with Q of 10,000 and a shift near 1% per nm needs its edges right to about a nanometre, and a pixel is 44 nm. Neither average gets that close at corners and in slots two pixels wide. That's the same sensitivity that the tolerance results measure, seen from the other side.
+
+**Verdict: don't build the full version.** It would cost 100 to 180 lines of Rust to halve the frequency error, without making the finish reliable. The finish gap is a sensitivity of these designs, not a flaw in the solver's grey pixels. What would address it is what already works: judging by drawn edges, and tuning after fabrication. Possibly also a goal that rewards designs less sensitive at the sub-pixel scale, such as sampling sub-pixel disorder, which the page's robust sampling already does at 2 nm.
 
 ### Vector fields: a line estimate
 

@@ -83,6 +83,8 @@ Inference. $s(\lambda)$ has a breakpoint at $\lambda_j=-g_j/f_j$ for every varia
 - mix $p,q$ coefficients rather than gradients, which makes $x(\lambda)$ continuous; or
 - after bisection, set the one breakpoint variable to its fractional value, which is the LP solution.
 
+Measured 2026-11-03 (see `2d-solver.md`, "Mixing coefficients, and predicting across a stage"). Mixing the coefficients makes the hold exact and runs nearly identical, but it halves the LDOS on nine starts, at a median of 704 against 1,348, because conflicted pixels stop inside their bounds and steps shrink. So the staircase does real work as a search. Adapting the move limit, by a trust-region ratio or by a schedule, didn't recover it. With four times the move, mixing's search does beat the page inside the loop, but snapping the sub-pixel edges to whole pixels loses some designs (see "Adapting the move" there).
+
 ## 8. What's new here, if anything
 
 Not much, and that is fine:
