@@ -154,8 +154,8 @@ wavevectors, so where the nonzeros are stays the same, which the next chapter ex
 ### Example: a lattice of rods
 
 Take a square lattice of rods with $\varepsilon = 12$ and radius $r = 0.2a$, on the **2D band diagram**
-view. This is checked against a plane-wave expansion ([Ho et al. 1990](20-references.md#ho-1990)), in
-`plans/probe-2d/planewave.py`, which shares nothing with this solver. Frequencies are in units of $a/\lambda$,
+view. This is checked against a plane-wave expansion ([Ho et al. 1990](20-references.md#ho-1990)), written
+for this check, which shares nothing with this solver. Frequencies are in units of $a/\lambda$,
 and M1 and X2 mean the first band at M and the second at X:
 
 | Grid (unknowns) | $E_z$ M1 | $E_z$ X2 | $H_z$ M1 | $H_z$ X2 |

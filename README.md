@@ -122,6 +122,7 @@ web/                     The page
   js/app.js              Connects the controls
   learn/                 Tutorial pages, generated from docs/
   learn.js               The code panel beside each tutorial chapter
+  THIRD_PARTY.md         Licences of the libraries compiled into pkg/
 docs/                    The tutorial, in Markdown
 scripts/build-docs.mjs   Turns docs/ into web/learn, with equations as MathML
 scripts/code-index.mjs   Finds the lines each name in the tutorial points at
@@ -160,3 +161,5 @@ Cholesky on band diagrams. `faer` is a dependency of the tests only, as an indep
 
 The code is released under the [MIT License](LICENSE). The tutorial's text in `docs/` is released
 under [CC BY 4.0](docs/LICENSE): reuse it freely, with credit. Code it quotes stays under MIT.
+The libraries compiled into the solver keep their own licences, listed in
+[web/THIRD_PARTY.md](web/THIRD_PARTY.md), which ships with the site. Update it when `Cargo.lock` changes.

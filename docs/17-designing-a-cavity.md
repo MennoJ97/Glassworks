@@ -168,6 +168,6 @@ These results deserve some caution.
 - **The disorder is assumed.** Its spread and correlation length are our choices, not a measured process, and six random draws per start understate the worst cases.
 - **Comparing these at $Q = 1000$ hides differences.** Once a mode's own $Q$ is far above the bandwidth, the LDOS stops growing with it, and is capped near 1,070 here by the mode's volume. That's why we also quote higher bandwidths.
 
-The page designs the unconstrained rod. The clear disc and the disordered goal are experiments, in `plans/probe-tolerance`.
+The page designs the unconstrained rod. The clear disc and the disordered goal were separate experiments, and aren't on it.
 
 Next: [when numbers lie](18-when-numbers-lie.md).
