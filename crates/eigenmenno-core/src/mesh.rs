@@ -154,7 +154,7 @@ impl Mesh {
         (self.coords[2 * v], self.coords[2 * v + 1])
     }
 
-    fn centroid(&self, cell: usize) -> (f64, f64) {
+    pub fn centroid(&self, cell: usize) -> (f64, f64) {
         let c = &self.cells[3 * cell..3 * cell + 3];
         let (x, y) = c.iter().fold((0.0, 0.0), |s, &v| (s.0 + self.vertex(v).0, s.1 + self.vertex(v).1));
         (x / 3.0, y / 3.0)

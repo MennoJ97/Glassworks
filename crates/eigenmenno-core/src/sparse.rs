@@ -9,8 +9,9 @@
 //! its own, though, and then its front has only a poor pivot, even if the whole matrix is
 //! fine. So a front reports any weak pivot, and solves are then refined against the matrix.
 //!
-//! This file has the method itself. Two refinements that a first reading can skip are in
-//! `sparse/`: `symmetric.rs` is faster when `A^T = A`, and `transposed.rs` solves `A^T x = b`.
+//! This file has the method itself. Three refinements that a first reading can skip are in
+//! `sparse/`: `blocked.rs` updates a front in cache-sized blocks, `symmetric.rs` is faster
+//! when `A^T = A`, and `transposed.rs` solves `A^T x = b`.
 
 use crate::assemble::Csr;
 use crate::banded::Factors;
@@ -18,15 +19,15 @@ use crate::{C64, ZERO};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+mod blocked;
 mod symmetric;
 mod transposed;
 
+use blocked::BLOCK;
 use symmetric::partial_ldl;
 
 /// Parts this small are eliminated whole.
 const LEAF: usize = 16;
-/// Columns eliminated together before updating the rest of a front, to stay in cache.
-const BLOCK: usize = 32;
 const REFINEMENT_STEPS: usize = 2;
 
 struct Node {
@@ -172,16 +173,6 @@ thread_local! {
     static LAST: RefCell<Option<(Vec<usize>, Vec<usize>, Rc<Ordering>)>> = const { RefCell::new(None) };
 }
 
-/// `y -= sum(u[q] x[q])`, over four columns at once for speed.
-#[inline]
-fn subtract(y: &mut [C64], x: [&[C64]; 4], u: [C64; 4]) {
-    let n = y.len();
-    let [x0, x1, x2, x3] = [&x[0][..n], &x[1][..n], &x[2][..n], &x[3][..n]];
-    for i in 0..n {
-        y[i] -= u[0] * x0[i] + u[1] * x1[i] + u[2] * x2[i] + u[3] * x3[i];
-    }
-}
-
 /// Eliminates the first `p` of a front's `m` unknowns in place, swapping rows among those `p`.
 /// `f` is column-major. Returns the swaps, and whether any pivot was weak.
 fn partial_lu(f: &mut [C64], m: usize, p: usize, scale: f64) -> (Vec<u32>, bool) {
@@ -219,31 +210,8 @@ fn partial_lu(f: &mut [C64], m: usize, p: usize, scale: f64) -> (Vec<u32>, bool)
                 col[j + 1..].iter_mut().zip(l).for_each(|(y, x)| *y -= u * *x);
             }
         }
-        // Update the later columns from this block.
-        let (left, right) = f.split_at_mut(e * m);
-        for col in right.chunks_exact_mut(m) {
-            for q in k..e {
-                let u = col[q];
-                for i in q + 1..e {
-                    col[i] -= u * left[q * m + i];
-                }
-            }
-            let (head, tail) = col.split_at_mut(e);
-            let mut q = k;
-            while q < e {
-                let take = (e - q).min(4);
-                let at = |o: usize| {
-                    if o < take {
-                        &left[(q + o) * m + e..(q + o + 1) * m]
-                    } else {
-                        &left[q * m + e..(q + 1) * m]
-                    }
-                };
-                let coef = |o: usize| if o < take { head[q + o] } else { ZERO };
-                subtract(tail, [at(0), at(1), at(2), at(3)], [coef(0), coef(1), coef(2), coef(3)]);
-                q += take;
-            }
-        }
+        // Update the later columns from this block, all at once to stay in cache.
+        blocked::update_after(f, m, k, e);
         k = e;
     }
     (swaps, weak)

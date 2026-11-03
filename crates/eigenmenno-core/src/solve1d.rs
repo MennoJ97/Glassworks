@@ -11,8 +11,11 @@
 //! `q = mu`. Multiplying by a test function and integrating by parts gives the
 //! matrices `S` (from `p u' v'`) and `M` (from `u v`) that `assemble` builds.
 
+mod gradient;
+mod validate;
+
 use crate::assemble::{assemble, Csr, DofMap};
-use crate::banded::BandedLu;
+use crate::banded::{BandedLu, Factors};
 use crate::eigen::eigs_near;
 use crate::mesh::Mesh;
 use crate::output::{normalized, FieldMeta, Meta, Output};
@@ -24,8 +27,6 @@ use std::f64::consts::PI;
 const EIG_TOL: f64 = 1e-11;
 /// Field output cap, so huge meshes cannot flood the plot.
 const MAX_FIELD_POINTS: usize = 20_000;
-/// Refuses meshes that would exhaust a browser tab's memory.
-const MAX_DOFS: f64 = 2.0e6;
 
 fn c(v: [f64; 2]) -> C64 {
     C64::new(v[0], v[1])
@@ -131,70 +132,8 @@ impl<'a> Setup<'a> {
     }
 }
 
-fn validate(req: &Request) -> Result<(), String> {
-    let err = |m: &str| Err(m.to_string());
-    let index = |l: &Layer| (c(l.eps) * c(l.mu)).norm().sqrt().max(1.0);
-    if req.layers.is_empty() || req.layers.iter().any(|l| !(l.thickness > 0.0)) {
-        return err("every layer needs a positive thickness");
-    }
-    if !(1..=5).contains(&req.mesh.order) || !(req.mesh.max_cell > 0.0) {
-        return err("element order must be 1 to 5, and cell size positive");
-    }
-    let cells: f64 = req.layers.iter().map(|l| l.thickness * index(l) / req.mesh.max_cell).sum();
-    if cells * req.mesh.order as f64 > MAX_DOFS {
-        return err("this mesh is too fine: lower the resolution or shrink the structure");
-    }
-    let periodic = req.left == Boundary::Periodic;
-    if periodic != (req.right == Boundary::Periodic) {
-        return err("periodic boundaries must be set on both sides");
-    }
-    let open = req.left.is_open() || req.right.is_open();
-    let ok_wl = |w: f64| w > 0.0 && w.is_finite();
-    match &req.analysis {
-        Analysis::Driven { wavelength, source, .. } => {
-            if !ok_wl(*wavelength)
-                || periodic
-                || (matches!(source, Source::PlaneWave) && req.left != Boundary::Port)
-            {
-                return err("driven solves need a positive wavelength, no periodic walls, and a left port for a plane wave");
-            }
-        }
-        Analysis::DrivenGradient { wavelength, .. } => {
-            if !ok_wl(*wavelength) || periodic || req.left != Boundary::Port {
-                return err("gradients need a positive wavelength, no periodic walls, and a left port");
-            }
-        }
-        Analysis::Sweep { wavelengths, .. } => {
-            if !wavelengths.iter().copied().all(ok_wl) || periodic || req.left != Boundary::Port {
-                return err("spectra need positive wavelengths and a port on the left");
-            }
-        }
-        eigen => {
-            if open {
-                return err("eigenmode analyses need closed boundaries: use PEC, PMC or periodic");
-            }
-            if req
-                .layers
-                .iter()
-                .any(|l| l.eps[1] != 0.0 || l.mu[1] != 0.0 || l.eps[0] <= 0.0 || l.mu[0] <= 0.0)
-            {
-                return err("eigenmode analyses support lossless materials only: use a driven solve for loss or metals");
-            }
-            let bad = match eigen {
-                Analysis::Bands { n_k, .. } => !periodic || *n_k < 2,
-                Analysis::Waveguide { wavelength, .. } => periodic || !ok_wl(*wavelength),
-                _ => false,
-            };
-            if bad {
-                return err("band diagrams need periodic walls; waveguides need PEC or PMC walls and a positive wavelength");
-            }
-        }
-    }
-    Ok(())
-}
-
 pub fn solve(req: &Request) -> Result<Output, String> {
-    validate(req)?;
+    validate::validate(req)?;
     let thickness: Vec<f64> = req.layers.iter().map(|l| l.thickness).collect();
     // Scale cells by local index so each layer has the same cells per wavelength.
     let max_cell: Vec<f64> =
@@ -230,7 +169,7 @@ pub fn solve(req: &Request) -> Result<Output, String> {
             let k0 = k0_of(*wavelength);
             let d = driven(&s, k0, *angle_deg, Source::PlaneWave)?;
             s.push_field(&mut out, &d.u, k0, d.kt, None, d.power);
-            power_gradients(&s, k0, &d, &mut out);
+            gradient::power_gradients(&s, k0, &d, &mut out);
         }
         Analysis::Sweep { wavelengths, angle_deg } => {
             let mut series = [vec![], vec![], vec![]];
@@ -345,61 +284,6 @@ fn driven(s: &Setup, k0: f64, angle_deg: f64, source: Source) -> Result<Driven, 
         [r, tr, 1.0 - r - tr]
     });
     Ok(Driven { u, kt, power, lu, t_scale })
-}
-
-/// Adjoint gradients of R, T and A. For a real `J(u)` with `A u = b`,
-/// `dJ/dθ = -2 Re(λᵀ (dA/dθ) u)`, where `Aᵀ λ = dJ/du`. Without periodic walls `A`
-/// is complex symmetric, so the factors of `A` also solve for `λ`, and each output
-/// costs one back-substitution however many layers there are.
-///
-/// Layers at an open end are left out: they also set the angle and the boundary
-/// terms. The result is the exact gradient of the discrete problem on this mesh.
-fn power_gradients(s: &Setup, k0: f64, d: &Driven, out: &mut Output) {
-    let last = s.space.n_dofs() - 1;
-    let adjoint = |dof: usize, g: C64| {
-        let mut x = vec![ZERO; s.dofs.n_free];
-        if let Some((r, _)) = s.dofs.map[dof] {
-            x[r] = g;
-        }
-        d.lu.solve(&mut x);
-        s.dofs.expand(&x)
-    };
-    let dr = layer_sensitivity(s, k0, d, &adjoint(0, (d.u[0] - ONE).conj()));
-    let dt = layer_sensitivity(s, k0, d, &adjoint(last, d.u[last].conj() * d.t_scale));
-    let da: Vec<C64> = dr.iter().zip(&dt).map(|(r, t)| -r - t).collect();
-    let n = s.req.layers.len();
-    let design = 1..if s.req.right.is_open() { n - 1 } else { n };
-    out.channels.push(("layer".into(), design.clone().map(|l| l as f64).collect()));
-    for (name, w) in [("R", &dr), ("T", &dt), ("A", &da)] {
-        // `dε = i dε''` multiplies `λᵀ (dA/dε) u` by `i`, which turns Re into -Im.
-        out.channels.push((format!("d{name}/deps_re"), design.clone().map(|l| -2.0 * w[l].re).collect()));
-        out.channels.push((format!("d{name}/deps_im"), design.clone().map(|l| 2.0 * w[l].im).collect()));
-    }
-}
-
-/// `λᵀ (dA/dε) u` for each layer. The derivative has the usual `a S + b M` form:
-/// TE has `q = ε` in `b = kt^2 p - k0^2 q`, and TM has `p = 1/ε` in both `a` and `b`.
-fn layer_sensitivity(s: &Setup, k0: f64, d: &Driven, lambda: &[C64]) -> Vec<C64> {
-    let n = s.space.local_size();
-    let (mut stiff, mut unused, mut mass, mut dofs) =
-        (vec![0.0; n * n], vec![0.0; n * n], vec![0.0; n * n], vec![0; n]);
-    let mut w = vec![ZERO; s.req.layers.len()];
-    for cell in 0..s.space.n_cells() {
-        s.space.cell_dofs(cell, &mut dofs);
-        s.space.local_matrices(cell, &mut stiff, &mut unused, &mut mass);
-        let (p, _) = s.coef(cell);
-        let (a, b) = match s.req.polarization {
-            Polarization::Te => (ZERO, C64::new(-k0 * k0, 0.0)),
-            Polarization::Tm => (-p * p, -p * p * (d.kt * d.kt)),
-        };
-        for i in 0..n {
-            for j in 0..n {
-                w[s.space.mesh.region[cell]] +=
-                    lambda[dofs[i]] * (a * stiff[i * n + j] + b * mass[i * n + j]) * d.u[dofs[j]];
-            }
-        }
-    }
-    w
 }
 
 /// Adds `amp * v(x)` to the right-hand side: the weak form of a current sheet.

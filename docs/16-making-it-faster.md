@@ -11,6 +11,15 @@ Lanczos, and $L$ has as many entries as $U$. So it was left out. Thinning the se
 for every problem. Measure before you add.
 
 
+## Blocks that stay in cache
+
+Factoring took 77% of a native cavity run, so that's where speed matters. `partial_lu` eliminates a
+front's columns 32 at a time, then updates every later column from all 32 at once, four at a time,
+while they're still in cache. The arithmetic is the same as updating after each column. Other block
+and leaf sizes were slower, and a hand-written SIMD kernel gained nothing, since the compiler already
+vectorizes this loop. The code is in [`sparse/blocked.rs`](../crates/eigenmenno-core/src/sparse/blocked.rs).
+<!-- code: update_after -->
+
 ## When the matrix is symmetric
 
 An absorbing layer's operator is complex symmetric, $A^T = A$, so half of every update to a front repeats the other half. Factoring it as $A = L D L^T$ updates only the lower triangle, which took 54 ms down to 30 ms on a cavity-sized matrix, and a whole cavity design from 16 s to 11 s on the page.

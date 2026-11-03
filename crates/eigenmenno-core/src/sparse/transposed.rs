@@ -3,6 +3,18 @@
 
 use super::{Csr, SparseLu, C64, ZERO};
 
+impl Csr {
+    /// `y = A^T x`, so refinement can check a transposed solve against the matrix.
+    pub fn mul_transposed(&self, x: &[C64], y: &mut [C64]) {
+        y.fill(ZERO);
+        for i in 0..self.n {
+            for k in self.ptr[i]..self.ptr[i + 1] {
+                y[self.col[k]] += self.val[k] * x[i];
+            }
+        }
+    }
+}
+
 impl SparseLu<'_> {
     /// `solve_once` for `A^T`: the transpose of each of its steps, in the opposite order.
     fn solve_transposed_once(&self, rhs: &mut [C64]) {

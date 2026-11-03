@@ -28,16 +28,10 @@ pub(super) fn open_dofs(req: &Request2d, space: &H1Triangle, pml: f64) -> DofMap
     DofMap::new(pos.len(), &zero, &[])
 }
 
-pub(super) fn cell_center(mesh: &Mesh, c: usize) -> (f64, f64) {
-    let v = &mesh.cells[3 * c..3 * c + 3];
-    let (x, y) = v.iter().fold((0.0, 0.0), |s, &i| (s.0 + mesh.vertex(i).0, s.1 + mesh.vertex(i).1));
-    (x / 3.0, y / 3.0)
-}
-
 /// The pixel of `req.density` holding a cell on an extended mesh, if any.
 pub(super) fn pixel_of(req: &Request2d, mesh: &Mesh, pml: f64, c: usize) -> Option<usize> {
     let d = req.density.as_ref()?;
-    let p = cell_center(mesh, c);
+    let p = mesh.centroid(c);
     let (u, v) = ((p.0 - side_layer(req, pml) - d.x0) / d.width, (p.1 - pml - d.y0) / d.height);
     ((0.0..1.0).contains(&u) && (0.0..1.0).contains(&v))
         .then(|| (v * d.ny as f64) as usize * d.nx + (u * d.nx as f64) as usize)
@@ -99,7 +93,7 @@ pub(super) fn stretched_matrix(
     };
     let t = assemble_split(space, dofs, |c| {
         let (p, q) = cell_material(req, space.mesh, coef, pml, c);
-        let (x, y) = cell_center(space.mesh, c);
+        let (x, y) = space.mesh.centroid(c);
         let (sx, sy) = (stretch(x, req.width, side_layer(req, pml)), stretch(y, req.height, pml));
         (p * sy / sx, p * sx / sy, -k0 * k0 * q * sx * sy)
     });

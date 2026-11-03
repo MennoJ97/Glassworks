@@ -1,7 +1,7 @@
 //! Native timings: `cargo run --release -p eigenmenno-core --example bench`.
 
 use eigenmenno_core::assemble::{assemble, Csr, DofMap};
-use eigenmenno_core::banded::BandedLu;
+use eigenmenno_core::banded::{BandedLu, Factors};
 use eigenmenno_core::mesh::Mesh;
 use eigenmenno_core::problem::{Analysis, Boundary, Layer, MeshSpec, Polarization, Request};
 use eigenmenno_core::solve1d::solve;

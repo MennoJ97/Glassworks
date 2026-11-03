@@ -3,7 +3,8 @@
 //! `A = L D L^T`. Refinement covers its weak pivots, and a pivot too small to trust falls back
 //! to the pivoted `factor`. Chapter 16 has the measurements.
 
-use super::{subtract, Csr, Ordering, SparseLu, BLOCK, C64, ZERO};
+use super::blocked::{subtract, BLOCK};
+use super::{Csr, Ordering, SparseLu, C64, ZERO};
 
 impl<'a> SparseLu<'a> {
     /// For `A^T = A`. About half the cost of `factor`, with the same accuracy after refinement.

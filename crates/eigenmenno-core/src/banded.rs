@@ -108,11 +108,6 @@ impl BandedLu {
         }
         Ok(Self { n, b, ld, ab, piv, perm })
     }
-
-    /// Solves `A x = rhs` in place.
-    pub fn solve(&self, rhs: &mut [C64]) {
-        Factors::solve(self, rhs)
-    }
 }
 
 impl Factors for BandedLu {

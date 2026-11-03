@@ -2,8 +2,9 @@
 
 This tutorial explains the finite element method (FEM) using Eigenmenno's own
 source code. Each chapter takes one idea, derives it, and points at the few lines
-that implement it. The essentials are about 3,000 lines of Rust, so you can read
-all of them. The 1D chapters cover about 1,200 of those.
+that implement it. The essentials are about 2,500 lines of Rust, so you can read
+all of them. The 1D chapters cover about 900 of those. Another 500 lines turn requests
+into structs, check them and package the results, and you can look those up when needed.
 
 You need calculus (integration by parts) and basic linear algebra (matrices,
 eigenvalues). Knowing Maxwell's equations helps but isn't required, because
@@ -53,9 +54,11 @@ The [references](20-references.md) list every source cited in the chapters.
 
 The files follow the chapters. Whatever only a Going further chapter needs has a file of its own, so the essentials read straight through.
 
+Some files are for looking up rather than reading: [`problem.rs`](../crates/eigenmenno-core/src/problem.rs) defines the requests, [`output.rs`](../crates/eigenmenno-core/src/output.rs) what a solve returns, and `solve1d/validate.rs` and [`solve2d/validate.rs`](../crates/eigenmenno-core/src/solve2d/validate.rs) check a request before any work starts.
+
 | Chapter | Source file |
 |---|---|
-| 1, 7 | [`solve1d.rs`](../crates/eigenmenno-core/src/solve1d.rs), which fills in [`output.rs`](../crates/eigenmenno-core/src/output.rs) |
+| 1, 7 | [`solve1d.rs`](../crates/eigenmenno-core/src/solve1d.rs) |
 | 3, 9 | [`mesh.rs`](../crates/eigenmenno-core/src/mesh.rs), [`space.rs`](../crates/eigenmenno-core/src/space.rs) |
 | 4 | [`assemble.rs`](../crates/eigenmenno-core/src/assemble.rs) |
 | 5 | [`banded.rs`](../crates/eigenmenno-core/src/banded.rs) |
@@ -66,11 +69,11 @@ The files follow the chapters. Whatever only a Going further chapter needs has a
 | 10 | [`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) |
 | 11 | [`solve2d/open.rs`](../crates/eigenmenno-core/src/solve2d/open.rs), [`solve2d/leaky.rs`](../crates/eigenmenno-core/src/solve2d/leaky.rs) |
 | 12 | [`solve2d/driven.rs`](../crates/eigenmenno-core/src/solve2d/driven.rs) |
-| 13 | [`solve2d/adjoint.rs`](../crates/eigenmenno-core/src/solve2d/adjoint.rs), and on the website, `web/js/optimizer.js` and `web/js/design.js` |
+| 13 | [`solve2d/adjoint.rs`](../crates/eigenmenno-core/src/solve2d/adjoint.rs), and on the website, `web/js/optimizer.js` and `web/js/design.js`. The website's 1D mirror designer uses [`solve1d/gradient.rs`](../crates/eigenmenno-core/src/solve1d/gradient.rs), the same adjoint for layers |
 
 | Going further | Source file |
 |---|---|
 | 15 | [`solve2d/grating.rs`](../crates/eigenmenno-core/src/solve2d/grating.rs), [`sparse/transposed.rs`](../crates/eigenmenno-core/src/sparse/transposed.rs), [`tests/gratings.rs`](../crates/eigenmenno-core/tests/gratings.rs) |
-| 16 | [`sparse/symmetric.rs`](../crates/eigenmenno-core/src/sparse/symmetric.rs) |
+| 16 | [`sparse/symmetric.rs`](../crates/eigenmenno-core/src/sparse/symmetric.rs), [`sparse/blocked.rs`](../crates/eigenmenno-core/src/sparse/blocked.rs) |
 | 17 | `web/js/cavity-design.js`, on the website rather than in the solver |
 | 19 | [`solve2d/dipole.rs`](../crates/eigenmenno-core/src/solve2d/dipole.rs), [`tests/hz_design.rs`](../crates/eigenmenno-core/tests/hz_design.rs), and on the website, `web/js/hz-design.js` |

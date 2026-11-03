@@ -2,7 +2,7 @@
 //! below. The ties cost it `A^T = A`, so its adjoint needs a transposed solve.
 
 use super::adjoint::pixel_slopes;
-use super::open::{cell_center, open_mesh, open_output, stretched_matrix};
+use super::open::{open_mesh, open_output, stretched_matrix};
 use super::{coefficients, free_positions, grid_size, steps_in};
 use crate::assemble::DofMap;
 use crate::banded::Factors;
@@ -47,7 +47,7 @@ fn bloch_dofs(req: &Request2d, space: &H1Triangle, pml: f64, phase: f64) -> Resu
 /// its cell, and the basis there.
 fn line_points(req: &Request2d, space: &H1Triangle, y: f64) -> Result<Vec<(f64, usize, [f64; 6])>, String> {
     let near: Vec<usize> =
-        (0..space.n_cells()).filter(|&c| (cell_center(space.mesh, c).1 - y).abs() < 4.0 * req.cell).collect();
+        (0..space.n_cells()).filter(|&c| (space.mesh.centroid(c).1 - y).abs() < 4.0 * req.cell).collect();
     let steps = steps_in(req.width, req.cell / 4.0);
     (0..steps)
         .map(|i| {

@@ -2,9 +2,7 @@
 
 use super::adjoint::density_gradient;
 use super::dipole;
-use super::open::{
-    cell_center, cell_load, line_response, open_dofs, open_matrix, open_mesh, open_output, point_load,
-};
+use super::open::{cell_load, line_response, open_dofs, open_matrix, open_mesh, open_output, point_load};
 use super::{coefficients, free_positions, steps_in};
 use crate::assemble::DofMap;
 use crate::banded::Factors;
@@ -136,7 +134,7 @@ fn port(
     let mut rhs = vec![ZERO; dofs.n_free];
     // Only cells near the port need searching.
     let near: Vec<usize> = (0..space.n_cells())
-        .filter(|&c| (cell_center(space.mesh, c).0 - pml - x).abs() < 4.0 * req.cell)
+        .filter(|&c| (space.mesh.centroid(c).0 - pml - x).abs() < 4.0 * req.cell)
         .collect();
     for pair in profile.windows(2).filter(|w| w[1].0 > w[0].0) {
         let y = (pair[0].0 + pair[1].0) / 2.0;
@@ -217,7 +215,7 @@ fn monitor_power(
             // Only cells near the strip need searching.
             let near: Vec<usize> = (0..space.n_cells())
                 .filter(|&c| {
-                    let p = cell_center(space.mesh, c);
+                    let p = space.mesh.centroid(c);
                     let (rx, ry) = (p.0 - pml - m.x0, p.1 - pml - m.y0);
                     let along = (rx * dx + ry * dy) / length;
                     (rx * nx + ry * ny).abs() < 4.0 * cell

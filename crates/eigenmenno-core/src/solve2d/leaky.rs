@@ -1,7 +1,7 @@
 //! Leaky modes of an open domain, found from the poles of a line source's response.
 
 use super::dipole;
-use super::open::{cell_center, line_response, open_dofs, open_matrix, open_mesh, open_output, point_load};
+use super::open::{line_response, open_dofs, open_matrix, open_mesh, open_output, point_load};
 use super::{coefficients, free_positions, mode_volume};
 use crate::output::{normalized, FieldMeta, Output};
 use crate::problem::Request2d;
@@ -54,7 +54,7 @@ pub(super) fn solve(
             }
             let u = normalized(dofs.expand(&u));
             let inside = |c: usize| {
-                let p = cell_center(&mesh, c);
+                let p = mesh.centroid(c);
                 p.0 > pml && p.1 > pml && p.0 < pml + req.width && p.1 < pml + req.height
             };
             let meta = FieldMeta {
