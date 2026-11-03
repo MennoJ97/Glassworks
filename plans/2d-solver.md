@@ -1157,9 +1157,9 @@ WebAssembly can address 4 GB, so 384 pixels is its limit. `hz/native.mjs` drives
 | 64 | 6 | 1,336 (918 to 1,709) | |
 | 128 | 9 | 1,705 (881 to 2,548) | 4 of 6 |
 | 256 | 7 | 1,999 (781 to 2,922) | 5 of 6 |
-| 384 | 1 | running when this was written | |
+| 384 | 1 | 1,143 (start 1 only) | 0 of 1 |
 
-So smaller pixels find better designs, by about 1.3 times at 128 and 1.5 times at 256, with as wide a spread as ever. The best reach mode Q of 25,000 to 39,000. Finer pixels allow finer slots and edges, which `H_z` rewards, as before. They're no easier to make, and each 256-pixel run took about 45 minutes in Node, against 2.5 minutes on the page's pixels.
+So smaller pixels find better designs, by about 1.3 times at 128 and 1.5 times at 256, with as wide a spread as ever. The one run at 384 pixels, on cells of λ/144, took 2.8 hours and 9.3 GB. Inside its loop it reached 1,989 at the last stage's bandwidth, the highest of any run, where the 64-pixel runs reach about 860. But it finished at 1,143, with a mode Q of only 437. So the finish lost it, as it lost designs from larger moves earlier, even though snapping to pixels of 7 nm moves an edge by at most 3.7 nm. One start says little either way. The best reach mode Q of 25,000 to 39,000. Finer pixels allow finer slots and edges, which `H_z` rewards, as before. They're no easier to make, and each 256-pixel run took about 45 minutes in Node, against 2.5 minutes on the page's pixels.
 
 ### Vector fields: a line estimate
 
