@@ -10,8 +10,8 @@ neighbours are next to it, so little happens.
 
 A 2D mesh of $N$ unknowns is about $\sqrt{N}$ nodes across. Even after chapter 5's reordering, the
 band can't be narrower than that, and it fills in completely. So a banded factorization stores about
-$N^{3/2}$ entries and costs about $N^2$ operations. At 40,000 unknowns it took 9.7 s and 1.5 GB, and
-160,000 needed 12 GB, far more than this page can give it.
+$N^{3/2}$ entries and costs about $N^2$ operations. At 40,000 unknowns it took 10 s and 1.5 GB, natively
+on an Apple M4 Pro, and 160,000 needed 12 GB, far more than this page can give it.
 
 ## Nested dissection
 

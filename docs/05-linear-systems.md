@@ -53,21 +53,21 @@ folds flat, with both sides of the ring numbered alternately, giving a bandwidth
 
 Here's our banded LU against [`faer`](https://docs.rs/faer), an excellent
 general-purpose sparse library, on the same 1D complex matrix. These are native,
-single-threaded timings from `cargo run --release -p eigenmenno-core --example bench`.
+single-threaded timings on an Apple M4 Pro, the median of three runs of `cargo run --release -p eigenmenno-core --example bench`.
 They vary between runs, so treat them as rough:
 
 | Unknowns | Order | Banded LU | `faer` sparse LU |
 |---|---|---|---|
-| 100,000 | 1 | 8 ms | 16 ms |
-| 1,000,000 | 1 | 97 ms | 190 ms |
-| 1,000,000 | 4 | 164 ms | 265 ms |
+| 100,000 | 1 | 8 ms | 15 ms |
+| 1,000,000 | 1 | 65 ms | 142 ms |
+| 1,000,000 | 4 | 111 ms | 175 ms |
 
 A specialised solver beats a general one here because it needs no symbolic analysis
 of the sparsity. That's specific to 1D, though. In 2D, the bandwidth of a mesh with
 $N$ unknowns grows like $\sqrt{N}$, so the cost becomes $O(N^2)$, and fill-reducing
 sparse solvers win by a wide margin ([George 1973](20-references.md#george-1973)). Chapter 10 covers that switch.
 
-In the browser, a complete driven solve with a million unknowns took 217 ms on an
-Apple M4 Pro, including assembly. Expect a slower result on a phone.
+In the browser, a complete driven solve with a million unknowns took 158 ms on the same
+machine, including assembly. Expect a slower result on a phone.
 
 Next: [eigenproblems](06-eigenproblems.md).

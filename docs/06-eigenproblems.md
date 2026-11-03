@@ -113,8 +113,8 @@ nothing closer than the current $k$-th best mode. The test
 Lanczos converges quickly when the wanted eigenvalues are well separated. A guided
 mode close to cutoff in a wide cladding is the bad case: it sits among a dense cluster
 of *box modes*, which are artefacts of closing the domain with walls. Those need a
-large basis. A waveguide with 20 µm of cladding took 454 ms for only 2,119 unknowns,
-compared with 23 ms for a 2,799-unknown resonance problem.
+large basis. In the browser on an Apple M4 Pro, a waveguide with 20 µm of cladding took 187 ms for
+only 1,431 unknowns, against 8 ms for the resonances of the same layers on the same mesh.
 <!-- code: MAX_BASIS -->
 
 The standard fix is **thick restarting**, as in Krylov-Schur, which bounds the basis
