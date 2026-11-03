@@ -51,17 +51,17 @@ through a straight guide:
 |---|---:|---:|
 | Guided band at $k = 0$ | 0.312 | 0.312 |
 | Top of the gap, reached at $k = 0.38$ | 0.443 | 0.445 |
-| Sharp bend at $\omega = 0.353$ | 98% at most | 97.8% |
-| Sharp bend at $\omega = 0.392$ | over 95% | 96.6% |
-| Sharp bend at $\omega = 0.403$ | about 95% | 95.8% |
-| Sharp bend at $\omega = 0.42$, read from their figure | about 90% | 90.7% |
+| Sharp bend at $\omega = 0.353$ | 98% at most, over the gap | 97.8% |
+| Sharp bend at $\omega = 0.392$ and $0.403$ | over 95% below $\omega = 0.403$ | 96.6% and 95.8% |
+| Sharp bend at $\omega = 0.42$ | about 90%, from their Fig. 4 | 90.7% |
 | Stepped bend at $\omega = 0.353$ | 100% | 99.8% |
 | Slab of index 3.5, sharp bend | 30% at most | 23% |
 <!-- code: guided_band_matches_mekis "band(0.0, 0.312)" .. "band(0.38, 0.443)" -->
 <!-- code: sharp_bends_transmit_as_in_mekis "close(transmission(Guide::Sharp, 0.353)" .. "close(transmission(Guide::Stepped" -->
 <!-- code: a_sharp_bend_in_a_slab_loses_most_of_its_power -->
 
-Frequencies are in units of $a/\lambda$. They computed these with a time-domain method, so the agreement is
+Frequencies are in units of $a/\lambda$. The paper states the band, the 100% and the bounds in its text. The
+90% is read off its plot of reflection, so it is good to a few percent. They computed these with a time-domain method, so the agreement is
 between two quite different solvers. The slab row is the weakest: they don't give that guide's width, so this
 uses a width of $0.143\lambda$, from their other bend. Thinner slabs do exceed 30%, reaching 57% at $0.06\lambda$,
 because the mode is then mostly in the air. A wider monitor also collects some of the radiated light, which
