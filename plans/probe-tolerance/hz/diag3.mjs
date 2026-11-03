@@ -2,8 +2,8 @@
 // at Q 1000, against the finished design. Usage: node diag3.mjs <tag> <seed>
 import { readFileSync } from 'node:fs';
 const S = process.cwd();
-const g = await import(`${S}/pkg/eigenmenno_wasm.js`);
-g.initSync({ module: readFileSync(`${S}/pkg/eigenmenno_wasm_bg.wasm`) });
+const g = await import(`${S}/pkg/glassworks_wasm.js`);
+g.initSync({ module: readFileSync(`${S}/pkg/glassworks_wasm_bg.wasm`) });
 const { defaultState } = await import(`${S}/rob3/web/js/model.js`);
 const { cavityRequest } = await import(`${S}/rob3/web/js/cavity-design.js`);
 const one = (r) => { const x = g.solve_2d(JSON.stringify(r)); const meta = JSON.parse(x.meta()); x.free(); return meta.fields[0]; };

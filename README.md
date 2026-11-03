@@ -1,4 +1,4 @@
-# Eigenmenno
+# Glassworks
 
 A small finite element solver for Maxwell eigenmode and driven problems. It runs
 entirely in the visitor's browser, so a website hosting it only serves static files
@@ -55,7 +55,7 @@ brew install rustup && $(brew --prefix rustup)/bin/rustup toolchain install stab
 ## Test it
 
 ```bash
-cargo test --release -p eigenmenno-core
+cargo test --release -p glassworks-core
 ```
 
 The optimizer has its own tests, which need the build above:
@@ -65,7 +65,7 @@ npm test
 ```
 
 ```bash
-cargo run --release -p eigenmenno-core --example bench
+cargo run --release -p glassworks-core --example bench
 ```
 
 ## Put it on a website
@@ -85,7 +85,7 @@ and nothing on the site links to it.
 ## How it fits together
 
 ```text
-crates/eigenmenno-core   The solver, with no browser dependencies
+crates/glassworks-core   The solver, with no browser dependencies
   mesh.rs                Geometry
   space.rs               Elements (the Space trait is the 2D extension point)
   assemble.rs            Sparse matrices and boundary constraints
@@ -109,7 +109,7 @@ crates/eigenmenno-core   The solver, with no browser dependencies
   solve2d/grating.rs     Periodic gratings and their diffraction orders
   solve2d/dipole.rs      An in-plane electric dipole, for H_z cavities
   solve2d/validate.rs    Checks on a request
-crates/eigenmenno-wasm   The thin browser interface
+crates/glassworks-wasm   The thin browser interface
 web/                     The page
   worker.js              Runs the solver off the main thread
   js/model.js            Geometry, examples, and building solver requests

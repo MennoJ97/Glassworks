@@ -32,7 +32,7 @@ coefficients a physical meaning: $u_i$ is just the value of the field at node $i
 Neighbouring cells share their end node, and that one shared unknown is what makes
 the field continuous across the boundary. Continuity is built into the basis.
 
-In [`space.rs`](../crates/eigenmenno-core/src/space.rs), the numbering is simply
+In [`space.rs`](../crates/glassworks-core/src/space.rs), the numbering is simply
 `cell * order + i`. Shared end nodes get the same number automatically, and the
 matrix ends up banded, with neighbours close together.
 <!-- code: H1Line::cell_dofs -->

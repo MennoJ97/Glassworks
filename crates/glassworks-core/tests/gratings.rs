@@ -4,9 +4,9 @@
 mod common;
 
 use common::{channel, close};
-use eigenmenno_core::mesh::Outline;
-use eigenmenno_core::output::Output;
-use eigenmenno_core::problem::{
+use glassworks_core::mesh::Outline;
+use glassworks_core::output::Output;
+use glassworks_core::problem::{
     Analysis2d, Boundary, Density, Material, OrderGoal, Polarization, Request2d, Shape,
 };
 
@@ -62,7 +62,7 @@ fn a_flat_interface_at_an_angle_matches_fresnel() {
         let mut r = grating_request(1.0, 0.375, angle, pol, 1.0 / 40.0, 1.0);
         r.shapes.truncate(1);
         r.width = 0.5;
-        let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+        let o = glassworks_core::solve2d::solve(&r).unwrap();
         let (cos_i, sin_i) = ((angle as f64).to_radians().cos(), (angle as f64).to_radians().sin());
         let cos_t = (1.0 - (sin_i / 1.5f64).powi(2)).sqrt();
         let amplitude = if pol == Polarization::Te {
@@ -84,7 +84,7 @@ fn a_grating_matches_the_fourier_modal_method() {
         (Polarization::Tm, [0.010134, 0.047082, 0.123978], [0.055278, 0.168438, 0.265488, 0.329601]),
     ];
     for (pol, reflected, transmitted) in expected {
-        let o = eigenmenno_core::solve2d::solve(&grating_request(2.5, 0.975, 20.0, pol, 1.0 / 80.0, 1.0))
+        let o = glassworks_core::solve2d::solve(&grating_request(2.5, 0.975, 20.0, pol, 1.0 / 80.0, 1.0))
             .unwrap();
         let (r, t) = (grating_orders(&o, "reflected"), grating_orders(&o, "transmitted"));
         assert_eq!(r.iter().map(|e| e.0).collect::<Vec<_>>(), [-2, -1, 0]);
@@ -98,7 +98,7 @@ fn a_grating_matches_the_fourier_modal_method() {
 #[test]
 fn a_symmetric_grating_mirrors_its_orders() {
     let solve = |angle| {
-        eigenmenno_core::solve2d::solve(&grating_request(
+        glassworks_core::solve2d::solve(&grating_request(
             1.5,
             1.125,
             angle,
@@ -135,7 +135,7 @@ fn scaling_a_grating_with_its_wavelength_changes_nothing() {
             transmit_y: 0.25 * scale,
             goal: None,
         };
-        channel(&eigenmenno_core::solve2d::solve(&r).unwrap(), "transmitted").to_vec()
+        channel(&glassworks_core::solve2d::solve(&r).unwrap(), "transmitted").to_vec()
     };
     shares(1.0).iter().zip(shares(2.833)).for_each(|(a, b)| close(*a, b, 1e-9));
 }
@@ -170,11 +170,11 @@ fn a_grating_gradient_matches_finite_differences() {
             r
         };
         let value = |rho: &[f64]| {
-            let o = eigenmenno_core::solve2d::solve(&make(rho)).unwrap();
+            let o = glassworks_core::solve2d::solve(&make(rho)).unwrap();
             share(&grating_orders(&o, if transmitted { "transmitted" } else { "reflected" }), order)
         };
         let rho = [0.2, 0.7, 0.9, 0.4, 0.1, 0.6, 0.8, 0.3, 0.5, 0.15, 0.65, 0.35];
-        let o = eigenmenno_core::solve2d::solve(&make(&rho)).unwrap();
+        let o = glassworks_core::solve2d::solve(&make(&rho)).unwrap();
         let gradient = channel(&o, "gradient");
         for pixel in [0, 3, 7, 10] {
             let (mut up, mut down) = (rho, rho);
@@ -203,7 +203,7 @@ fn a_grating_refuses_lines_it_cannot_read() {
             transmit_y,
             goal: None,
         };
-        eigenmenno_core::solve2d::solve(&r).map(|_| ()).unwrap_err()
+        glassworks_core::solve2d::solve(&r).map(|_| ()).unwrap_err()
     };
     assert!(lines(1.0, 1.25, 0.25).contains("in order"));
     assert!(lines(1.26, 1.25, 0.25).contains("wavelengths above"));
@@ -214,7 +214,7 @@ fn a_grating_refuses_lines_it_cannot_read() {
         let mut r = grating_request(1.5, 1.125, 0.0, Polarization::Te, 1.0 / 20.0, 1.0);
         let outline = Outline::Rect { x0, y0: 1.5, x1, y1: 1.7 };
         r.shapes.push(Shape { outline, material: Material { eps: 4.0, mu: 1.0 } });
-        eigenmenno_core::solve2d::solve(&r).map(|_| ()).unwrap_err()
+        glassworks_core::solve2d::solve(&r).map(|_| ()).unwrap_err()
     };
     assert!(crossing(0.1, 0.4).contains("uniform"));
     assert!(crossing(-1.0, 2.5).contains("one material"));

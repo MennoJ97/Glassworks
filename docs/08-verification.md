@@ -6,22 +6,22 @@ checks turned up while it was being built.
 
 ## Test against exact results, not stored numbers
 
-Each test in [`tests/analytic.rs`](../crates/eigenmenno-core/tests/analytic.rs)
+Each test in [`tests/analytic.rs`](../crates/glassworks-core/tests/analytic.rs)
 compares against an independently known answer:
 
 | Test | What it's compared to |
 |---|---|
-| [Cavity modes](../crates/eigenmenno-core/tests/analytic.rs "pec_cavity_matches_mode_formula") | $k_0 = m\pi/L$ |
-| [Layered cavity](../crates/eigenmenno-core/tests/analytic.rs "layered_cavity_satisfies_transcendental_equation") | The transcendental equation from matching fields at the interface |
-| [Bragg stack bands](../crates/eigenmenno-core/tests/analytic.rs "bloch_bands_satisfy_bragg_stack_dispersion") | The analytic Bloch dispersion relation ([Yeh et al. 1977](20-references.md#yeh-1977)) |
-| [Degenerate Bloch modes](../crates/eigenmenno-core/tests/analytic.rs "bloch_modes_of_uniform_medium_include_degenerate_pairs") | The double modes of a uniform medium |
-| [Slab waveguide, TE and TM](../crates/eigenmenno-core/tests/analytic.rs "slab_waveguide_te_and_tm_satisfy_dispersion") | The slab dispersion equations ([Yariv & Yeh 2007](20-references.md#yariv-yeh-2007)) |
-| [Single interface at 40°](../crates/eigenmenno-core/tests/analytic.rs "single_interface_matches_fresnel_at_oblique_incidence") | The Fresnel equations ([Born & Wolf 1999](20-references.md#born-wolf-1999)) |
-| [Multilayer spectrum](../crates/eigenmenno-core/tests/analytic.rs "multilayer_spectrum_matches_transfer_matrix"), [lossy layers](../crates/eigenmenno-core/tests/analytic.rs "lossy_layer_absorbs_and_matches_transfer_matrix") | A [separately written transfer-matrix calculation](../crates/eigenmenno-core/tests/analytic.rs "transfer_matrix") ([Yeh 2005](20-references.md#yeh-2005)) |
-| [Current sheet](../crates/eigenmenno-core/tests/analytic.rs "line_source_radiates_the_free_space_green_function") | The free-space solution |
-| [$E$ and $H$ fields](../crates/eigenmenno-core/tests/analytic.rs "derived_fields_satisfy_faraday_in_a_cavity") | $E_y = \sin\pi x$ and $\eta_0 H_z = -i\cos\pi x$ in a cavity |
+| [Cavity modes](../crates/glassworks-core/tests/analytic.rs "pec_cavity_matches_mode_formula") | $k_0 = m\pi/L$ |
+| [Layered cavity](../crates/glassworks-core/tests/analytic.rs "layered_cavity_satisfies_transcendental_equation") | The transcendental equation from matching fields at the interface |
+| [Bragg stack bands](../crates/glassworks-core/tests/analytic.rs "bloch_bands_satisfy_bragg_stack_dispersion") | The analytic Bloch dispersion relation ([Yeh et al. 1977](20-references.md#yeh-1977)) |
+| [Degenerate Bloch modes](../crates/glassworks-core/tests/analytic.rs "bloch_modes_of_uniform_medium_include_degenerate_pairs") | The double modes of a uniform medium |
+| [Slab waveguide, TE and TM](../crates/glassworks-core/tests/analytic.rs "slab_waveguide_te_and_tm_satisfy_dispersion") | The slab dispersion equations ([Yariv & Yeh 2007](20-references.md#yariv-yeh-2007)) |
+| [Single interface at 40°](../crates/glassworks-core/tests/analytic.rs "single_interface_matches_fresnel_at_oblique_incidence") | The Fresnel equations ([Born & Wolf 1999](20-references.md#born-wolf-1999)) |
+| [Multilayer spectrum](../crates/glassworks-core/tests/analytic.rs "multilayer_spectrum_matches_transfer_matrix"), [lossy layers](../crates/glassworks-core/tests/analytic.rs "lossy_layer_absorbs_and_matches_transfer_matrix") | A [separately written transfer-matrix calculation](../crates/glassworks-core/tests/analytic.rs "transfer_matrix") ([Yeh 2005](20-references.md#yeh-2005)) |
+| [Current sheet](../crates/glassworks-core/tests/analytic.rs "line_source_radiates_the_free_space_green_function") | The free-space solution |
+| [$E$ and $H$ fields](../crates/glassworks-core/tests/analytic.rs "derived_fields_satisfy_faraday_in_a_cavity") | $E_y = \sin\pi x$ and $\eta_0 H_z = -i\cos\pi x$ in a cavity |
 
-[`tests/cross_check.rs`](../crates/eigenmenno-core/tests/cross_check.rs) also compares
+[`tests/cross_check.rs`](../crates/glassworks-core/tests/cross_check.rs) also compares
 the handwritten LUs and Lanczos against `faer`, used only in tests as an independent
 reference.
 

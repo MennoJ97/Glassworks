@@ -34,7 +34,7 @@ so `BandedLu::factor` reports it as an error.
 
 Swapping rows can push entries above the original band, up to $2b$: a row swapped up
 from as far as $b$ rows below reaches $b$ columns past its own diagonal. The storage in
-[`banded.rs`](../crates/eigenmenno-core/src/banded.rs) keeps a column of $3b + 1$
+[`banded.rs`](../crates/glassworks-core/src/banded.rs) keeps a column of $3b + 1$
 entries to leave room, the same layout LAPACK uses
 ([Anderson et al. 1999](20-references.md#anderson-1999)). Entry $(i, j)$ is stored at
 row $2b + i - j$ of column $j$. The diagonal sits at row $2b$, $L$ in the $b$ rows
@@ -78,7 +78,7 @@ in and undoes it on the way out.
 
 Here's our banded LU against [`faer`](https://docs.rs/faer), an excellent
 general-purpose sparse library, on the same 1D complex matrix. These are native,
-single-threaded timings on an Apple M4 Pro, the median of three runs of `cargo run --release -p eigenmenno-core --example bench`.
+single-threaded timings on an Apple M4 Pro, the median of three runs of `cargo run --release -p glassworks-core --example bench`.
 They vary between runs, so treat them as rough:
 
 | Unknowns | Order | Banded LU | `faer` sparse LU |

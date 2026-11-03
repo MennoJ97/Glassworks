@@ -1,6 +1,6 @@
 # Third-party notices
 
-The solver in `pkg/` is compiled from Eigenmenno's own Rust code together with the libraries
+The solver in `pkg/` is compiled from the Rust code of Glassworks together with the libraries
 below. Each is used under the MIT License, which all of them offer, alone or as one of
 their choices. Its text follows the list.
 

@@ -6,8 +6,8 @@
 //! Pivoting stays inside each front's own unknowns, with no delayed pivots. A pivot too small
 //! to use is replaced, and iterative refinement corrects for that.
 
-use eigenmenno_core::assemble::Csr;
-use eigenmenno_core::C64;
+use glassworks_core::assemble::Csr;
+use glassworks_core::C64;
 
 const ZERO: C64 = C64::new(0.0, 0.0);
 const LEAF: usize = 16;

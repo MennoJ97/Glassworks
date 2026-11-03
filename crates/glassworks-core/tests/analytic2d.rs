@@ -3,16 +3,16 @@
 mod common;
 
 use common::{cavity, channel, close, layer, request};
-use eigenmenno_core::assemble::Csr;
-use eigenmenno_core::banded::Factors;
-use eigenmenno_core::mesh::{Mesh, Outline};
-use eigenmenno_core::output::Output;
-use eigenmenno_core::problem::{
+use glassworks_core::assemble::Csr;
+use glassworks_core::banded::Factors;
+use glassworks_core::mesh::{Mesh, Outline};
+use glassworks_core::output::Output;
+use glassworks_core::problem::{
     Analysis2d, Boundary, Density, Material, Monitor, Polarization, Request2d, Shape, Source2d,
 };
-use eigenmenno_core::solve1d::solve;
-use eigenmenno_core::sparse::{Ordering, SparseLu};
-use eigenmenno_core::C64;
+use glassworks_core::solve1d::solve;
+use glassworks_core::sparse::{Ordering, SparseLu};
+use glassworks_core::C64;
 use std::f64::consts::PI;
 
 fn rods(cell: f64, pol: Polarization, analysis: Analysis2d) -> Request2d {
@@ -35,7 +35,7 @@ fn rods(cell: f64, pol: Polarization, analysis: Analysis2d) -> Request2d {
 
 /// Frequency `a / lambda` of the lowest modes of the rod lattice at one Bloch phase.
 fn rod_bands(cell: f64, pol: Polarization, bloch: [f64; 2]) -> Vec<f64> {
-    let o = eigenmenno_core::solve2d::solve(&rods(
+    let o = glassworks_core::solve2d::solve(&rods(
         cell,
         pol,
         Analysis2d::Cavity { n_modes: 3, bloch, target_k0: None },
@@ -92,13 +92,13 @@ fn rectangular_cavity_matches_mode_formula() {
     };
     let k2 = |m: f64, n: f64| PI * PI * (m * m + n * n / 2.25);
     // E_z vanishes on a perfect conductor, so the mode numbers start from 1.
-    let ez = eigenmenno_core::solve2d::solve(&box_of(Polarization::Te, Boundary::Pec)).unwrap();
+    let ez = glassworks_core::solve2d::solve(&box_of(Polarization::Te, Boundary::Pec)).unwrap();
     let want = [k2(1.0, 1.0), k2(1.0, 2.0), k2(2.0, 1.0), k2(1.0, 3.0), k2(2.0, 2.0), k2(2.0, 3.0)];
     for (f, w) in ez.meta.fields.iter().zip(want) {
         close(f.k0 * f.k0, w, 2e-4 * w);
     }
     // H_z has zero normal derivative there, so a static mode comes first.
-    let hz = eigenmenno_core::solve2d::solve(&box_of(Polarization::Tm, Boundary::Pec)).unwrap();
+    let hz = glassworks_core::solve2d::solve(&box_of(Polarization::Tm, Boundary::Pec)).unwrap();
     let want = [0.0, k2(0.0, 1.0), k2(1.0, 0.0), k2(1.0, 1.0), k2(0.0, 2.0), k2(1.0, 2.0)];
     for (f, w) in hz.meta.fields.iter().zip(want) {
         close(f.k0 * f.k0, w, 2e-4 * w.max(1.0));
@@ -133,7 +133,7 @@ fn layered_box_matches_the_1d_solver() {
         0.02,
         cavity(4),
     );
-    let (two, one) = (eigenmenno_core::solve2d::solve(&r).unwrap(), solve(&o).unwrap());
+    let (two, one) = (glassworks_core::solve2d::solve(&r).unwrap(), solve(&o).unwrap());
     for (a, b) in two.meta.fields.iter().zip(&one.meta.fields) {
         close(a.k0, b.k0, 2e-3 * b.k0.max(1.0));
     }
@@ -171,7 +171,7 @@ fn bloch_phase_gives_a_wave_travelling_along_k() {
         monitors: vec![],
         density: None,
     };
-    let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+    let o = glassworks_core::solve2d::solve(&r).unwrap();
     let (kx, ky) = (bloch[0] / width, bloch[1] / height);
     close(o.meta.fields[0].k0, kx.hypot(ky), 1e-5);
     let (x, y) = (channel(&o, "x"), channel(&o, "y"));
@@ -185,7 +185,7 @@ fn bloch_phase_gives_a_wave_travelling_along_k() {
 
 #[test]
 fn band_path_visits_the_lattice_symmetry_points() {
-    let bands = eigenmenno_core::solve2d::solve(&rods(
+    let bands = glassworks_core::solve2d::solve(&rods(
         0.05,
         Polarization::Te,
         Analysis2d::Bands { n_bands: 2, n_k: 2 },
@@ -205,7 +205,7 @@ fn request_2d_parses_from_json() {
         "shapes": [{"type": "circle", "x": 0.5, "y": 0.5, "r": 0.2, "material": {"eps": 12}}],
         "analysis": {"type": "bands", "n_bands": 4, "n_k": 3}}"#;
     let r: Request2d = serde_json::from_str(json).unwrap();
-    assert!(eigenmenno_core::solve2d::solve(&r).is_ok());
+    assert!(glassworks_core::solve2d::solve(&r).is_ok());
 }
 
 /// `J_n(x)` and `Y_n(x)` for x > 0, from their integral representations.
@@ -268,7 +268,7 @@ fn line_source_radiates_the_2d_green_function() {
     let k = 2.0 * PI;
     for (cell, pml, tol) in [(1.0 / 12.0, 0.5, 0.01), (1.0 / 24.0, 1.0, 0.002)] {
         let r = open_box(vec![], Polarization::Te, cell, pml, Source2d::Line { x: 1.5, y: 1.5 });
-        let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+        let o = glassworks_core::solve2d::solve(&r).unwrap();
         let mut worst = 0f64;
         for (x, y, u) in field_of(&o, "Ez") {
             let d = (x - 1.5).hypot(y - 1.5);
@@ -330,7 +330,7 @@ fn dielectric_cylinder_matches_the_mie_series() {
         [(Polarization::Te, "Ez", 0.0), (Polarization::Tm, "Hz", 0.0), (Polarization::Te, "Ez", 30.0f64)]
     {
         let r = open_box(rod(), pol, 1.0 / 32.0, 1.0, Source2d::PlaneWave { angle_deg: angle });
-        let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+        let o = glassworks_core::solve2d::solve(&r).unwrap();
         let a = angle.to_radians();
         // The incident phase at the cylinder's centre, relative to the domain's origin.
         let centre = C64::from_polar(1.0, k * (1.5 * a.cos() + 1.5 * a.sin()));
@@ -360,8 +360,8 @@ fn absorbing_requests_are_checked() {
         }]
     };
     let wave = Source2d::PlaneWave { angle_deg: 0.0 };
-    assert!(eigenmenno_core::solve2d::solve(&open_box(rod(0.2), Polarization::Te, 0.2, 0.5, wave)).is_err());
-    assert!(eigenmenno_core::solve2d::solve(&open_box(
+    assert!(glassworks_core::solve2d::solve(&open_box(rod(0.2), Polarization::Te, 0.2, 0.5, wave)).is_err());
+    assert!(glassworks_core::solve2d::solve(&open_box(
         vec![],
         Polarization::Te,
         0.2,
@@ -369,10 +369,10 @@ fn absorbing_requests_are_checked() {
         Source2d::Line { x: 9.0, y: 1.0 }
     ))
     .is_err());
-    assert!(eigenmenno_core::solve2d::solve(&open_box(vec![], Polarization::Te, 0.2, 0.0, wave)).is_err());
+    assert!(glassworks_core::solve2d::solve(&open_box(vec![], Polarization::Te, 0.2, 0.0, wave)).is_err());
     let mut walled = open_box(vec![], Polarization::Te, 0.2, 0.5, wave);
     walled.walls = Boundary::Pec;
-    assert!(eigenmenno_core::solve2d::solve(&walled).is_err());
+    assert!(glassworks_core::solve2d::solve(&walled).is_err());
 }
 
 /// A square lattice of rods (eps 12, r = 0.2a), `n` by `n`, with the middle one missing.
@@ -408,7 +408,7 @@ fn removing_a_rod_puts_one_mode_in_the_gap() {
         Boundary::Periodic,
         Analysis2d::Cavity { n_modes: 3, bloch: [0.0, 0.0], target_k0: Some(target) },
     );
-    let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+    let o = glassworks_core::solve2d::solve(&r).unwrap();
     let f: Vec<f64> = o.meta.fields.iter().map(|m| m.k0 / (2.0 * PI)).collect();
     eprintln!(
         "defect supercell a/lambda {f:?}, areas {:?}",
@@ -435,12 +435,12 @@ fn mode_area_of_a_box_is_a_quarter_of_it() {
         density: None,
     };
     // sin^2 sin^2 averages to 1/4 and peaks at 1, whatever eps is.
-    let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+    let o = glassworks_core::solve2d::solve(&r).unwrap();
     close(o.meta.fields[0].volume.unwrap(), 1.5 / 4.0, 1e-4);
 }
 
 fn ldos(r: &Request2d) -> f64 {
-    eigenmenno_core::solve2d::solve(r).unwrap().meta.fields[0].ldos.unwrap()
+    glassworks_core::solve2d::solve(r).unwrap().meta.fields[0].ldos.unwrap()
 }
 
 fn ldos_request(shapes: Vec<Shape>, k: f64, average_q: Option<f64>) -> Request2d {
@@ -503,7 +503,7 @@ fn leaky_mode_matches_the_ldos_peak_and_q_grows_with_the_crystal() {
         let analysis =
             Analysis2d::Resonance { target_k0: 2.0 * PI * 0.38, x: c, y: c, pml: 1.3, dipole_deg: None };
         let o =
-            eigenmenno_core::solve2d::solve(&defect_crystal(n, 1.0 / 12.0, Boundary::Absorbing, analysis))
+            glassworks_core::solve2d::solve(&defect_crystal(n, 1.0 / 12.0, Boundary::Absorbing, analysis))
                 .unwrap();
         let f = &o.meta.fields[0];
         eprintln!(
@@ -546,7 +546,7 @@ fn an_empty_domain_has_no_leaky_mode() {
         analysis: Analysis2d::Resonance { target_k0: 4.0, x: 1.0, y: 1.0, pml: 0.5, dipole_deg: None },
         ..ldos_request(vec![], 4.0, None)
     };
-    assert!(eigenmenno_core::solve2d::solve(&r).is_err());
+    assert!(glassworks_core::solve2d::solve(&r).is_err());
 }
 
 fn monitors(o: &Output) -> &[f64] {
@@ -583,7 +583,7 @@ fn power_around_a_line_source_matches_its_ldos() {
         ],
         density: None,
     };
-    let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+    let o = glassworks_core::solve2d::solve(&r).unwrap();
     let total: f64 = monitors(&o).iter().sum();
     close(total, o.meta.fields[0].ldos.unwrap() / 4.0, 3e-3 * total);
 }
@@ -642,7 +642,7 @@ fn port_launches_the_exact_slab_mode() {
     let kappa = lo;
     let gamma = (v2 - kappa * kappa).sqrt();
     let beta = (k * k * 3.5 * 3.5 - kappa * kappa).sqrt();
-    let o = eigenmenno_core::solve2d::solve(&slab(w, false, 1.0 / 32.0, 1.2)).unwrap();
+    let o = glassworks_core::solve2d::solve(&slab(w, false, 1.0 / 32.0, 1.2)).unwrap();
     let on_axis = |x: f64| {
         field_of(&o, "Ez")
             .into_iter()
@@ -669,10 +669,10 @@ fn ports_are_checked() {
     let source = Source2d::Port { x: 0.5, y0: 0.0, y1: 9.0 };
     let mut r = slab(0.12, false, 0.2, 1.0);
     r.analysis = Analysis2d::Driven { wavelength: 1.0, source, pml: 1.0, average_q: None };
-    assert!(eigenmenno_core::solve2d::solve(&r).is_err());
+    assert!(glassworks_core::solve2d::solve(&r).is_err());
     let mut empty = slab(0.12, false, 0.2, 1.0);
     empty.shapes.clear();
-    assert!(eigenmenno_core::solve2d::solve(&empty).is_err());
+    assert!(glassworks_core::solve2d::solve(&empty).is_err());
 }
 
 /// Mekis et al. 1996: rods of index 3.4 and radius 0.18a on a square lattice, with rows
@@ -752,7 +752,7 @@ fn guided_band_matches_mekis() {
             monitors: vec![],
             density: None,
         };
-        let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+        let o = glassworks_core::solve2d::solve(&r).unwrap();
         let nearest = o
             .meta
             .fields
@@ -770,7 +770,7 @@ fn guided_band_matches_mekis() {
 
 #[test]
 fn sharp_bends_transmit_as_in_mekis() {
-    let solve_guide = |kind, freq| eigenmenno_core::solve2d::solve(&lattice_guide(kind, freq)).unwrap();
+    let solve_guide = |kind, freq| glassworks_core::solve2d::solve(&lattice_guide(kind, freq)).unwrap();
     let transmission = |kind, freq| {
         let (straight, bend) = (solve_guide(Guide::Straight, freq), solve_guide(kind, freq));
         // Nothing radiates in a band gap, so all power passing the input reaches the output.
@@ -795,8 +795,8 @@ fn a_sharp_bend_in_a_slab_loses_most_of_its_power() {
     // given for a sharp bend, so this uses the width over wavelength of their other bend.
     let (w, cell, span) = (0.143, 1.0 / 32.0, 1.0);
     let (straight, bend) = (slab(w, false, cell, span), slab(w, true, cell, span));
-    let t = monitors(&eigenmenno_core::solve2d::solve(&bend).unwrap())[0]
-        / monitors(&eigenmenno_core::solve2d::solve(&straight).unwrap())[0];
+    let t = monitors(&glassworks_core::solve2d::solve(&bend).unwrap())[0]
+        / monitors(&glassworks_core::solve2d::solve(&straight).unwrap())[0];
     eprintln!("slab bend T {t:.4}");
     assert!(t > 0.1 && t < 0.3, "T {t}");
 }
@@ -816,7 +816,7 @@ fn ldos_gradient_matches_finite_differences() {
         };
         r
     };
-    let solve = |rho: &[f64]| eigenmenno_core::solve2d::solve(&request(rho.to_vec())).unwrap();
+    let solve = |rho: &[f64]| glassworks_core::solve2d::solve(&request(rho.to_vec())).unwrap();
     let ldos = |rho: &[f64]| solve(rho).meta.fields[0].ldos.unwrap();
     let exact = channel(&solve(&rho), "gradient").to_vec();
     for pixel in [0, 40, 77, 78, 143] {
@@ -829,7 +829,7 @@ fn ldos_gradient_matches_finite_differences() {
 
 #[test]
 fn pixels_must_line_up_with_the_mesh() {
-    let solve = |r: &Request2d| eigenmenno_core::solve2d::solve(r).map(|_| ());
+    let solve = |r: &Request2d| glassworks_core::solve2d::solve(r).map(|_| ());
     let mut r = density_bend(vec![0.5; 144]);
     assert!(solve(&r).is_ok());
     // Half a pixel's cell is still whole cells per pixel.
@@ -873,7 +873,7 @@ fn scaled_request(mut r: Request2d, f: f64) -> Request2d {
 
 #[test]
 fn scaling_a_structure_with_its_wavelength_changes_nothing() {
-    let solve = |r| eigenmenno_core::solve2d::solve(&r).unwrap();
+    let solve = |r| glassworks_core::solve2d::solve(&r).unwrap();
     let transmission = |f| {
         monitors(&solve(scaled_request(lattice_guide(Guide::Sharp, 0.353), f)))[0]
             / monitors(&solve(scaled_request(lattice_guide(Guide::Straight, 0.353), f)))[0]
@@ -939,7 +939,7 @@ fn density_gradient_matches_finite_differences() {
     let n = 12 * 12;
     let rho: Vec<f64> = (0..n).map(|i| 0.5 + 0.4 * ((i * 37 % 101) as f64 / 101.0 - 0.5)).collect();
     let power = |rho: &[f64]| {
-        let o = eigenmenno_core::solve2d::solve(&density_bend(rho.to_vec())).unwrap();
+        let o = glassworks_core::solve2d::solve(&density_bend(rho.to_vec())).unwrap();
         (monitors(&o)[0], channel(&o, "gradient").to_vec())
     };
     let (_, gradient) = power(&rho);
@@ -956,10 +956,10 @@ fn density_gradient_matches_finite_differences() {
 
 #[test]
 fn density_requests_are_checked() {
-    assert!(eigenmenno_core::solve2d::solve(&density_bend(vec![0.5; 3])).is_err());
+    assert!(glassworks_core::solve2d::solve(&density_bend(vec![0.5; 3])).is_err());
     let mut unmeasured = density_bend(vec![0.5; 144]);
     unmeasured.monitors.clear();
-    assert!(eigenmenno_core::solve2d::solve(&unmeasured).is_err());
+    assert!(glassworks_core::solve2d::solve(&unmeasured).is_err());
 }
 
 /// The page's optimizer's result for a bend over wavelengths 0.95 to 1.05, top row first.
@@ -1048,7 +1048,7 @@ fn optimized_bend(
 #[test]
 fn optimized_bend_survives_a_finer_mesh() {
     let (cx, cy) = (1.5, 1.0);
-    let power = |r: Request2d| monitors(&eigenmenno_core::solve2d::solve(&r).unwrap())[0];
+    let power = |r: Request2d| monitors(&glassworks_core::solve2d::solve(&r).unwrap())[0];
     for wavelength in [0.95, 1.0, 1.05] {
         for cell in [1.0 / 24.0, 1.0 / 48.0] {
             // Far along the guide, and narrow, so that no light radiated at the corner counts.
@@ -1083,7 +1083,7 @@ fn power_is_conserved_around_an_optimized_bend() {
         Monitor { x0: a, y0: d, x1: a, y1: c },
         Monitor { x0: a, y0: c, x1: b, y1: c },
     ];
-    let o = eigenmenno_core::solve2d::solve(&optimized_bend(
+    let o = glassworks_core::solve2d::solve(&optimized_bend(
         Some(&OPTIMIZED_BEND),
         false,
         1.0,
@@ -1177,7 +1177,7 @@ fn moving_an_edge_shifts_a_resonance_as_perturbation_theory_says() {
     // dk / k = -(deps / 2) sum(integral(u^2) along the edges) / integral(eps u^2) per unit of outward move.
     let cell = 1.0 / 24.0;
     let solve_at =
-        |d: f64, target: f64| eigenmenno_core::solve2d::solve(&square_rod_cavity(d, cell, target)).unwrap();
+        |d: f64, target: f64| glassworks_core::solve2d::solve(&square_rod_cavity(d, cell, target)).unwrap();
     let o = solve_at(0.0, 2.0 * PI * 0.37);
     let k = o.meta.fields[0].k0;
     let channel = |name: &str| &o.channels.iter().find(|c| c.0 == name).unwrap().1;
@@ -1263,7 +1263,7 @@ fn moving_an_edge_in_hz_shifts_a_mode_as_perturbation_theory_says() {
     // D_n = dH/dt / k along it, and integral(eps E^2) = integral(H^2) in a closed box.
     let cell = 1.0 / 96.0;
     let solve_at =
-        |d: f64, target: f64| eigenmenno_core::solve2d::solve(&hz_square_rod(d, cell, target)).unwrap();
+        |d: f64, target: f64| glassworks_core::solve2d::solve(&hz_square_rod(d, cell, target)).unwrap();
     let o = solve_at(0.0, 4.0);
     let k = o.meta.fields[0].k0;
     let channel = |name: &str| &o.channels.iter().find(|c| c.0 == name).unwrap().1;

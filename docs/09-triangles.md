@@ -22,7 +22,7 @@ way gives the same weak form:
 
 $$\int p\,\nabla u\cdot\nabla v\,dA - k_0^2\int q\,u\,v\,dA = \int f\,v\,dA.$$
 
-So [`assemble.rs`](../crates/eigenmenno-core/src/assemble.rs) doesn't change. It only ever saw a
+So [`assemble.rs`](../crates/glassworks-core/src/assemble.rs) doesn't change. It only ever saw a
 `Space` that gives it local matrices and dofs. Two things are new: a `Space` on triangles, and a
 mesh of them. Chapter 14 explains why this doesn't extend to in-plane vector fields, where the
 scalar picture breaks down.
@@ -44,7 +44,7 @@ continuous across it with nothing else to enforce.
 On a straight triangle, the gradients of the $\lambda_i$ are constant, so the stiffness integrand
 is a polynomial of degree 2, and the mass integrand has degree 4. Chapter 3's quadrature idea
 applies directly, with a small rule on the triangle ([Dunavant 1985](20-references.md#dunavant-1985)).
-[`space.rs`](../crates/eigenmenno-core/src/space.rs) has all of this in `H1Triangle`.
+[`space.rs`](../crates/glassworks-core/src/space.rs) has all of this in `H1Triangle`.
 <!-- code: TRIANGLE_RULE -->
 
 Barycentric coordinates do the job of chapter 3's reference element. A point of the triangle with
@@ -99,7 +99,7 @@ outline is only ever approximated to first order, with a jump in the wrong place
 
 These are errors in the band edges of the rod lattice at the end of this chapter. A staircase can land
 close by luck at one mesh, as $E_z$ does at 24 × 24, but it stops improving. `Mesh::fitted_grid` in
-[`mesh.rs`](../crates/eigenmenno-core/src/mesh.rs) fits the outline instead, in three steps:
+[`mesh.rs`](../crates/glassworks-core/src/mesh.rs) fits the outline instead, in three steps:
 
 1. **Snap nodes onto outlines** (`Mesh::snap`). Corners of a shape take the nearest grid node. Then,
    wherever a grid line crosses an outline, one of its two ends moves onto the outline. Nodes very

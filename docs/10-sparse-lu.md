@@ -28,7 +28,7 @@ Now the expensive part is only the separators, and most of them are small. For a
 factorization costs about $N^{3/2}$ operations rather than $N^2$, and storage about $N\log N$. No
 ordering of such a mesh can do better than $N^{3/2}$ ([Hoffman et al. 1973](20-references.md#hoffman-1973)).
 
-[`sparse.rs`](../crates/eigenmenno-core/src/sparse.rs) does this with a few decisions that keep it short:
+[`sparse.rs`](../crates/glassworks-core/src/sparse.rs) does this with a few decisions that keep it short:
 
 1. **Split by position, along the longer side.** Whatever on the left touches the right becomes the
    separator. This reads the separator from the matrix rather than the grid, so flipped edges and

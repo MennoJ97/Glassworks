@@ -6,9 +6,9 @@
 //! time of general sparse LU over a band diagram. Driven problems are indefinite, so
 //! they use LU.
 
-use eigenmenno_core::assemble::Csr;
-use eigenmenno_core::banded::Factors;
-use eigenmenno_core::C64;
+use glassworks_core::assemble::Csr;
+use glassworks_core::banded::Factors;
+use glassworks_core::C64;
 use faer::prelude::*;
 use faer::sparse::linalg::solvers::{Llt, Lu, SymbolicLlt};
 use faer::sparse::{SparseColMat, Triplet};

@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-const root = '/Users/mennojansen/source/eigenmenno'; const seed = +process.argv[2];
-const g = await import(`${root}/web/pkg/eigenmenno_wasm.js`);
-g.initSync({ module: readFileSync(`${root}/web/pkg/eigenmenno_wasm_bg.wasm`) });
+import { fileURLToPath } from 'node:url';
+const root = fileURLToPath(new URL('../..', import.meta.url)).replace(/\/$/, ''); const seed = +process.argv[2];
+const g = await import(`${root}/web/pkg/glassworks_wasm.js`);
+g.initSync({ module: readFileSync(`${root}/web/pkg/glassworks_wasm_bg.wasm`) });
 const { defaultState } = await import(`${root}/web/js/model.js`);
 const { optimize, gradientRequests, designGeometry } = await import(`${root}/web/js/design.js`);
 const one = (r) => { const x = g.solve_2d(JSON.stringify(r)); const channels = {}; x.channel_names().forEach((n, i) => { channels[n] = x.channel(i); }); const meta = JSON.parse(x.meta()); x.free(); return { meta, channels }; };

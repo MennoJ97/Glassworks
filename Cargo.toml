@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/eigenmenno-core", "crates/eigenmenno-wasm"]
+members = ["crates/glassworks-core", "crates/glassworks-wasm"]
 resolver = "2"
 
 [workspace.package]

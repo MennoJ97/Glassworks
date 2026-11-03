@@ -33,8 +33,8 @@ const math = (tex, displayMode) =>
     .replace(/<mi mathvariant="bold">([A-Za-z]+)<\/mi>/g, (_, letters) => `<mi>${[...letters].map(boldLetter).join('')}</mi>`);
 
 const sources = [
-  ...['mesh', 'space', 'assemble', 'banded', 'eigen', 'problem', 'output', 'solve1d', 'solve1d/gradient', 'sparse', 'sparse/blocked', 'sparse/symmetric', 'sparse/transposed', 'solve2d', 'solve2d/closed', 'solve2d/open', 'solve2d/driven', 'solve2d/leaky', 'solve2d/adjoint', 'solve2d/grating', 'solve2d/dipole', 'solve2d/validate'].map((n) => `crates/eigenmenno-core/src/${n}.rs`),
-  ...['analytic', 'analytic2d', 'gratings', 'hz_design', 'cross_check'].map((n) => `crates/eigenmenno-core/tests/${n}.rs`),
+  ...['mesh', 'space', 'assemble', 'banded', 'eigen', 'problem', 'output', 'solve1d', 'solve1d/gradient', 'sparse', 'sparse/blocked', 'sparse/symmetric', 'sparse/transposed', 'solve2d', 'solve2d/closed', 'solve2d/open', 'solve2d/driven', 'solve2d/leaky', 'solve2d/adjoint', 'solve2d/grating', 'solve2d/dipole', 'solve2d/validate'].map((n) => `crates/glassworks-core/src/${n}.rs`),
+  ...['analytic', 'analytic2d', 'gratings', 'hz_design', 'cross_check'].map((n) => `crates/glassworks-core/tests/${n}.rs`),
   ...['optimizer', 'design', 'cavity-design', 'hz-design'].map((n) => `web/js/${n}.js`),
 ];
 
@@ -232,8 +232,8 @@ const chapters = readdirSync(docs)
   }));
 
 // What each kind of page may be reused under: the tutorial's text, or the solver's code.
-const TEXT_LICENSE = 'Text by Menno Jansen, under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. The code it shows is under the MIT License.';
-const CODE_LICENSE = 'Code by Menno Jansen, under the MIT License.';
+const TEXT_LICENSE = 'Text by the Glassworks authors, under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. The code it shows is under the MIT License.';
+const CODE_LICENSE = 'Code by the Glassworks authors, under the MIT License.';
 
 function layout({ title, body, current, prefix = '', panel = '', license = TEXT_LICENSE }) {
   const links = chapters
@@ -244,7 +244,7 @@ function layout({ title, body, current, prefix = '', panel = '', license = TEXT_
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)} | Eigenmenno</title>
+<title>${escapeHtml(title)} | Glassworks</title>
 <link rel="stylesheet" href="${prefix}../style.css">
 <link rel="stylesheet" href="${prefix}../learn.css">${
     panel
@@ -256,7 +256,7 @@ function layout({ title, body, current, prefix = '', panel = '', license = TEXT_
 </head>
 <body class="learn${panel ? ' with-code' : ''}">
 <header class="learn-header">
-  <a class="brand" href="${prefix}index.html">Eigenmenno tutorial</a>
+  <a class="brand" href="${prefix}index.html">Glassworks tutorial</a>
   <a class="open-solver" href="${prefix}../index.html">Open the solver</a>
 </header>
 <div class="learn-layout">

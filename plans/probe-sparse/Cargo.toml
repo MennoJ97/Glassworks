@@ -5,7 +5,7 @@ edition = "2021"
 [lib]
 crate-type = ["rlib", "cdylib"]
 [dependencies]
-eigenmenno-core = { path = "../../crates/eigenmenno-core" }
+glassworks-core = { path = "../../crates/glassworks-core" }
 faer = { version = "0.24", default-features = false, features = ["std", "linalg", "sparse", "sparse-linalg"] }
 [profile.release]
 opt-level = 3

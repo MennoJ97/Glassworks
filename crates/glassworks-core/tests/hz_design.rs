@@ -4,12 +4,12 @@
 mod common;
 
 use common::{channel, close};
-use eigenmenno_core::mesh::Outline;
-use eigenmenno_core::output::Output;
-use eigenmenno_core::problem::{
+use glassworks_core::mesh::Outline;
+use glassworks_core::output::Output;
+use glassworks_core::problem::{
     Analysis2d, Boundary, Density, Material, Monitor, Polarization, Request2d, Shape, Source2d,
 };
-use eigenmenno_core::solve2d::solve;
+use glassworks_core::solve2d::solve;
 
 const CORE: Material = Material { eps: 12.25, mu: 1.0 };
 

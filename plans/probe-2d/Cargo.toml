@@ -8,7 +8,7 @@ crate-type = ["rlib", "cdylib"]
 default = []
 sparse = ["faer"]
 [dependencies]
-eigenmenno-core = { path = "../../crates/eigenmenno-core" }
+glassworks-core = { path = "../../crates/glassworks-core" }
 faer = { version = "0.24", default-features = false, features = ["std", "linalg", "sparse", "sparse-linalg"], optional = true }
 [profile.release]
 opt-level = 3

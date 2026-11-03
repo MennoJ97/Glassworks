@@ -1,12 +1,12 @@
-//! Native timings: `cargo run --release -p eigenmenno-core --example bench`.
+//! Native timings: `cargo run --release -p glassworks-core --example bench`.
 
-use eigenmenno_core::assemble::{assemble, Csr, DofMap};
-use eigenmenno_core::banded::{BandedLu, Factors};
-use eigenmenno_core::mesh::Mesh;
-use eigenmenno_core::problem::{Analysis, Boundary, Layer, MeshSpec, Polarization, Request};
-use eigenmenno_core::solve1d::solve;
-use eigenmenno_core::space::{H1Line, Space};
-use eigenmenno_core::C64;
+use glassworks_core::assemble::{assemble, Csr, DofMap};
+use glassworks_core::banded::{BandedLu, Factors};
+use glassworks_core::mesh::Mesh;
+use glassworks_core::problem::{Analysis, Boundary, Layer, MeshSpec, Polarization, Request};
+use glassworks_core::solve1d::solve;
+use glassworks_core::space::{H1Line, Space};
+use glassworks_core::C64;
 use faer::prelude::*;
 use faer::sparse::{SparseColMat, Triplet};
 use faer::Mat;

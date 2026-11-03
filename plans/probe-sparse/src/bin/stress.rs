@@ -1,13 +1,13 @@
 //! The hardest case for pivoting only inside each front: a matrix that's fine as a whole, but
 //! whose subdomain, walled in by its separator, sits on a resonance of its own. Elimination
 //! there meets a nearly singular block, and no later unknown can be used to pivot it.
-use eigenmenno_core::assemble::{assemble, Csr, DofMap};
-use eigenmenno_core::banded::Factors;
-use eigenmenno_core::eigen::eigs_near;
-use eigenmenno_core::mesh::{Mesh, Outline};
-use eigenmenno_core::space::H1Triangle;
+use glassworks_core::assemble::{assemble, Csr, DofMap};
+use glassworks_core::banded::Factors;
+use glassworks_core::eigen::eigs_near;
+use glassworks_core::mesh::{Mesh, Outline};
+use glassworks_core::space::H1Triangle;
 use probe_sparse::faer_reference::SparseLu;
-use eigenmenno_core::{C64, ONE, ZERO};
+use glassworks_core::{C64, ONE, ZERO};
 use probe_sparse::multifrontal::{Analysis, Multifrontal};
 use probe_sparse::{load, residual};
 

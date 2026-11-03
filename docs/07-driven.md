@@ -97,7 +97,7 @@ $$-(u')' - k_0^2 u = ik_0\,\delta(x - x_0).$$
 The weak form handles the delta function gracefully, since
 $\int \delta(x - x_0)\,v\,dx = v(x_0)$. So the right-hand side is just the basis
 functions evaluated at $x_0$. See `add_point_load` in
-[`solve1d.rs`](../crates/eigenmenno-core/src/solve1d.rs).
+[`solve1d.rs`](../crates/glassworks-core/src/solve1d.rs).
 <!-- code: add_point_load "let xi" .. "rhs[r] +=" -->
 
 The exact solution in free space is $u = -\tfrac12 e^{ik_0|x - x_0|}$. The minus sign

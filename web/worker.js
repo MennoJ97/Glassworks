@@ -1,5 +1,5 @@
 // Runs the WebAssembly solver off the main thread, so the page stays responsive.
-import init, { solve, solve_2d } from './pkg/eigenmenno_wasm.js';
+import init, { solve, solve_2d } from './pkg/glassworks_wasm.js';
 
 const ready = init();
 

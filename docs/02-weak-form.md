@@ -37,7 +37,7 @@ code. The weak form enforces it automatically. To see why, integrate by parts on
 layer separately. Each interface leaves a term proportional to the jump in $p u'$,
 times $v$ there. The weak form has no such term, so if it holds for every $v$, the
 jump is zero.
-[`Mesh::layered_line`](../crates/eigenmenno-core/src/mesh.rs) puts a vertex on every
+[`Mesh::layered_line`](../crates/glassworks-core/src/mesh.rs) puts a vertex on every
 interface for a different reason: a polynomial can't have a kink inside a cell, only
 at its ends.
 <!-- code: Mesh::layered_line "let n = (t / h)" .. "start += t" -->
@@ -71,12 +71,12 @@ inherited from FEM's origins in structural mechanics
 
 A differential equation has become a matrix equation. All three of $S$, $P$ and $Q$
 are of the same two kinds, so one function can build them all. See `assemble` in
-[`assemble.rs`](../crates/eigenmenno-core/src/assemble.rs), which builds
+[`assemble.rs`](../crates/glassworks-core/src/assemble.rs), which builds
 $\sum_c (a_c S_c + b_c M_c)$, where the coefficients $a_c$ and $b_c$ are per cell.
 $S_c$ and $M_c$ are $\int\phi_i'\phi_j'\,dx$ and $\int\phi_i\phi_j\,dx$ over cell $c$
 alone. Since $p$ and $q$ are constant on each cell, with values $p_c$ and $q_c$,
 $S = \sum_c p_c S_c$, $P = \sum_c p_c M_c$ and $Q = \sum_c q_c M_c$.
-For example, `cavity_modes` in [`solve1d.rs`](../crates/eigenmenno-core/src/solve1d.rs)
+For example, `cavity_modes` in [`solve1d.rs`](../crates/glassworks-core/src/solve1d.rs)
 gets $S$ with $(a_c, b_c) = (p_c, 0)$ and $Q$ with $(0, q_c)$.
 <!-- code: cavity_modes "let a = s.matrix" .. "let b = s.matrix" -->
 

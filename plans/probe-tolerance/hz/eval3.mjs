@@ -2,8 +2,8 @@
 // both kinds are read on the same mesh. Usage: node eval3.mjs <tag> <seed>
 import { readFileSync } from 'node:fs';
 const S = process.cwd();
-const g = await import(`${S}/pkg/eigenmenno_wasm.js`);
-g.initSync({ module: readFileSync(`${S}/pkg/eigenmenno_wasm_bg.wasm`) });
+const g = await import(`${S}/pkg/glassworks_wasm.js`);
+g.initSync({ module: readFileSync(`${S}/pkg/glassworks_wasm_bg.wasm`) });
 const { defaultState } = await import(`${S}/rob3/web/js/model.js`);
 const { cavityRequest, CAVITY } = await import(`${S}/rob3/web/js/cavity-design.js`);
 const [tag, seed] = [process.argv[2], +process.argv[3]];

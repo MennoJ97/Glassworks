@@ -14,8 +14,8 @@ if [ "$(.tools/bin/wasm-bindgen --version 2>/dev/null | cut -d' ' -f2)" != "$BIN
 fi
 
 RUSTFLAGS="-C target-feature=+simd128" \
-  cargo build --release --target wasm32-unknown-unknown -p eigenmenno-wasm
-.tools/bin/wasm-bindgen target/wasm32-unknown-unknown/release/eigenmenno_wasm.wasm \
+  cargo build --release --target wasm32-unknown-unknown -p glassworks-wasm
+.tools/bin/wasm-bindgen target/wasm32-unknown-unknown/release/glassworks_wasm.wasm \
   --out-dir web/pkg --target web --no-typescript
 
 # Generate the tutorial pages from docs/.

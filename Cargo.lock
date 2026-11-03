@@ -81,25 +81,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1d926b4d407d372f141f93bb444696142c29d32962ccbd3531117cf3aa0bfa9"
 
 [[package]]
-name = "eigenmenno-core"
-version = "0.1.0"
-dependencies = [
- "faer",
- "num-complex",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "eigenmenno-wasm"
-version = "0.1.0"
-dependencies = [
- "eigenmenno-core",
- "serde_json",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "enum-as-inner"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -306,6 +287,25 @@ name = "generativity"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2c81fb5260e37854d09d5c87183309fd8c555b75289427884b25660bc87a85e"
+
+[[package]]
+name = "glassworks-core"
+version = "0.1.0"
+dependencies = [
+ "faer",
+ "num-complex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "glassworks-wasm"
+version = "0.1.0"
+dependencies = [
+ "glassworks-core",
+ "serde_json",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "half"

@@ -7,7 +7,7 @@ Both are short, and the answer turns out to need more care than the calculation.
 
 A **port** is a current sheet with a mode's shape. A straight guide is layered across its width, so
 chapter 7's 1D solver already finds its modes, and `port_mode` in
-[`solve2d/driven.rs`](../crates/eigenmenno-core/src/solve2d/driven.rs) simply reads the layers along the sheet and asks it.
+[`solve2d/driven.rs`](../crates/glassworks-core/src/solve2d/driven.rs) simply reads the layers along the sheet and asks it.
 
 Modes are orthogonal with weight $p$, so a sheet of $p\,\phi(y)$ excites only the mode $\phi$, with
 

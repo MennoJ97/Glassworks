@@ -17,7 +17,7 @@ Factoring took 77% of a native cavity run, so that's where speed matters. `parti
 front's columns 32 at a time, then updates every later column from all 32 at once, four at a time,
 while they're still in cache. The arithmetic is the same as updating after each column. Other block
 and leaf sizes were slower, and a hand-written SIMD kernel gained nothing, since the compiler already
-vectorizes this loop. The code is in [`sparse/blocked.rs`](../crates/eigenmenno-core/src/sparse/blocked.rs).
+vectorizes this loop. The code is in [`sparse/blocked.rs`](../crates/glassworks-core/src/sparse/blocked.rs).
 <!-- code: update_after -->
 
 ## When the matrix is symmetric
@@ -29,7 +29,7 @@ The price is pivoting. Swapping rows alone would break the symmetry, so these fa
 <!-- code: partial_ldl "let below" .. "weak |=" -->
 <!-- code: SparseLu::factor_symmetric -->
 
-The code is in [`sparse/symmetric.rs`](../crates/eigenmenno-core/src/sparse/symmetric.rs), apart from the method it refines.
+The code is in [`sparse/symmetric.rs`](../crates/glassworks-core/src/sparse/symmetric.rs), apart from the method it refines.
 
 ## A band diagram that asks for too much
 

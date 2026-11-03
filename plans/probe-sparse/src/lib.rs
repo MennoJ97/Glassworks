@@ -3,10 +3,10 @@
 pub mod faer_reference;
 pub mod multifrontal;
 
-use eigenmenno_core::assemble::{assemble, assemble_split, Csr, DofMap};
-use eigenmenno_core::mesh::{Mesh, Outline};
-use eigenmenno_core::space::H1Triangle;
-use eigenmenno_core::{C64, I, ONE, ZERO};
+use glassworks_core::assemble::{assemble, assemble_split, Csr, DofMap};
+use glassworks_core::mesh::{Mesh, Outline};
+use glassworks_core::space::H1Triangle;
+use glassworks_core::{C64, I, ONE, ZERO};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::collections::HashMap;
 use std::f64::consts::PI;
@@ -135,7 +135,7 @@ fn defect(n: usize) -> Vec<Outline> {
 
 /// The leaky mode of a defect crystal, from the core's own search, to sit right on its pole.
 fn pole(n: usize, cell: f64, pml: f64) -> C64 {
-    use eigenmenno_core::problem::*;
+    use glassworks_core::problem::*;
     let c = n as f64 / 2.0;
     let shapes = defect(n).into_iter().map(|outline| Shape { outline, material: Material { eps: 12.0, mu: 1.0 } }).collect();
     let r = Request2d {
@@ -143,21 +143,21 @@ fn pole(n: usize, cell: f64, pml: f64) -> C64 {
         polarization: Polarization::Te, walls: Boundary::Absorbing,
         analysis: Analysis2d::Resonance { target_k0: 2.0 * PI * 0.38, x: c, y: c, pml }, monitors: vec![],
     };
-    let o = eigenmenno_core::solve2d::solve(&r).unwrap();
+    let o = glassworks_core::solve2d::solve(&r).unwrap();
     let f = &o.meta.fields[0];
     C64::new(f.k0, -f.k0 / (2.0 * f.q.unwrap()))
 }
 
 /// The closed defect mode's `k0^2`, to shift right onto a lossless resonance.
 fn closed_mode(cell: f64) -> f64 {
-    use eigenmenno_core::problem::*;
+    use glassworks_core::problem::*;
     let shapes = defect(5).into_iter().map(|outline| Shape { outline, material: Material { eps: 12.0, mu: 1.0 } }).collect();
     let r = Request2d {
         width: 5.0, height: 5.0, cell, background: Material { eps: 1.0, mu: 1.0 }, shapes,
         polarization: Polarization::Te, walls: Boundary::Periodic,
         analysis: Analysis2d::Cavity { n_modes: 1, bloch: [0.0, 0.0], target_k0: Some(2.0 * PI * 0.35) }, monitors: vec![],
     };
-    eigenmenno_core::solve2d::solve(&r).unwrap().meta.fields[0].k0.powi(2)
+    glassworks_core::solve2d::solve(&r).unwrap().meta.fields[0].k0.powi(2)
 }
 
 pub const CASES: usize = 9;
@@ -210,7 +210,7 @@ pub fn load(n: usize) -> Vec<C64> {
 pub mod wasm {
     use super::*;
     use crate::multifrontal::{Analysis, Multifrontal};
-    use eigenmenno_core::banded::Factors;
+    use glassworks_core::banded::Factors;
     use crate::faer_reference::SparseLu;
     static mut CASE: Option<Case> = None;
     static mut ANALYSIS: Option<Analysis> = None;

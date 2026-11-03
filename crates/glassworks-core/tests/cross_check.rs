@@ -1,12 +1,12 @@
 //! Checks the handwritten linear algebra against faer on the same matrices.
 
-use eigenmenno_core::assemble::{assemble, Csr, DofMap};
-use eigenmenno_core::banded::{rcm, BandedLu, Factors};
-use eigenmenno_core::eigen::eigs_near;
-use eigenmenno_core::mesh::{Mesh, Outline};
-use eigenmenno_core::space::H1Triangle;
-use eigenmenno_core::sparse::{Ordering, SparseLu};
-use eigenmenno_core::C64;
+use glassworks_core::assemble::{assemble, Csr, DofMap};
+use glassworks_core::banded::{rcm, BandedLu, Factors};
+use glassworks_core::eigen::eigs_near;
+use glassworks_core::mesh::{Mesh, Outline};
+use glassworks_core::space::H1Triangle;
+use glassworks_core::sparse::{Ordering, SparseLu};
+use glassworks_core::C64;
 use faer::prelude::*;
 use faer::sparse::{SparseColMat, Triplet};
 use faer::Mat;

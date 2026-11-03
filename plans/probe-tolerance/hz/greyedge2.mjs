@@ -4,8 +4,8 @@
 import { readFileSync } from 'node:fs';
 import { load } from './pix.mjs';
 const A = process.env.PKG ?? `${process.cwd()}/../aniso/pkg`;
-const g = await import(`${A}/eigenmenno_wasm.js`);
-g.initSync({ module: readFileSync(`${A}/eigenmenno_wasm_bg.wasm`) });
+const g = await import(`${A}/glassworks_wasm.js`);
+g.initSync({ module: readFileSync(`${A}/glassworks_wasm_bg.wasm`) });
 const one = (r) => { const x = g.solve_2d(JSON.stringify(r)); const channels = {}; x.channel_names().forEach((n, i) => { channels[n] = x.channel(i); }); const meta = JSON.parse(x.meta()); x.free(); return { meta, channels }; };
 const root = `${process.cwd()}/src`;
 const { defaultState } = await import(`${root}/web/js/model.js`);

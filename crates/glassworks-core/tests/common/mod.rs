@@ -1,8 +1,8 @@
 //! What the test files share. Not every test file uses all of it.
 #![allow(dead_code)]
 
-use eigenmenno_core::output::Output;
-use eigenmenno_core::problem::{Analysis, Boundary, Layer, MeshSpec, Polarization, Request};
+use glassworks_core::output::Output;
+use glassworks_core::problem::{Analysis, Boundary, Layer, MeshSpec, Polarization, Request};
 
 pub fn channel<'a>(o: &'a Output, name: &str) -> &'a [f64] {
     &o.channels.iter().find(|(n, _)| n == name).unwrap_or_else(|| panic!("no channel {name}")).1

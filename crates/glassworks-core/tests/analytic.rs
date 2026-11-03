@@ -4,10 +4,10 @@
 mod common;
 
 use common::{cavity, channel, close, layer, request};
-use eigenmenno_core::output::Output;
-use eigenmenno_core::problem::{Analysis, Boundary, Layer, Polarization, Request, Source};
-use eigenmenno_core::solve1d::solve;
-use eigenmenno_core::C64;
+use glassworks_core::output::Output;
+use glassworks_core::problem::{Analysis, Boundary, Layer, Polarization, Request, Source};
+use glassworks_core::solve1d::solve;
+use glassworks_core::C64;
 use std::f64::consts::PI;
 
 #[test]

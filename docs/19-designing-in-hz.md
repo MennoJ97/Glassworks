@@ -20,7 +20,7 @@ A density mixes permittivities, and in $E_z$ that's $q = \varepsilon$, in the ma
 $$\delta A = -\frac{\delta\varepsilon}{\varepsilon^2}\,S.$$
 <!-- code: pixel_slopes "Polarization::Tm" .. "deps / (eps * eps)" -->
 
-The adjoint from chapter 13 is otherwise unchanged. There's no $k_0^2$ here, and each slope is now a sum of $\nabla w\cdot\nabla u$ over the pixel's cells. `a_monitors_gradient_matches_finite_differences` in [`tests/hz_design.rs`](../crates/eigenmenno-core/tests/hz_design.rs) checks this.
+The adjoint from chapter 13 is otherwise unchanged. There's no $k_0^2$ here, and each slope is now a sum of $\nabla w\cdot\nabla u$ over the pixel's cells. `a_monitors_gradient_matches_finite_differences` in [`tests/hz_design.rs`](../crates/glassworks-core/tests/hz_design.rs) checks this.
 
 ## A bend needs a wider guide
 
@@ -43,7 +43,7 @@ A cavity's goal is the LDOS at its emitter. In $E_z$ a line source is an electri
 $$\mathbf{E}\cdot\mathbf{d} = \frac{i}{k}\,p\,\frac{\partial H_z}{\partial n},$$
 <!-- code: dipole.rs "let mut load = vec![]" .. "Ok(load)" -->
 
-with $\mathbf{n}$ a quarter turn from $\mathbf{d}$. So it's a new $e_0$ with the same algebra: $A u = ik\,e_0$, and $F = -2\,\mathrm{Re}(e_0^T u)$. [`solve2d/dipole.rs`](../crates/eigenmenno-core/src/solve2d/dipole.rs) takes the derivative across two points, and scales it so that $F = k/2$ in vacuum, as for a line source. `the_power_a_dipole_supplies_crosses_any_loop` checks it against energy balance, which knows nothing of that scale.
+with $\mathbf{n}$ a quarter turn from $\mathbf{d}$. So it's a new $e_0$ with the same algebra: $A u = ik\,e_0$, and $F = -2\,\mathrm{Re}(e_0^T u)$. [`solve2d/dipole.rs`](../crates/glassworks-core/src/solve2d/dipole.rs) takes the derivative across two points, and scales it so that $F = k/2$ in vacuum, as for a line source. `the_power_a_dipole_supplies_crosses_any_loop` checks it against energy balance, which knows nothing of that scale.
 <!-- code: dipole.rs "let step" .. "Ok([point" -->
 
 Chapter 17's shortcut, that the source is its own adjoint, still holds. But $e_0$ now holds $p$ at the emitter, so a pixel there moves the source as well as the field. That adds a term,

@@ -1,6 +1,7 @@
+import { fileURLToPath } from 'node:url';
 import { one } from './lib.mjs';
 import { rng, gauss } from './pix.mjs';
-const R = '/Users/mennojansen/source/eigenmenno';
+const R = fileURLToPath(new URL('../..', import.meta.url)).replace(/\/$/, '');
 const { defaultState } = await import(`${R}/web/js/model.js`);
 const { optimize, gradientRequests, meanReflection, prepareDesign, bendScale } = await import(`${R}/web/js/design.js`);
 const seed = +process.argv[2];

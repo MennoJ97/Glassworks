@@ -2,8 +2,8 @@
 // so designs with different pixels are read on one mesh. Usage: node evalpix.mjs <tag> <seed> [cells]
 import { readFileSync } from 'node:fs';
 const S = process.cwd();
-const g = await import(`${S}/pkg/eigenmenno_wasm.js`);
-g.initSync({ module: readFileSync(`${S}/pkg/eigenmenno_wasm_bg.wasm`) });
+const g = await import(`${S}/pkg/glassworks_wasm.js`);
+g.initSync({ module: readFileSync(`${S}/pkg/glassworks_wasm_bg.wasm`) });
 const { defaultState } = await import(`${S}/rob3/web/js/model.js`);
 const { cavityRequest, CAVITY } = await import(`${S}/rob3/web/js/cavity-design.js`);
 const [tag, seed, cells] = [process.argv[2], +process.argv[3], +(process.argv[4] ?? 256)];

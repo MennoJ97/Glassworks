@@ -1,5 +1,5 @@
 --- web/js/design.js	2026-11-02 09:09:03
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/tol/rob/web/js/design.js	2026-11-02 12:38:45
++++ <scratchpad>/tol/rob/web/js/design.js	2026-11-02 12:38:45
 @@ -200,6 +200,14 @@
  // has its slope along the frequency removed. A correction along that slope then keeps the
  // resonance on target, and scaling the finished design takes out what sharpening leaves.

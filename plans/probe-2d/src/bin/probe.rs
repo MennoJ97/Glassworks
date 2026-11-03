@@ -1,8 +1,8 @@
-use eigenmenno_core::assemble::{assemble, Csr, DofMap};
-use eigenmenno_core::banded::rcm;
-use eigenmenno_core::eigen::eigs_near;
-use eigenmenno_core::space::Space;
-use eigenmenno_core::{C64, ZERO};
+use glassworks_core::assemble::{assemble, Csr, DofMap};
+use glassworks_core::banded::rcm;
+use glassworks_core::eigen::eigs_near;
+use glassworks_core::space::Space;
+use glassworks_core::{C64, ZERO};
 use proto2d::*;
 use std::f64::consts::PI;
 use std::time::Instant;
@@ -101,7 +101,7 @@ fn pml() {
         let mut b = vec![ZERO; d.n_free];
         b[d.map[src].unwrap().0] = C64::new(1.0, 0.0);
         let tt = Instant::now();
-        eigenmenno_core::banded::BandedLu::factor(&a).unwrap().solve(&mut b);
+        glassworks_core::banded::BandedLu::factor(&a).unwrap().solve(&mut b);
         let ms = tt.elapsed().as_secs_f64() * 1000.0;
         let u = d.expand(&b);
         let (mut worst, mut count) = (0f64, 0);

@@ -35,7 +35,7 @@ $$a_x = p\,\frac{s_y}{s_x}, \qquad a_y = p\,\frac{s_x}{s_y}, \qquad b = -k_0^2\,
 
 So a PML looks like a complex, anisotropic *material*
 ([Sacks et al. 1995](20-references.md#sacks-1995); [Johnson 2021](20-references.md#johnson-2021)).
-[`open.rs`](../crates/eigenmenno-core/src/solve2d/open.rs) builds it cell by cell in `open_matrix`.
+[`open.rs`](../crates/glassworks-core/src/solve2d/open.rs) builds it cell by cell in `open_matrix`.
 The stiffness had to split into separate $x$ and $y$ parts, which is `assemble_split`, and nothing else in
 assembly changes. The matrix isn't Hermitian any more, but it's still complex **symmetric**, since each
 weight only multiplies a symmetric local matrix. Chapter 13 will rely on that.
@@ -117,7 +117,7 @@ resolve, so the test combines two widths to get a tail that falls off faster.
 
 The layer makes the eigenproblem non-Hermitian, and its coefficients depend on $k$. A general eigensolver
 such as Krylov-Schur could handle the first ([Stewart 2002](20-references.md#stewart-2002)). Driven solves
-turn out to be enough, and [`leaky.rs`](../crates/eigenmenno-core/src/solve2d/leaky.rs) needs no new machinery at all.
+turn out to be enough, and [`leaky.rs`](../crates/glassworks-core/src/solve2d/leaky.rs) needs no new machinery at all.
 
 A leaky mode is a pole of that same response, at a complex $k_p$ below the real axis. Near it,
 

@@ -10,9 +10,9 @@ import { DISORDER, HeldMma, edgeField, holdingStep, movedEdges, smoothProject } 
 import { randomNumbers } from '../web/js/optimizer.js';
 import { goalGradient, gradientRequests, meanReflection, optimize, pixelCount, prepareDesign, references, totalIterations } from '../web/js/design.js';
 import { Mma, coneFilter, coneFilter2d, project } from '../web/js/optimizer.js';
-import { initSync, solve as solve1d, solve_2d } from '../web/pkg/eigenmenno_wasm.js';
+import { initSync, solve as solve1d, solve_2d } from '../web/pkg/glassworks_wasm.js';
 
-initSync({ module: readFileSync(new URL('../web/pkg/eigenmenno_wasm_bg.wasm', import.meta.url)) });
+initSync({ module: readFileSync(new URL('../web/pkg/glassworks_wasm_bg.wasm', import.meta.url)) });
 
 const solveOne = (request) => {
   const solution = (request.width === undefined ? solve1d : solve_2d)(JSON.stringify(request));

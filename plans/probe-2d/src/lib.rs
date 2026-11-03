@@ -1,9 +1,9 @@
-//! Throwaway 2D probe. P2 triangles on a structured grid, reusing eigenmenno-core.
-use eigenmenno_core::assemble::{assemble, Csr, DofMap, Triplets};
-use eigenmenno_core::banded::BandedLu;
-use eigenmenno_core::mesh::Mesh;
-use eigenmenno_core::space::Space;
-use eigenmenno_core::{C64, ONE, ZERO};
+//! Throwaway 2D probe. P2 triangles on a structured grid, reusing glassworks-core.
+use glassworks_core::assemble::{assemble, Csr, DofMap, Triplets};
+use glassworks_core::banded::BandedLu;
+use glassworks_core::mesh::Mesh;
+use glassworks_core::space::Space;
+use glassworks_core::{C64, ONE, ZERO};
 use std::collections::HashMap;
 
 /// Structured triangles; `coords` holds x, y per vertex, `cells` three ids per cell.

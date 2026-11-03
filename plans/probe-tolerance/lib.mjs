@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 const P = `${process.cwd()}/pkg`;
-const g = await import(`${P}/eigenmenno_wasm.js`);
-g.initSync({ module: readFileSync(`${P}/eigenmenno_wasm_bg.wasm`) });
+const g = await import(`${P}/glassworks_wasm.js`);
+g.initSync({ module: readFileSync(`${P}/glassworks_wasm_bg.wasm`) });
 export const one = (r) => { const x = g.solve_2d(JSON.stringify(r)); const channels = {}; x.channel_names().forEach((n, i) => { channels[n] = x.channel(i); }); const meta = JSON.parse(x.meta()); x.free(); return { meta, channels }; };
 export const SIDE = 64 / 24, MARGIN = 0.25, PML = 0.25;
 const mul = (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];

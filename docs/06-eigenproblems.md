@@ -86,7 +86,7 @@ code, $\beta_j$ is the norm computed at the top of the next pass.
 The eigenvalues of $T_m$, called *Ritz values*, are very good approximations to the outermost
 eigenvalues of $C$ after just a few steps
 ([Parlett 1998](20-references.md#parlett-1998); [Saad 2011](20-references.md#saad-2011)). `tridiagonal_eigen` in
-[`eigen.rs`](../crates/eigenmenno-core/src/eigen.rs) finds them with the QL algorithm
+[`eigen.rs`](../crates/glassworks-core/src/eigen.rs) finds them with the QL algorithm
 ([Bowdler et al. 1968](20-references.md#bowdler-1968)). It's the standard method, like LAPACK's
 `dsteqr`, so you can treat it as a black box.
 <!-- code: lanczos "let (theta, z)" .. "order.sort_by" -->

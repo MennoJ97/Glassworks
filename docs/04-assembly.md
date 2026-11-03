@@ -21,7 +21,7 @@ Where two cells share a dof, their contributions add. You could see this in the
 worked example in chapter 3, where the middle node received $1/h$ from each side.
 
 This loop is the function `assemble` in
-[`assemble.rs`](../crates/eigenmenno-core/src/assemble.rs), and it doesn't know about
+[`assemble.rs`](../crates/glassworks-core/src/assemble.rs), and it doesn't know about
 1D. It only sees the `Space` trait, which supplies dof numbers and local matrices.
 That's what makes 2D an addition rather than a rewrite. The loop itself is in
 `assemble_split`, which also lets 2D weight the $x$ and $y$ derivatives separately.
@@ -77,7 +77,7 @@ static mode at $k_0 = 0$, as the theory says.
 
 ## One mechanism for all constraints
 
-`DofMap` in [`assemble.rs`](../crates/eigenmenno-core/src/assemble.rs) gives each
+`DofMap` in [`assemble.rs`](../crates/glassworks-core/src/assemble.rs) gives each
 global dof a reduced index and a factor, or marks it as fixed to zero:
 
 $$u_\text{global} = \text{factor} \times u_\text{reduced}$$

@@ -1,6 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "eigenmenno", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "8123", "--directory", "web"], "port": 8123 }
+    { "name": "glassworks", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "8123", "--directory", "web"], "port": 8123 }
   ]
 }

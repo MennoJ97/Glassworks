@@ -1,8 +1,8 @@
 // Optimizes an H_z cavity with the page's own code, and saves it.
 import { readFileSync, writeFileSync } from 'node:fs';
 const S = process.cwd(); const root = `${S}/rob`; const seed = +process.argv[2]; const tag = process.argv[3];
-const g = await import(`${S}/pkg/eigenmenno_wasm.js`);
-g.initSync({ module: readFileSync(`${S}/pkg/eigenmenno_wasm_bg.wasm`) });
+const g = await import(`${S}/pkg/glassworks_wasm.js`);
+g.initSync({ module: readFileSync(`${S}/pkg/glassworks_wasm_bg.wasm`) });
 const { defaultState } = await import(`${root}/web/js/model.js`);
 const { optimize } = await import(`${root}/web/js/design.js`);
 const { tuned, cavityRequest, CAVITY } = await import(`${root}/web/js/cavity-design.js`);

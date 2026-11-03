@@ -1,12 +1,12 @@
 //! Where a band diagram's time goes: factoring, solving, or the rest of Lanczos. Each solver
 //! runs one diagram of a lattice of rods, with the shift below every eigenvalue.
-use eigenmenno_core::assemble::{assemble, Csr, DofMap};
-use eigenmenno_core::banded::Factors;
-use eigenmenno_core::eigen::eigs_factored;
-use eigenmenno_core::mesh::{Mesh, Outline};
-use eigenmenno_core::space::H1Triangle;
-use eigenmenno_core::sparse::{Ordering, SparseLu};
-use eigenmenno_core::{C64, ONE, ZERO};
+use glassworks_core::assemble::{assemble, Csr, DofMap};
+use glassworks_core::banded::Factors;
+use glassworks_core::eigen::eigs_factored;
+use glassworks_core::mesh::{Mesh, Outline};
+use glassworks_core::space::H1Triangle;
+use glassworks_core::sparse::{Ordering, SparseLu};
+use glassworks_core::{C64, ONE, ZERO};
 use probe_sparse::faer_reference::SparseCholesky;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;

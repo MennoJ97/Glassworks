@@ -1,12 +1,12 @@
-use eigenmenno_core::banded::Factors;
+use glassworks_core::banded::Factors;
 use probe_sparse::faer_reference::{SparseCholesky, SparseLu};
-use eigenmenno_core::C64;
+use glassworks_core::C64;
 use probe_sparse::multifrontal::{Analysis, Multifrontal};
 use probe_sparse::*;
 use std::time::Instant;
 
 fn refine(c: &Case, f: &Multifrontal, x: &mut [C64], b: &[C64]) {
-    let mut r = vec![eigenmenno_core::ZERO; c.a.n];
+    let mut r = vec![glassworks_core::ZERO; c.a.n];
     c.a.mul(x, &mut r);
     r.iter_mut().zip(b).for_each(|(v, w)| *v = *w - *v);
     f.solve(&mut r);

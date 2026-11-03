@@ -4,8 +4,8 @@
 // page's finished pixels. Usage: node aniso3.mjs <tag> <seed> [readings]
 import { readFileSync } from 'node:fs';
 const S = process.cwd(), A = `${S}/../aniso/pkg`;
-const g = await import(`${A}/eigenmenno_wasm.js`);
-g.initSync({ module: readFileSync(`${A}/eigenmenno_wasm_bg.wasm`) });
+const g = await import(`${A}/glassworks_wasm.js`);
+g.initSync({ module: readFileSync(`${A}/glassworks_wasm_bg.wasm`) });
 const { defaultState } = await import(`${S}/rob3/web/js/model.js`);
 const { cavityRequest, CAVITY, mirrored } = await import(`${S}/rob3/web/js/cavity-design.js`);
 const { coneFilter2d, smoothProject } = await import(`${S}/rob3/web/js/optimizer.js`);

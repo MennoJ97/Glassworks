@@ -137,7 +137,7 @@ sigma_max = -3 ln(1e-4) / (2 T),  sigma(d) = sigma_max (d / T)^2
 ## Milestones
 
 Each one adds a capability and ends with a check against a known answer. Add the check
-as a test in `crates/eigenmenno-core/tests/analytic.rs` before calling it done.
+as a test in `crates/glassworks-core/tests/analytic.rs` before calling it done.
 
 ### Milestone 1: bands on a good mesh
 
@@ -1356,14 +1356,14 @@ The probe isn't part of the workspace, so it can't affect normal builds. The ful
 takes about 10 minutes, most of it in the largest solves at the end.
 
 ```bash
-cd plans/probe-2d && CARGO_TARGET_DIR=/tmp/eigenmenno-probe cargo run --release --features sparse --bin probe
+cd plans/probe-2d && CARGO_TARGET_DIR=/tmp/glassworks-probe cargo run --release --features sparse --bin probe
 ```
 
 For the WebAssembly timings, build with the rustup toolchain and run `run.mjs`. It expects
 the output copied next to it as `sparse.wasm`:
 
 ```bash
-cd plans/probe-2d && CARGO_TARGET_DIR=/tmp/eigenmenno-probe RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown --lib --features sparse
+cd plans/probe-2d && CARGO_TARGET_DIR=/tmp/glassworks-probe RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown --lib --features sparse
 ```
 
 For the sparse solver comparison, from `plans/probe-sparse`. Give an output directory outside
@@ -1372,19 +1372,19 @@ parts, and `stress` covers the risk above. The probe has its own copy of the sol
 `faer` through its own `faer_reference.rs`:
 
 ```bash
-CARGO_TARGET_DIR=/tmp/eigenmenno-sparse cargo run --release --bin bench
+CARGO_TARGET_DIR=/tmp/glassworks-sparse cargo run --release --bin bench
 ```
 
 ```bash
-CARGO_TARGET_DIR=/tmp/eigenmenno-sparse cargo run --release --bin bands
+CARGO_TARGET_DIR=/tmp/glassworks-sparse cargo run --release --bin bands
 ```
 
 ```bash
-CARGO_TARGET_DIR=/tmp/eigenmenno-sparse cargo run --release --bin stress
+CARGO_TARGET_DIR=/tmp/glassworks-sparse cargo run --release --bin stress
 ```
 
 ```bash
-CARGO_TARGET_DIR=/tmp/eigenmenno-sparse RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown --lib && node run.mjs /tmp/eigenmenno-sparse/wasm32-unknown-unknown/release/probe_sparse.wasm
+CARGO_TARGET_DIR=/tmp/glassworks-sparse RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown --lib && node run.mjs /tmp/glassworks-sparse/wasm32-unknown-unknown/release/probe_sparse.wasm
 ```
 
 The whole-request table compares a build from before the swap, commit `7a0706a` plus milestone 4,

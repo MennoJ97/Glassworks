@@ -1,12 +1,12 @@
-Binary files crates/.DS_Store and /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/.DS_Store differ
-Binary files crates/eigenmenno-core/.DS_Store and /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/.DS_Store differ
-diff -ruN crates/eigenmenno-core/examples/serve.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/examples/serve.rs
---- crates/eigenmenno-core/examples/serve.rs	1970-01-01 01:00:00
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/examples/serve.rs	2026-11-03 10:57:12
+Binary files crates/.DS_Store and <scratchpad>/aniso/crates/.DS_Store differ
+Binary files crates/glassworks-core/.DS_Store and <scratchpad>/aniso/crates/glassworks-core/.DS_Store differ
+diff -ruN crates/glassworks-core/examples/serve.rs <scratchpad>/aniso/crates/glassworks-core/examples/serve.rs
+--- crates/glassworks-core/examples/serve.rs	1970-01-01 01:00:00
++++ <scratchpad>/aniso/crates/glassworks-core/examples/serve.rs	2026-11-03 10:57:12
 @@ -0,0 +1,26 @@
 +//! Probe: one JSON request on stdin, then a JSON header line and the channels as raw
 +//! little-endian f64 on stdout, so the optimizer can run natively, past WebAssembly's 4 GB.
-+use eigenmenno_core::problem::Request2d;
++use glassworks_core::problem::Request2d;
 +use std::io::{BufWriter, Read, Write};
 +
 +fn main() {
@@ -15,7 +15,7 @@ diff -ruN crates/eigenmenno-core/examples/serve.rs /private/tmp/claude-501/-User
 +    let mut out = BufWriter::new(std::io::stdout().lock());
 +    let result = serde_json::from_str::<Request2d>(&text)
 +        .map_err(|e| e.to_string())
-+        .and_then(|req| eigenmenno_core::solve2d::solve(&req));
++        .and_then(|req| glassworks_core::solve2d::solve(&req));
 +    match result {
 +        Err(e) => writeln!(out, "{}", serde_json::json!({ "error": e })).unwrap(),
 +        Ok(mut o) => {
@@ -30,9 +30,9 @@ diff -ruN crates/eigenmenno-core/examples/serve.rs /private/tmp/claude-501/-User
 +        }
 +    }
 +}
-diff -ruN crates/eigenmenno-core/src/assemble.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/assemble.rs
---- crates/eigenmenno-core/src/assemble.rs	2026-11-02 14:05:45
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/assemble.rs	2026-11-03 10:28:08
+diff -ruN crates/glassworks-core/src/assemble.rs <scratchpad>/aniso/crates/glassworks-core/src/assemble.rs
+--- crates/glassworks-core/src/assemble.rs	2026-11-02 14:05:45
++++ <scratchpad>/aniso/crates/glassworks-core/src/assemble.rs	2026-11-03 10:28:08
 @@ -110,25 +110,31 @@
  pub fn assemble(space: &dyn Space, dofs: &DofMap, coef: impl Fn(usize) -> (C64, C64)) -> Triplets {
      assemble_split(space, dofs, |c| {
@@ -69,9 +69,9 @@ diff -ruN crates/eigenmenno-core/src/assemble.rs /private/tmp/claude-501/-Users-
              }
          }
      }
-diff -ruN crates/eigenmenno-core/src/problem.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/problem.rs
---- crates/eigenmenno-core/src/problem.rs	2026-11-02 15:47:04
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/problem.rs	2026-11-03 11:54:33
+diff -ruN crates/glassworks-core/src/problem.rs <scratchpad>/aniso/crates/glassworks-core/src/problem.rs
+--- crates/glassworks-core/src/problem.rs	2026-11-02 15:47:04
++++ <scratchpad>/aniso/crates/glassworks-core/src/problem.rs	2026-11-03 11:54:33
 @@ -214,6 +214,9 @@
      pub eps_low: f64,
      pub eps_high: f64,
@@ -92,9 +92,9 @@ diff -ruN crates/eigenmenno-core/src/problem.rs /private/tmp/claude-501/-Users-m
  }
  
  #[derive(Deserialize, Clone)]
-diff -ruN crates/eigenmenno-core/src/solve2d/dipole.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/dipole.rs
---- crates/eigenmenno-core/src/solve2d/dipole.rs	2026-11-02 15:47:04
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/dipole.rs	2026-11-03 11:54:33
+diff -ruN crates/glassworks-core/src/solve2d/dipole.rs <scratchpad>/aniso/crates/glassworks-core/src/solve2d/dipole.rs
+--- crates/glassworks-core/src/solve2d/dipole.rs	2026-11-02 15:47:04
++++ <scratchpad>/aniso/crates/glassworks-core/src/solve2d/dipole.rs	2026-11-03 11:54:33
 @@ -17,7 +17,7 @@
      (x, y, angle_deg): (f64, f64, f64),
      k0: f64,
@@ -114,9 +114,9 @@ diff -ruN crates/eigenmenno-core/src/solve2d/dipole.rs /private/tmp/claude-501/-
          load.extend(cell_load(space, dofs, c, px, py).into_iter().map(|(r, v)| (r, v * p * weight)));
      }
      Ok(load)
-diff -ruN crates/eigenmenno-core/src/solve2d/open.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/open.rs
---- crates/eigenmenno-core/src/solve2d/open.rs	2026-11-02 15:47:04
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/open.rs	2026-11-03 10:29:32
+diff -ruN crates/glassworks-core/src/solve2d/open.rs <scratchpad>/aniso/crates/glassworks-core/src/solve2d/open.rs
+--- crates/glassworks-core/src/solve2d/open.rs	2026-11-02 15:47:04
++++ <scratchpad>/aniso/crates/glassworks-core/src/solve2d/open.rs	2026-11-03 10:29:32
 @@ -61,6 +61,32 @@
      }
  }
@@ -163,9 +163,9 @@ diff -ruN crates/eigenmenno-core/src/solve2d/open.rs /private/tmp/claude-501/-Us
      });
      Csr::from_triplets(dofs.n_free, t)
  }
-diff -ruN crates/eigenmenno-core/src/solve2d.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d.rs
---- crates/eigenmenno-core/src/solve2d.rs	2026-11-02 15:47:04
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d.rs	2026-11-03 10:54:31
+diff -ruN crates/glassworks-core/src/solve2d.rs <scratchpad>/aniso/crates/glassworks-core/src/solve2d.rs
+--- crates/glassworks-core/src/solve2d.rs	2026-11-02 15:47:04
++++ <scratchpad>/aniso/crates/glassworks-core/src/solve2d.rs	2026-11-03 10:54:31
 @@ -26,7 +26,7 @@
  
  /// Refuses meshes likely to exhaust WebAssembly's 4 GiB. An eigenmode solve, the heaviest,
@@ -175,9 +175,9 @@ diff -ruN crates/eigenmenno-core/src/solve2d.rs /private/tmp/claude-501/-Users-m
  
  pub fn solve(req: &Request2d) -> Result<Output, String> {
      validate::validate(req)?;
-diff -ruN crates/eigenmenno-core/src/space.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/space.rs
---- crates/eigenmenno-core/src/space.rs	2026-11-02 09:23:12
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/space.rs	2026-11-03 10:28:08
+diff -ruN crates/glassworks-core/src/space.rs <scratchpad>/aniso/crates/glassworks-core/src/space.rs
+--- crates/glassworks-core/src/space.rs	2026-11-02 09:23:12
++++ <scratchpad>/aniso/crates/glassworks-core/src/space.rs	2026-11-03 10:28:08
 @@ -13,6 +13,10 @@
      /// Unit-coefficient stiffness and mass matrices of a cell, row-major. Stiffness comes
      /// in x and y parts, because an absorbing layer weights them differently.
@@ -209,4 +209,4 @@ diff -ruN crates/eigenmenno-core/src/space.rs /private/tmp/claude-501/-Users-men
      fn n_dofs(&self) -> usize {
          self.n_vertices + self.edges.len()
      }
-Binary files crates/eigenmenno-wasm/.DS_Store and /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-wasm/.DS_Store differ
+Binary files crates/glassworks-wasm/.DS_Store and <scratchpad>/aniso/crates/glassworks-wasm/.DS_Store differ

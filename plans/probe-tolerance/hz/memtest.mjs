@@ -1,7 +1,7 @@
 // One cavity LDOS solve on a random design of N x N pixels over the page's area, with cells a pixel wide.
 import { readFileSync } from 'node:fs';
-const g = await import(`${process.cwd()}/pkg/eigenmenno_wasm.js`);
-const wasm = g.initSync({ module: readFileSync(`${process.cwd()}/pkg/eigenmenno_wasm_bg.wasm`) });
+const g = await import(`${process.cwd()}/pkg/glassworks_wasm.js`);
+const wasm = g.initSync({ module: readFileSync(`${process.cwd()}/pkg/glassworks_wasm_bg.wasm`) });
 const N = +process.argv[2], side = 64 / 24, margin = 0.25, size = side + 2 * margin;
 let r = 7; const rho = Array.from({ length: N * N }, () => ((r = (r * 16807) % 2147483647) / 2147483647 > 0.5 ? 1 : 0));
 const req = { width: size, height: size, cell: side / N, background: { eps: 1, mu: 1 }, shapes: [], polarization: 'tm', walls: 'absorbing', monitors: [],

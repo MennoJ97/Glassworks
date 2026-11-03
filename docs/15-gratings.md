@@ -2,7 +2,7 @@
 
 *Going further. This builds on chapter 9's Bloch ties, chapter 11's absorbing layers and chapter 13's adjoint.*
 
-A grating repeats forever along $x$, and it's open above and below. So it needs the two boundary conditions we already have at once: Bloch ties on the sides, and an absorbing layer on the top and bottom. Try it on the **2D grating** view, under **Driven response**. The code is in [`solve2d/grating.rs`](../crates/eigenmenno-core/src/solve2d/grating.rs).
+A grating repeats forever along $x$, and it's open above and below. So it needs the two boundary conditions we already have at once: Bloch ties on the sides, and an absorbing layer on the top and bottom. Try it on the **2D grating** view, under **Driven response**. The code is in [`solve2d/grating.rs`](../crates/glassworks-core/src/solve2d/grating.rs).
 
 ## Diffraction orders
 
@@ -60,7 +60,7 @@ The reference is a Fourier modal method written for this check ([Moharam et al. 
 | Transmitted $0$ | 0.11827 | 0.11828 | 0.26553 | 0.26549 |
 | Transmitted $1$ | 0.18431 | 0.18431 | 0.32958 | 0.32960 |
 
-[`tests/gratings.rs`](../crates/eigenmenno-core/tests/gratings.rs) also checks a flat interface against Fresnel's formula, and that a symmetric grating mirrors its orders.
+[`tests/gratings.rs`](../crates/glassworks-core/tests/gratings.rs) also checks a flat interface against Fresnel's formula, and that a symmetric grating mirrors its orders.
 
 A real limit remains. Where an order sits exactly on its cutoff, a **Rayleigh anomaly**, the shares change abruptly with wavelength, and the slowest rate goes to zero, past what the cap can cover. For a period of $1.5\lambda$, the zeroth transmitted order is about 1% off at that wavelength, under 0.2% within 0.1% of it, and about $10^{-4}$ off once 7% away.
 
@@ -71,7 +71,7 @@ Chapter 13 relied on $A^T = A$. Bloch ties break this. With $Z$ carrying the pha
 $$A^T = Z^T A_\text{full} \overline{Z},$$
 <!-- code: grating.rs "lu.solve_transposed" .. "let full" -->
 
-which is the same operator at the opposite phase. So the adjoint really needs $A^T w = g$. Happily, an LU factorization already holds the answer. A solve is a sequence of simple steps, so $A^{-T}$ is each step's transpose, in the reverse order, with no new factorization. [`sparse/transposed.rs`](../crates/eigenmenno-core/src/sparse/transposed.rs) mirrors the ordinary solve line by line.
+which is the same operator at the opposite phase. So the adjoint really needs $A^T w = g$. Happily, an LU factorization already holds the answer. A solve is a sequence of simple steps, so $A^{-T}$ is each step's transpose, in the reverse order, with no new factorization. [`sparse/transposed.rs`](../crates/glassworks-core/src/sparse/transposed.rs) mirrors the ordinary solve line by line.
 <!-- code: SparseLu::solve_transposed_once -->
 
 `a_grating_gradient_matches_finite_differences` checks the result at an angle, where the two would differ, and for an order on each side. The page doesn't optimize gratings yet, but the solver returns everything that would need.

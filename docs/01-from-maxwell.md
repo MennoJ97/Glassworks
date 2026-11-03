@@ -50,7 +50,7 @@ $$E_x = \frac{k_t}{k_0\varepsilon}\,\eta_0 H_y, \qquad E_z = \frac{i}{k_0\vareps
 <!-- code: Setup::push_field "} else {" .. "I * d * scale" -->
 
 These are exactly the lines in `Setup::push_field` in
-[`solve1d.rs`](../crates/eigenmenno-core/src/solve1d.rs).
+[`solve1d.rs`](../crates/glassworks-core/src/solve1d.rs).
 
 ## The one equation
 
@@ -82,7 +82,7 @@ a current sheet $J_y = J\,\delta(x - x_0)$ goes through the same steps and gives
 $f = ik_0\eta_0 J\,\delta(x - x_0)$. Chapter 7 uses a unit sheet, $\eta_0 J = 1$.
 <!-- code: driven "Source::Line" -->
 
-Everything Eigenmenno calculates is this one equation with different questions asked
+Everything Glassworks calculates is this one equation with different questions asked
 of it:
 
 | Analysis | Known | Unknown |
