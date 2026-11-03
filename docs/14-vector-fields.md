@@ -52,8 +52,9 @@ exactly $\lambda = 0$, none of them a resonance.
 
 An eigensolver hunting for the smallest eigenvalues would drown in them. Shift-invert from chapter 6 avoids this
 neatly. With $\sigma$ near the modes of interest, the null space sits far from the shift, at $\theta = -1/\sigma$, a
-small value, so Lanczos ignores it. That's why the eigensolver's interface takes a shift, even though 1D doesn't need
-this.
+small value, so Lanczos ignores it. That's why the eigensolver's interface, `eigs_near`, takes a shift, even though 1D
+doesn't need this.
+<!-- code: eigs_near "pub fn eigs_near" .. "sub_scaled" -->
 
 ## When the browser isn't the right tool
 

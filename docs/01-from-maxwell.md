@@ -42,10 +42,12 @@ Each group needs only one unknown, because the other two components follow from 
 For TE:
 
 $$\eta_0 H_x = -\frac{k_t}{k_0\mu}E_y, \qquad \eta_0 H_z = -\frac{i}{k_0\mu}\frac{dE_y}{dx}.$$
+<!-- code: Setup::push_field "let (second, third)" .. "-I * d * scale" -->
 
 For TM:
 
 $$E_x = \frac{k_t}{k_0\varepsilon}\,\eta_0 H_y, \qquad E_z = \frac{i}{k_0\varepsilon}\frac{d(\eta_0 H_y)}{dx}.$$
+<!-- code: Setup::push_field "} else {" .. "I * d * scale" -->
 
 These are exactly the lines in `Setup::push_field` in
 [`solve1d.rs`](../crates/eigenmenno-core/src/solve1d.rs).
@@ -61,6 +63,7 @@ $$-\frac{d}{dx}\left(p\,\frac{du}{dx}\right) + k_t^2\,p\,u - k_0^2\,q\,u = f$$
 |---|---|---|---|
 | TE | $E_y$ | $1/\mu$ | $\varepsilon$ |
 | TM | $\eta_0 H_y$ | $1/\varepsilon$ | $\mu$ |
+<!-- code: layer_coef "match pol" .. "Polarization::Tm" -->
 
 The right side $f$ is a source, which is zero unless we add a current.
 
@@ -73,6 +76,9 @@ of it:
 | Band diagram | Bloch phase across the cell | $k_0$ and $u$ (an eigenproblem) |
 | Guided modes | $k_0$ | $\beta = k_t$ and $u$ (an eigenproblem) |
 | Spectrum, single wavelength | $k_0$, $k_t$, $f$ | $u$ (a linear system) |
+
+In `solve1d.rs`, `cavity_modes`, `bands`, `waveguide` and `driven` each answer one
+row of this table.
 
 One more thing to notice is the $p$ inside the derivative. It can jump at an
 interface between materials. Where $p$ jumps, $u'$ must jump too, because physics

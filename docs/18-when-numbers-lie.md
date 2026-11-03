@@ -11,9 +11,11 @@ rectangle's edge can lie exactly halfway between two rows, many nodes can be equ
 shape, and a domain can be exactly 84 cells wide. What decides each tie is then floating-point
 noise. This looks harmless until the same structure gets a different mesh for no physical reason.
 
-This solver has a test that made that visible: multiplying every length and the wavelength by the same
-number shouldn't change anything (chapter 12 explains why). At first, it changed one structure's gradients by
+This solver has a test that made that visible,
+`scaling_a_structure_with_its_wavelength_changes_nothing`. Multiplying every length and the wavelength
+by the same number shouldn't change anything (chapter 12 explains why). At first, it changed one structure's gradients by
 up to 17%, even though no solve was wrong. It took four separate fixes to find all of these:
+<!-- code: scaling_a_structure_with_its_wavelength_changes_nothing "let rho" .. "1e-11" -->
 
 | Tie | What noise did |
 |---|---|
@@ -21,12 +23,16 @@ up to 17%, even though no solve was wrong. It took four separate fixes to find a
 | A shape's corner is exactly halfway between two nodes | It decides which node moves |
 | Several nodes are equally far from a shape | It decides the order they snap in |
 | A triangle's centroid lies exactly on an outline, where it meets the outer edge whose nodes can't move | It picks that cell's material |
+<!-- code: mesh.rs "Halfway between two nodes" .. "ny as f64 - 1e-9" -->
+<!-- code: mesh.rs "A shape on a grid has many nodes" .. "order.sort_by" -->
+<!-- code: mesh.rs "Where an outline meets" .. "rposition" -->
 
 The fix is the same each time: decide with a small tolerance, relative to the cell, so that a tie
 always falls the same way. Results at different scales now agree to $10^{-11}$. The last one took
 longest to find, because the field was only wrong in the last column of cells, next to the wall, and
 its effect was $10^{-6}$. Looking at *where* two solutions differ located it, after several good
 theories about the eigensolver and the linear solver had been ruled out by measuring them.
+<!-- code: steps_in -->
 
 ## When a transmission reads 465%
 

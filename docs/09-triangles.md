@@ -35,6 +35,7 @@ vertex and 0 on the opposite edge, and they add up to 1. A second-order element 
 at the three vertices and three edge midpoints, with basis functions
 
 $$\lambda_i(2\lambda_i - 1) \quad\text{at a vertex}, \qquad 4\lambda_i\lambda_j \quad\text{at the midpoint between } i \text{ and } j.$$
+<!-- code: basis_values -->
 
 Each is 1 at its own node and 0 at the other five. Along an edge, each of these is a quadratic
 fixed by that edge's three nodes, and two triangles sharing an edge share those nodes, so $u$ is
@@ -44,6 +45,8 @@ On a straight triangle, the gradients of the $\lambda_i$ are constant, so the st
 is a polynomial of degree 2, and the mass integrand has degree 4. Chapter 3's quadrature idea
 applies directly, with a small rule on the triangle.
 [`space.rs`](../crates/eigenmenno-core/src/space.rs) has all of this in `H1Triangle`.
+<!-- code: H1Triangle::shape -->
+<!-- code: H1Triangle::local_matrices "let (det" .. "mass[i * 6 + j]" -->
 
 On a mesh that fits the geometry, eigenvalue error should fall as $h^{2p}$, as chapter 8 showed.
 With $p = 2$ that's a factor of 16 per halving, and a square cavity's error falls about 15 times.
@@ -67,23 +70,26 @@ outline is only ever approximated to first order, with a jump in the wrong place
 These are errors in a rod lattice's band edges, explained below. `Mesh::fitted_grid` in
 [`mesh.rs`](../crates/eigenmenno-core/src/mesh.rs) fits the outline instead, in three steps:
 
-1. **Snap nodes onto outlines.** Corners of a shape take the nearest grid node. Then, wherever a
-   grid line crosses an outline, one of its two ends moves onto the outline. Nodes very close to an
-   outline join it too, or they'd form slivers against the ones that moved.
+1. **Snap nodes onto outlines** (`Mesh::snap`). Corners of a shape take the nearest grid node. Then,
+   wherever a grid line crosses an outline, one of its two ends moves onto the outline. Nodes very
+   close to an outline join it too, or they'd form slivers against the ones that moved.
 2. **Choose diagonals afterwards.** Each grid square is cut into two triangles. With no grid line
    crossing an outline any more, at least one diagonal doesn't cross it either. Doing this after
    snapping matters: an early version snapped along diagonals as well, which pulled two neighbours
    across a curve onto almost the same point.
-3. **Flip to Delaunay.** Snapping still leaves some thin triangles along curves. Two triangles
-   sharing an edge form a quadrilateral with two possible diagonals, and the better one is where the
-   angles opposite the edge add up to less than 180°. Repeating this removes slivers, and a flip that
-   would cross an outline is refused, so every triangle stays in one material.
+3. **Flip to Delaunay** (`Mesh::flip_to_delaunay`). Snapping still leaves some thin triangles along
+   curves. Two triangles sharing an edge form a quadrilateral with two possible diagonals, and the
+   better one is where the angles opposite the edge add up to less than 180°. Repeating this removes
+   slivers, and a flip that would cross an outline is refused, so every triangle stays in one material.
+<!-- code: Mesh::fitted_grid "m.snap" .. "flip_to_delaunay" -->
 
 A triangle's material is then read at its centroid. Over 200 random placements, the worst angle was
 22° for circles and 16° for rectangles.
+<!-- code: Mesh::fitted_grid "m.region =" .. ".collect()" -->
 
 Nodes on the domain's outer edge never move. That's the useful property: opposite edges of the
 domain have matching nodes, which is exactly what periodic boundaries need.
+<!-- code: Mesh::snap "let free" .. "};" -->
 
 Straight cells still cut the corners of a circle, so a curved outline's error falls at second order,
 even with second-order elements. Fitting doesn't undo that: it just gets the outline's position right.
@@ -95,18 +101,21 @@ the same map with many entries. A periodic cell has two directions, with a phase
 the wavevector $\mathbf{k}$:
 
 $$u(x + L_x, y) = e^{ik_x L_x}\,u(x, y), \qquad u(x, y + L_y) = e^{ik_y L_y}\,u(x, y).$$
+<!-- code: constraints "let angle" .. "from_polar" -->
 
 Every dof on the right edge ties to its partner on the left, and every one on the top to its partner
 on the bottom. Corners tie to the origin, carrying both phases. Because outer nodes never moved, each
 partner exists, and `DofMap` needs nothing else: assembly already multiplies each entry by its dofs'
 phases, as chapter 4 showed. The matrix is Hermitian, so Lanczos and shift-invert from chapter 6 work
 unchanged.
+<!-- code: constraints "let key" .. "&ties)" -->
 
 A **band diagram** repeats that eigenproblem for wavevectors around the edge of the irreducible
 Brillouin zone: from $\Gamma$ ($\mathbf{k} = 0$) to X to M and back to $\Gamma$. For a square lattice, the
 extremes of the bands are usually found on this path, though this isn't guaranteed
 ([Harrison et al. 2007](20-references.md#harrison-2007)). Only the phases change between
 wavevectors, so where the nonzeros are stays the same, which the next chapter exploits.
+<!-- code: closed.rs "let points" .. "band.push" -->
 
 ### Example: a lattice of rods
 

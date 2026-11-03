@@ -9,6 +9,11 @@ You need calculus (integration by parts) and basic linear algebra (matrices,
 eigenvalues). Knowing Maxwell's equations helps but isn't required, because
 chapter 1 reduces them to one ordinary differential equation.
 
+On the website, each chapter's code sits beside it. Point at a name in `code` type, or at a
+passage or equation marked in the margin, and the code shows the lines that do it. As you
+scroll, the code follows the passage you're reading. Here on GitHub, follow the links to the
+source files instead.
+
 This teaches the method, and it doesn't design devices. Its 2D results use bulk-like indices rather than a real chip's effective index, and they can't see light leaking out of the plane.
 
 ## The essentials, in reading order

@@ -4,6 +4,7 @@ A cavity's resonances are the values of $k_0$ where the equation has a nonzero
 solution with no source. In matrix form:
 
 $$S\mathbf{u} = k_0^2\,Q\,\mathbf{u}$$
+<!-- code: cavity_modes "let a" .. "let b" -->
 
 This is a **generalized eigenproblem**, $A\mathbf{x} = \lambda B\mathbf{x}$. Here $A$
 is Hermitian and $B$ is positive definite, which guarantees real eigenvalues
@@ -13,6 +14,7 @@ Guided modes have the same form. Rearranging the operator from chapter 2 with
 $k_t = \beta$:
 
 $$(k_0^2 Q - S)\,\mathbf{u} = \beta^2\,P\,\mathbf{u}.$$
+<!-- code: waveguide "let a" .. "let b" -->
 
 The matrix may have thousands of eigenvalues and we want only a few. So we need an
 iterative method.
@@ -30,6 +32,7 @@ The trick is to change the operator. Pick a target $\sigma$ near the modes you w
 and consider
 
 $$(A - \sigma B)^{-1} B\,\mathbf{x} = \theta\,\mathbf{x}, \qquad \theta = \frac{1}{\lambda - \sigma}.$$
+<!-- code: eigs_factored "let mut pairs" -->
 
 It has the same eigenvectors, but eigenvalues close to $\sigma$ now have the *largest*
 $|\theta|$. The modes you want have become the easiest to find
@@ -38,12 +41,16 @@ $|\theta|$. The modes you want have become the easiest to find
 Applying the operator means solving a linear system, but we only factor
 $A - \sigma B$ once and reuse the factors each iteration. Chapter 5's fast solver is
 what makes this cheap.
+<!-- code: eigs_near "sub_scaled" -->
+<!-- code: lanczos "u.copy_from_slice" .. "lu.solve" -->
 
 Each analysis chooses its own shift:
 - **Resonances:** a small negative $\sigma$, which finds the lowest modes and keeps
   the operator definite.
 - **Guided modes:** just above $k_0^2 n_\text{max}^2$, the largest $\beta^2$ physically
   possible, since the most tightly confined modes are the ones we want.
+<!-- code: cavity_modes "A negative shift" .. "let sigma" -->
+<!-- code: waveguide "let n2: Vec" .. "n2_max * 1.001" -->
 
 ## Lanczos
 
@@ -56,29 +63,35 @@ For a Hermitian operator, a remarkable simplification happens. The restricted ma
 is **tridiagonal**, so each new vector needs only a three-term recurrence:
 
 $$C\mathbf{v}_j = \beta_{j-1}\mathbf{v}_{j-1} + \alpha_j\mathbf{v}_j + \beta_j\mathbf{v}_{j+1}$$
+<!-- code: lanczos "if !v.is_empty()" .. "alpha.push" -->
 
 Its eigenvalues, called *Ritz values*, are very good approximations to the outermost
 eigenvalues of $C$ after just a few steps
 ([Parlett 1998](20-references.md#parlett-1998); [Saad 2011](20-references.md#saad-2011)). `tridiagonal_eigen` in
 [`eigen.rs`](../crates/eigenmenno-core/src/eigen.rs) finds them with the QL algorithm
 ([Bowdler et al. 1968](20-references.md#bowdler-1968)).
+<!-- code: lanczos "let (theta, z)" .. "order.sort_by" -->
 
 Three details in the code are worth pointing out.
 
 **The inner product uses $B$.** The operator is only Hermitian in the $B$ inner
 product, $\langle \mathbf{x}, \mathbf{y}\rangle_B = \mathbf{x}^H B\,\mathbf{y}$, so the
 basis is $B$-orthonormal ([Ericsson & Ruhe 1980](20-references.md#ericsson-ruhe-1980)). That's why the code stores both `v` and `bv`.
+<!-- code: lanczos "b.mul(&u, &mut bu)" .. "let norm" -->
+<!-- code: lanczos "v.push(u.iter()" .. "bv.push" -->
 
 **Full reorthogonalization.** In exact arithmetic, the three-term recurrence keeps the
 basis orthogonal. In floating point, it doesn't, and copies of converged eigenvectors
 creep back in ([Paige 1972](20-references.md#paige-1972)). So each new vector is orthogonalized again against the whole basis.
 This costs memory and $O(m^2 N)$ time in total, but it makes the code short and
 reliable.
+<!-- code: lanczos "Full reorthogonalization" .. "found.iter().for_each" -->
 
 **The stopping test is nearly free.** The residual of a Ritz pair equals the coupling
 to the next basis vector times the last component of its eigenvector in the
 tridiagonal problem. So we can tell what has converged without computing a single
 actual eigenvector ([Parlett 1998](20-references.md#parlett-1998)).
+<!-- code: lanczos "A Ritz pair's residual" .. "let converged" -->
 
 ## Degenerate modes
 
@@ -87,11 +100,13 @@ So when two modes share an eigenvalue, Lanczos can only find one of them. This
 actually happens: a uniform periodic structure has two modes at each frequency, for
 waves going left and right.
 
-`eigs_near` handles this by **locking** ([Bai et al. 2000](20-references.md#bai-2000)). It runs Lanczos, keeps the converged modes,
+`eigs_near` handles this by **locking** ([Bai et al. 2000](20-references.md#bai-2000)). Its loop, in `eigs_factored`, runs Lanczos, keeps the converged modes,
 then runs it again from a fresh random vector that's kept orthogonal to them. The
 second copy of each degenerate mode is then visible. It stops when a run finds
 nothing closer than the current $k$-th best mode. The test
 `bloch_modes_of_uniform_medium_include_degenerate_pairs` checks this.
+<!-- code: eigs_factored "while found.len()" .. "break" -->
+<!-- code: lanczos "found.iter().for_each" -->
 
 ## The known weak spot
 
@@ -100,6 +115,7 @@ mode close to cutoff in a wide cladding is the bad case: it sits among a dense c
 of *box modes*, which are artefacts of closing the domain with walls. Those need a
 large basis. A waveguide with 20 µm of cladding took 454 ms for only 2,119 unknowns,
 compared with 23 ms for a 2,799-unknown resonance problem.
+<!-- code: MAX_BASIS -->
 
 The standard fix is **thick restarting**, as in Krylov-Schur, which bounds the basis
 size ([Wu & Simon 2000](20-references.md#wu-simon-2000); [Stewart 2002](20-references.md#stewart-2002)). We left it out to keep the code readable, and `faer` provides it if we ever

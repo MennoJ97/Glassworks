@@ -42,3 +42,49 @@ body.learn { max-width: 1120px; font-size: 16px; line-height: 1.6; }
   .learn article h1 { font-size: 28px; }
 }
 .learn-layout nav .part { color: var(--muted); font-size: 0.85em; font-weight: 600; margin-top: 12px; list-style: none; }
+
+/* The code panel beside a chapter, from learn.js. Below 1100px, or when hidden, the names
+   in the text are ordinary links to the source pages. */
+.source .line:target { background: color-mix(in srgb, var(--glass) 16%, transparent); }
+.source .cm, .code-panel .cm { color: var(--muted); }
+.source .st, .code-panel .st { color: var(--series-3); }
+.learn a.code-ref { text-decoration-style: dotted; text-decoration-color: var(--glass); }
+.code-panel, .code-hint, .code-toggle { display: none; }
+
+@media (min-width: 1100px) {
+  html:not(.code-off) body.learn.with-code { max-width: 1760px; }
+  html:not(.code-off) .with-code .learn-layout { grid-template-columns: minmax(0, 72ch) minmax(360px, 1fr); gap: 36px; }
+  html:not(.code-off) .with-code .learn-layout nav { grid-column: 1 / -1; position: static; }
+  html:not(.code-off) .with-code .learn-layout nav ul { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); column-gap: 12px; }
+  .with-code .code-toggle { display: inline-block; margin-left: auto; min-height: 0; padding: 3px 10px; font-size: 14px; }
+  html:not(.code-off) .code-hint { display: block; color: var(--muted); font-size: 14.5px; }
+  html:not(.code-off) .code-panel {
+    display: flex; flex-direction: column; position: sticky; top: 16px; height: calc(100vh - 32px); min-width: 0;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden;
+  }
+
+  /* A passage that points into the code gets a bar in the margin, lit while it's shown. */
+  html:not(.code-off) .with-code article [data-code]:not(a) { border-left: 3px solid var(--grid); margin-left: -16px; padding-left: 13px; }
+  html:not(.code-off) .with-code article pre[data-code] { margin-left: 0; padding-left: 14px; }
+  html:not(.code-off) .with-code article [data-code].code-active:not(a) { border-left-color: var(--glass); }
+  html:not(.code-off) .with-code a.code-ref.code-active { background: color-mix(in srgb, var(--glass) 22%, transparent); border-radius: 3px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--glass) 22%, transparent); }
+  html:not(.code-off) .with-code a.code-ref.code-active code { background: none; }
+}
+@media (min-width: 1400px) {
+  html:not(.code-off) .with-code .learn-layout { grid-template-columns: 220px minmax(0, 68ch) minmax(420px, 1fr); }
+  html:not(.code-off) .with-code .learn-layout nav { grid-column: auto; position: sticky; }
+  html:not(.code-off) .with-code .learn-layout nav ul { grid-template-columns: none; }
+}
+
+.code-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.code-tabs { display: flex; gap: 2px; overflow-x: auto; min-width: 0; }
+.code-tabs button { border: 0; background: none; min-height: 0; padding: 3px 8px; color: var(--muted); white-space: nowrap; }
+.code-tabs button[aria-selected=true] { background: var(--surface); color: var(--ink); font-weight: 500; }
+.code-full { white-space: nowrap; color: var(--muted) !important; }
+.code-body { position: relative; flex: 1; overflow: auto; background: var(--surface); }
+.code-panel pre { margin: 0; padding: 10px 0; border-radius: 0; background: none; overflow: visible; counter-reset: line; }
+.code-panel pre code { font-size: 12.5px; }
+/* Long lines wrap under themselves, past the line number, so nothing hides off to the side. */
+.code-panel .line { display: block; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 12px 0 4.2em; text-indent: -4.2em; counter-increment: line; }
+.code-panel .line::before { content: counter(line); display: inline-block; width: 3.2em; margin-right: 1em; text-indent: 0; text-align: right; color: var(--muted); user-select: none; }
+.code-panel .line.hl { background: color-mix(in srgb, var(--glass) 16%, transparent); box-shadow: inset 3px 0 0 var(--glass); }

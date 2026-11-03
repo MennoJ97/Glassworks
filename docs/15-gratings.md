@@ -9,20 +9,26 @@ A grating repeats forever along $x$, and it's open above and below. So it needs 
 A plane wave at angle $\theta$ has $k_x = k\sin\theta$ along the grating. Since the structure repeats with period $L$, what comes back can only add multiples of $2\pi/L$:
 
 $$k_{x,m} = k_x + \frac{2\pi m}{L}, \qquad k_{y,m} = \sqrt{k^2 - k_{x,m}^2}.$$
+<!-- code: grating.rs "let orders" .. ".collect()" -->
 
 These are the **diffraction orders**. Where $|k_{x,m}| < k$ an order propagates, and otherwise it's evanescent and carries no power. What we want from the solver is the share of power in each propagating order.
 
 ## Launching and reading
 
 The plane wave comes from a sheet of current with the wave's own phase along $x$, as in chapter 12's port. This has one advantage over chapter 11's scattered-field form: a substrate can run out through the layer, because nothing assumes a uniform background.
+<!-- code: grating.rs "The sheet" .. "lu.solve(&mut u)" -->
 
 Each order's amplitude comes from a line across the period: the average of $u\,e^{-ik_{x,m}x}$ picks out that order, and all the others average to zero. Below the structure, that's the answer. Above it, a line holds both the reflected wave and the incident one, so four lines fit both at once, by least squares:
+<!-- code: add_order -->
 
 $$u_m(y) = a_m^{\uparrow} e^{ik_{y,m}y} + a_m^{\downarrow} e^{-ik_{y,m}y}.$$
+<!-- code: split_order "let n" .. "(up, down)" -->
 
 These use field values rather than derivatives, which chapter 12 found are least accurate at a cell's edge. The share of power in an order is then
 
 $$\eta_m = \frac{p\,k_{y,m}\,|a_m|^2}{p_0\,k_{y,0}\,|a_0^{\downarrow}|^2}.$$
+<!-- code: grating.rs "let (_, incident)" .. "let power_in" -->
+<!-- code: grating.rs "let ratio" .. "let share" -->
 
 Measuring the incident amplitude this way means nothing depends on how exactly the mesh launches the wave.
 
@@ -35,8 +41,10 @@ A layer absorbs at a rate of $k_y/k$. So an order that's nearly grazing barely n
 The second is an order that doesn't propagate at all. Chapter 11's stretch $s = 1 + i\sigma/k$ only rotates an evanescent wave's phase, without adding any decay. So an order just past its cutoff decays slowly, passes through the layer untouched, and returns from the wall. That needs a real part in the stretch, which does speed up its decay, and which leaves a propagating wave alone apart from shortening its wavelength:
 
 $$s = 1 + \left(\frac{k}{\kappa_{\min}} + i\,\frac{k}{k_{y,\min}}\right)\frac{\sigma}{k}.$$
+<!-- code: stretched_matrix "let stretch" .. "I * strength" -->
 
-Here $k_{y,\min}$ belongs to the most grazing propagating order and $\kappa_{\min}$ to the slowest evanescent one. Both factors are capped at 10, since a steeper layer stops being resolved. The first change alone took the most grazing reflected order from 0.00122 to the correct 0.00179, and the second took the zeroth transmitted order from 0.45894 to the correct 0.45646, on the same mesh.
+Here $k_{y,\min}$ belongs to the most grazing propagating order and $\kappa_{\min}$ to the slowest evanescent one. Both factors are capped at 10 (`MAX_STRENGTH`), since a steeper layer stops being resolved. The first change alone took the most grazing reflected order from 0.00122 to the correct 0.00179, and the second took the zeroth transmitted order from 0.45894 to the correct 0.45646, on the same mesh.
+<!-- code: grating.rs "let background" .. "MAX_STRENGTH));" -->
 
 ## Checking it
 
@@ -61,8 +69,10 @@ A real limit remains. Where an order sits exactly on its cutoff, a **Rayleigh an
 Chapter 13 relied on $A^T = A$. Bloch ties break this. With $Z$ carrying the phases, $A = Z^H A_\text{full} Z$, where $A_\text{full}$ is still complex symmetric, so
 
 $$A^T = Z^T A_\text{full} \overline{Z},$$
+<!-- code: grating.rs "lu.solve_transposed" .. "let full" -->
 
 which is the same operator at the opposite phase. So the adjoint really needs $A^T w = g$. Happily, an LU factorization already holds the answer. A solve is a sequence of simple steps, so $A^{-T}$ is each step's transpose, in the reverse order, with no new factorization. [`sparse/transposed.rs`](../crates/eigenmenno-core/src/sparse/transposed.rs) mirrors the ordinary solve line by line.
+<!-- code: SparseLu::solve_transposed_once -->
 
 `a_grating_gradient_matches_finite_differences` checks the result at an angle, where the two would differ, and for an order on each side. The page doesn't optimize gratings yet, but the solver returns everything that would need.
 

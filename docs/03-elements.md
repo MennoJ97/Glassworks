@@ -22,6 +22,7 @@ order. The basis function for node $i$ is the polynomial that equals 1 at node $
 and 0 at all the other nodes:
 
 $$\ell_i(\xi) = \prod_{j \ne i}\frac{\xi - \xi_j}{\xi_i - \xi_j}$$
+<!-- code: H1Line::basis "let node" .. "val[i] *=" -->
 
 This gives the coefficients a physical meaning: $u_i$ is just the value of the field
 at node $i$.
@@ -32,6 +33,7 @@ the field continuous across the boundary. Continuity is built into the basis.
 In [`space.rs`](../crates/eigenmenno-core/src/space.rs), the numbering is simply
 `cell * order + i`. Shared end nodes get the same number automatically, and the
 matrix ends up banded, with neighbours close together.
+<!-- code: H1Line::cell_dofs -->
 
 This code uses evenly spaced nodes because they're the easiest to understand. They
 get badly conditioned at high order, which is one reason order is capped at 5
@@ -48,6 +50,7 @@ $$x = x_0 + \frac{h}{2}(\xi + 1), \qquad dx = \frac{h}{2}\,d\xi, \qquad \frac{d}
 Applying this to the two integrals, the factors of $h$ come out cleanly:
 
 $$S^{e}_{ij} = \int \phi_i'\phi_j'\,dx = \frac{2}{h}\int_{-1}^{1}\ell_i'\ell_j'\,d\xi, \qquad M^{e}_{ij} = \int \phi_i\phi_j\,dx = \frac{h}{2}\int_{-1}^{1}\ell_i\ell_j\,d\xi$$
+<!-- code: H1Line::local_matrices "let h" .. "h / 2.0" -->
 
 That scaling is all `local_matrices` does. In 2D this mapping becomes a Jacobian
 matrix, but the idea stays the same.
@@ -58,6 +61,7 @@ The integrals on the reference element are of polynomials, and **Gauss-Legendre
 quadrature** computes those exactly ([Davis & Rabinowitz 1984](20-references.md#davis-rabinowitz-1984)):
 
 $$\int_{-1}^{1} g(\xi)\,d\xi \approx \sum_{q=1}^{n} w_q\,g(\xi_q)$$
+<!-- code: H1Line::new "gauss_legendre" .. "ref_mass[i * n + j]" -->
 
 $n$ points integrate polynomials up to degree $2n - 1$ exactly. The mass integrand
 $\ell_i\ell_j$ has degree $2p$, so $n = p + 1$ points are enough. That's what
@@ -98,6 +102,7 @@ This table is real output from this solver, on the same cavity problem:
 | $p = 1$, 16 cells | 15 | $3.2 \times 10^{-2}$ |
 | $p = 2$, 8 cells | 15 | $3.2 \times 10^{-4}$ |
 | $p = 4$, 4 cells | 15 | $5.5 \times 10^{-8}$ |
+<!-- code: eigenvalue_error_converges_at_rate_2p "for order in" .. "assert!" -->
 
 All three use 15 unknowns, but the error differs by a factor of about 600,000.
 Chapter 8 has the full table.

@@ -9,11 +9,13 @@ makes it fast.
 With the numbering from chapter 3, $A_{ij}$ is zero unless $i$ and $j$ share a cell.
 So all nonzeros sit within a narrow band around the diagonal. For order $p$ in 1D,
 the half-width is $b = p$.
+<!-- code: BandedLu::factor "let mut b = 0" .. "b = b.max" -->
 
 Gaussian elimination never creates nonzeros outside the band, since it only combines
 rows that already overlap. So LU factorization on a band costs
 
 $$O(N b^2)$$
+<!-- code: BandedLu::factor "// Eliminate below the pivot" .. "*x -= *m * t" -->
 
 which is **linear** in $N$ ([Golub & Van Loan 2013](20-references.md#golub-van-loan-2013)). Doubling the mesh doubles the time.
 
@@ -23,11 +25,13 @@ Our matrices are often *indefinite*: $S - k_0^2 Q$ has both positive and negativ
 eigenvalues. Plain elimination can then hit a tiny or zero pivot and lose all its
 accuracy, so each step picks the largest available entry in the column and swaps it
 into place. That's **partial pivoting** ([Golub & Van Loan 2013](20-references.md#golub-van-loan-2013)).
+<!-- code: BandedLu::factor "// Partial pivoting" .. "ab.swap" -->
 
 Swapping rows can push entries above the original band, up to $2b$. The storage in
 [`banded.rs`](../crates/eigenmenno-core/src/banded.rs) keeps a column of $3b + 1$
 entries to leave room, the same layout LAPACK uses
 ([Anderson et al. 1999](20-references.md#anderson-1999)).
+<!-- code: BandedLu::factor "let (ld, diag)" .. "ab[diag + r + c * ld - c]" -->
 
 ## Reordering
 
@@ -39,8 +43,9 @@ mesh, whose numbering is arbitrary.
 with few neighbours, then number nodes breadth-first, then reverse the order. Numbers
 now spread out in rings, so neighbours stay close
 ([Cuthill & McKee 1969](20-references.md#cuthill-mckee-1969); [Liu & Sherman 1976](20-references.md#liu-sherman-1976); [George & Liu 1981](20-references.md#george-liu-1981)).
+<!-- code: rcm -->
 
-It's about 30 lines, and it elegantly fixes the periodic case. A ring of $N$ nodes
+`rcm` is about 30 lines, and it elegantly fixes the periodic case. A ring of $N$ nodes
 folds flat, with both sides of the ring numbered alternately, giving a bandwidth of
 2. The test `rcm_folds_a_ring_to_a_narrow_band` confirms this.
 

@@ -14,8 +14,10 @@ But $A^{-1}e_0$ is just $u/(ik)$, which we already have. A source's adjoint is i
 reciprocal. So
 
 $$\delta F = 2\,\mathrm{Re}\!\left(\frac{u^T \delta A\,u}{ik}\right),$$
+<!-- code: density_gradient "With no monitor" .. "u.iter().map" -->
 
 and the gradient costs one more sum over cells. `ldos_gradient_matches_finite_differences` checks this.
+<!-- code: pixel_slopes "for c in 0..space.n_cells()" .. "imaginary[pixel] +=" -->
 
 ## The first attempts
 
@@ -27,6 +29,7 @@ resonance. The gradient is the one that needs no extra solve.
 Our benchmark is chapter 11's crystal of 7 × 7 rods with $\varepsilon = 12$, in a region of the same size, 2.67 wavelengths wide, in 64 × 64
 pixels. The run has 8 stages of 20 iterations, ending at $Q = 500$ and $\beta = 128$. This is the honest comparison: a crystal is a good cavity. And it starts out badly. It's worth seeing how, since each failure
 teaches something.
+<!-- code: CAVITY -->
 
 **The resonance moved.** Finished designs were strong, but with peaks 2 to 5% away from the target. At $Q = 1000$ the bandwidth is 0.1%, so
 they miss it completely, and the optimizer spends its effort chasing a peak that moves whenever it takes a step.
@@ -46,23 +49,29 @@ that don't.
 Near a pole, $1/u_0$ is nearly linear in $k$, as chapter 11 showed, which gives us two things. First, two solves place the pole. Second, the
 same complex quantity $u^T \delta A\,u / (ik)$ is the slope of $-u_0$, not only of its real part. Writing $1/u_0$ as a straight line, with the
 slope $d(1/u_0)/dk$ from those two solves, a change of $u_0$ moves the pole by
+<!-- code: findResonance "const offset" .. "const points" -->
 
 $$\delta k_p = \frac{\delta(1/u_0)}{-\,d(1/u_0)/dk}.$$
+<!-- code: findResonance "const r = dipole" .. "moves: Float64Array" -->
 
 So for every density $x_i$, we get a number $c_i = \partial\,\mathrm{Re}\,k_p/\partial x_i$. Measured on a true resonance, that predicts the real
 shift within 2%. Together these numbers are a direction in the space of all densities: the one direction along which the frequency changes
 fastest. Every direction perpendicular to it leaves the frequency alone, to first order. So remove that component from the gradient $g$:
 
 $$g \;\to\; g - \frac{g\cdot c}{c\cdot c}\,c.$$
+<!-- code: optimizeCavity "const square" .. "goal.map((v, k) => v - along" -->
 
 The step now improves the cavity without moving it. MMA has bounds, so its step isn't quite perpendicular, and any error builds up. So afterwards, a
 correction moves along $c$ by just enough to aim half of the remaining frequency error back at the target. That makes "stay at this wavelength" a real
 constraint on the design, rather than something to hope for.
+<!-- code: optimizeCavity "const moved" .. "x = next.map" -->
 
 Each step reads LDOS at the mode's current wavelength rather than at the target, for a reason the results below will show.
+<!-- code: optimizeCavity "solve, own)" .. "own = (2 * Math.PI) / poleK" -->
 
 The last stages of sharpening still shift it a little, because a pixel flip is a big step. Scale invariance takes out what's left exactly: resize the
 finished design by $\lambda_\text{target}/\lambda_\text{mode}$.
+<!-- code: optimizeCavity "tuned.set(rho" -->
 
 It's worth measuring, because one good run proves little here: starts differ by far more than most of these choices. This table covers nine
 starts, at a bandwidth narrow enough for a strong mode to stand out. These runs read LDOS at the target, as the first version did.
@@ -78,6 +87,7 @@ So the hold is worth about ten times in $Q$. Holding alone isn't enough, though:
 ### The result
 
 We compare everything at $Q = 1000$, relative to vacuum, and each at its own resonance. The crystal is tuned to its own, and every pattern goes through the same search for its strongest peak within 4%, then resizing:
+<!-- code: optimizeCavity "const scan" .. "let peak" -->
 
 | Structure | LDOS | $Q$ | $V$ (wavelengths²) |
 |---|---:|---:|---:|
@@ -91,6 +101,8 @@ to 2,000 reached only 269 on one start.
 
 Drawn as ordinary rectangles, and using the separate search for leaky modes from chapter 11, the default start has an LDOS of 1,066 at $Q = 1000$, $Q$ of about 1,512,000 and $V = 0.0079$ wavelengths². Those change by under 1% from cells of $\lambda/24$
 to $\lambda/72$. Its $Q$ stays within 0.3% for layers of 0.5 to 1.5 wavelengths, and within 0.7% with 0.25 to 1.5 wavelengths of air around it.
+<!-- code: cavityShapes -->
+<!-- code: optimizeCavity "Checks it as a drawn structure" .. "const found" -->
 
 ### A goal that can work against itself
 

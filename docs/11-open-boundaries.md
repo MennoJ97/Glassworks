@@ -15,6 +15,7 @@ An outgoing wave $e^{ikx}$ is an analytic function of $x$. So it can be followed
 leaves the real axis. Replace $x$ by a complex coordinate, with $dx \to s\,dx$ and
 
 $$s = 1 + \frac{i\sigma(x)}{k}.$$
+<!-- code: stretched_matrix "let sigma_max" .. "/ k" -->
 
 Then $e^{ikx}$ becomes $e^{ikx}\,e^{-\int\sigma\,dx}$: the same wave, decaying exponentially. Where
 $\sigma = 0$ nothing has changed, and the solution inside the domain is still the exact solution of
@@ -26,9 +27,11 @@ To get the equations, each derivative along $x$ becomes $\frac{1}{s_x}\partial_x
 element becomes $s_x s_y\,dA$. In the weak form, that's only a change of the weights:
 
 $$a_x = p\,\frac{s_y}{s_x}, \qquad a_y = p\,\frac{s_x}{s_y}, \qquad b = -k_0^2\,q\,s_x s_y.$$
+<!-- code: stretched_matrix "let t = assemble_split" .. "sx * sy)" -->
 
 So a PML looks like a complex, anisotropic *material*
 ([Sacks et al. 1995](20-references.md#sacks-1995); [Johnson 2021](20-references.md#johnson-2021)).
+[`open.rs`](../crates/eigenmenno-core/src/solve2d/open.rs) builds it cell by cell in `open_matrix`.
 The stiffness had to split into separate $x$ and $y$ parts, which is `assemble_split`, and nothing else in
 assembly changes. The matrix isn't Hermitian any more, but it's still complex **symmetric**, since each
 weight only multiplies a symmetric local matrix. Chapter 13 will rely on that.
@@ -60,6 +63,7 @@ A plane wave never decays, so it can't simply be a source inside the layer. It e
 total as $u = u_i + u_s$ leaves
 
 $$L\,u_s = -(L - L_b)\,u_i,$$
+<!-- code: plane_wave "region[c] != 0" .. "*v += i" -->
 
 where $L_b$ is the background's operator. The right side is zero everywhere except inside the shapes,
 and $u_s$ is purely outgoing, so the layer absorbs it. The **2D scattering** view does this, and
@@ -70,8 +74,10 @@ cylinder, within 1%.
 
 A line source at $\mathbf{r}_0$ gives $A(k)\,u = ik\,e_0$, where $e_0$ reads the field at that point.
 Dividing by $ik$ gives the Green's function, so
+<!-- code: line_response -->
 
 $$F(k) = 2\,\mathrm{Re}(-u_0)$$
+<!-- code: driven.rs "Source2d::Line" .. "ldos = Some" -->
 
 is $\pi$ times the **local density of states** (LDOS) per unit $k$. It says how many modes the source
 can radiate into, and so how much power it emits. In vacuum it's $k/2$, and the ratio to that is what's
@@ -86,6 +92,7 @@ So one solve at $k_0(1 + i/2Q)$ gives the LDOS averaged over a bandwidth of $1/Q
 resonances inside it ([Liang & Johnson 2013](20-references.md#liang-johnson-2013)). A real frequency would
 need many solves to find a sharp peak, or miss it completely. On a fixed mesh this is an exact identity,
 which `complex_frequency_is_a_lorentzian_average_of_real_ones` checks.
+<!-- code: driven.rs "let k0 = 2.0 * PI" .. "let k = C64::new" -->
 
 Two warnings about that average. In 2D, a Lorentzian's slow tail meets an LDOS that grows with $k$, so
 the average carries a small term that grows logarithmically as cells shrink. At $Q = 100$, vacuum reads
@@ -97,7 +104,7 @@ resolve, so the test combines two widths to get a tail that falls off faster.
 
 The layer makes the eigenproblem non-Hermitian, and its coefficients depend on $k$. A general eigensolver
 such as Krylov-Schur could handle the first ([Stewart 2002](20-references.md#stewart-2002)). Driven solves
-turn out to be enough, with no new machinery at all.
+turn out to be enough, and [`leaky.rs`](../crates/eigenmenno-core/src/solve2d/leaky.rs) needs no new machinery at all.
 
 A leaky mode is a pole of that same response, at a complex $k_p$ below the real axis. Near it,
 
@@ -106,18 +113,22 @@ $$u_0 \approx \frac{R}{k - k_p},$$
 so $1/u_0$ is nearly a straight line in $k$, crossing zero at $k_p$. A **secant iteration** finds that zero:
 evaluate $1/u_0$ at two points, follow the straight line through them, and repeat. It takes 6 or 7 driven
 solves. The mode's sharpness and size then follow:
+<!-- code: leaky.rs "let mut prev" .. "g = response.inv()" -->
 
 $$Q = \frac{\mathrm{Re}\,k_p}{2\,|\mathrm{Im}\,k_p|}, \qquad
 V = \frac{\int q\,|u|^2\,dA}{\max\,q\,|u|^2}.$$
+<!-- code: mode_volume "let (mut energy" .. "energy / peak" -->
 
 The solve closest to the pole is dominated by the mode, so it provides the field for $V$. The integral
 stops at the layer, whose artificial field isn't part of the mode's energy. Because nothing varies along
 $z$, $V$ is an area. It only means the usual electric mode volume for $E_z$: for $H_z$ it measures magnetic
 energy.
+<!-- code: leaky.rs "let u = normalized" .. "volume: Some" -->
 
 The search needs a source where the mode is strong, and a target within about a quarter of the answer. It
 refuses a pole further away, because in an empty domain it otherwise wanders up to a pole of the mesh
 and reports a plausible-looking $Q$.
+<!-- code: leaky.rs "A search can wander" .. "break;" -->
 
 ### Example: one rod missing
 

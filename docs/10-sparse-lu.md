@@ -22,6 +22,7 @@ Cut the mesh in half with a line of nodes. Those nodes are a **separator**: noth
 touches anything on the right except through them. If we number the separator last, then eliminating
 the left creates no fill on the right, and the two sides can be factored independently. Do the same to
 each half, and each quarter, and so on, which makes a tree of ever smaller separators.
+<!-- code: dissect "let children" .. "nodes.push((separator" -->
 
 Now the expensive part is only the separators, and most of them are small. For a 2D mesh, the
 factorization costs about $N^{3/2}$ operations rather than $N^2$, and storage about $N\log N$. No
@@ -36,6 +37,9 @@ ordering of such a mesh can do better than $N^{3/2}$ ([George 1973](20-reference
    can leave a separator two columns thick. A node touching nothing further left can join the right.
 3. **Reuse the ordering.** It depends only on where the nonzeros are, not their values. So a band
    diagram finds it once for all its wavevectors, and a design for all its iterations.
+<!-- code: dissect "let along_x" .. "partition(" -->
+<!-- code: dissect "Elements couple nodes" .. "});" -->
+<!-- code: Ordering::reused -->
 
 ## The multifrontal method
 
@@ -44,6 +48,7 @@ other. The **multifrontal** method makes this explicit. Each separator gets a de
 **front**, for its own unknowns and whatever they couple to later. It starts from the matrix entries
 that first appear there, and adds the block that each of its two children left behind. Eliminating the
 separator's unknowns from its front leaves a smaller dense block, which it passes up to its parent.
+<!-- code: SparseLu::factor_as "let mut f = vec![ZERO" .. "updates[i] = update" -->
 
 So the whole sparse factorization becomes a tree of small dense LUs, and dense loops are about the
 fastest code a computer can run. On driven problems in WebAssembly, this was 2 to 6 times faster
@@ -59,16 +64,19 @@ A pivot can only come from a front's own unknowns, because taking one from elsew
 which fronts need what. That's a real restriction. A part of the mesh walled in by its separator is a
 small cavity, and it can happen to sit on a resonance of its own. Its front then has only poor pivots,
 even when the whole matrix is fine.
+<!-- code: partial_lu "for i in j..p" .. "weak |=" -->
 
 So `sparse.rs` notes any weak pivot, and then corrects each solve with two steps of **iterative
 refinement**: compute what the answer gets wrong, solve for that, and add it. The test
 `sparse_lu_recovers_when_a_part_sits_on_its_own_resonance` builds this case on purpose. The error is
 0.008 without refinement and $10^{-12}$ with it.
+<!-- code: SparseLu::refined "if self.weak" .. "rhs.iter_mut().zip(&r)" -->
 
 ## How big can a mesh be?
 
 The limit in a browser is memory, since WebAssembly can address at most 4 GiB per instance. So the solver
 refuses meshes above 400,000 unknowns. Chapter 16 shows where that number comes from, and what else was tried
 to make these solves faster.
+<!-- code: solve2d.rs "Refuses meshes" .. "MAX_DOFS: usize" -->
 
 Next: [open boundaries and leaky modes](11-open-boundaries.md).

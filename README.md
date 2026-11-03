@@ -107,8 +107,10 @@ web/                     The page
   js/solver.js           Worker client; drops stale solves
   js/app.js              Connects the controls
   learn/                 Tutorial pages, generated from docs/
+  learn.js               The code panel beside each tutorial chapter
 docs/                    The tutorial, in Markdown
 scripts/build-docs.mjs   Turns docs/ into web/learn, with equations as MathML
+scripts/code-index.mjs   Finds the lines each name in the tutorial points at
 ```
 
 ## Why it's built this way

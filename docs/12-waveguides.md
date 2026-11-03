@@ -12,10 +12,12 @@ chapter 7's 1D solver already finds its modes, and `port_mode` in
 Modes are orthogonal with weight $p$, so a sheet of $p\,\phi(y)$ excites only the mode $\phi$, with
 
 $$u = -\frac{k_0}{2\beta}\,\phi(y)\,e^{i\beta|x - x_0|},$$
+<!-- code: port "for pair in profile.windows" .. "rhs[r] += I * k" -->
 
 going both ways. This is chapter 7's current sheet again, with a mode in place of the plane wave. The half
 going backwards leaves through the absorbing layer. On an exact slab mode, the field is within 1.2% and the
 power within 0.5%.
+<!-- code: port_launches_the_exact_slab_mode "for x in [0.0, 1.5, 3.0]" .. "close(monitors(&o)[0]" -->
 
 A port needs its line to cross a layered guide, which a photonic crystal's isn't. There, a line source does
 the same job, since nothing else exists in the gap for it to excite.
@@ -25,11 +27,13 @@ the same job, since nothing else exists in the gap for it to excite.
 A **monitor** integrates the Poynting flux across a line:
 
 $$P = \frac{1}{2k_0}\int p\,\mathrm{Im}\!\left(u^*\frac{\partial u}{\partial n}\right)ds.$$
+<!-- code: monitor_power "let (val, (gx, gy))" .. "total += weight" -->
 
 There's a trap here. A second-order element's derivative is least accurate at the edge of a cell, which is
 exactly where a line along the grid sits: this read 2% high on a slab. Power is conserved across a thin strip,
 so the monitor averages over two cells instead. Around a line source, the power crossing a closed loop then
-matches $F/4$, with the LDOS $F$ from chapter 11, within 0.3%.
+matches $F/4$, with the LDOS $F$ from chapter 11, within 0.3%. `power_around_a_line_source_matches_its_ldos` checks this.
+<!-- code: monitor_power "for i in 0..steps" .. "offset * cell * ny + pml" -->
 
 ### Example: a sharp bend
 
@@ -41,6 +45,7 @@ get through must come back.
 The page's **2D waveguide bend** view, under **Driven response**, does this. Outside the band gap a ratio like this stops meaning anything, and chapter 18 shows how the page knows. A line source in the guide excites
 the one guided mode, and transmission is the power through a monitor, divided by the same source's power
 through a straight guide:
+<!-- code: sharp_bends_transmit_as_in_mekis "let (straight, bend)" .. "let t =" -->
 
 | Check | Mekis et al. | This solver |
 |---|---:|---:|
@@ -52,6 +57,9 @@ through a straight guide:
 | Sharp bend at $\omega = 0.42$, read from their figure | about 90% | 90.8% |
 | Stepped bend at $\omega = 0.353$ | 100% | 99.8% |
 | Slab of index 3.5, sharp bend | 30% at most | 23% |
+<!-- code: guided_band_matches_mekis "band(0.0, 0.312)" .. "band(0.38, 0.443)" -->
+<!-- code: sharp_bends_transmit_as_in_mekis "close(transmission(Guide::Sharp, 0.353)" .. "close(transmission(Guide::Stepped" -->
+<!-- code: a_sharp_bend_in_a_slab_loses_most_of_its_power -->
 
 Frequencies are in units of $a/\lambda$. They computed these with a time-domain method, so the agreement is
 between two quite different solvers. The slab row is the weakest: they don't give that guide's width, so this
@@ -64,6 +72,7 @@ and they reflect the guided mode a little: 1.6% of its power at $2a$ of layer, 0
 That small reflection formed a resonance with the bend, and gave a transmission over 100%. Asking for weaker
 absorption also helps, because a steep layer reflects more. Close to the guide's cutoff, below about
 $\omega = 0.35$, light travels slowly enough that reflection returns, so these numbers shouldn't be trusted there.
+<!-- code: lattice_guide "let (arm, clad, pml)" .. "let rods" -->
 
 ## Scale invariance
 
@@ -74,7 +83,7 @@ $$-\frac{1}{s^2}\nabla\cdot(p\nabla u) - \frac{k_0^2}{s^2}\,q\,u = 0.$$
 
 Both terms pick up the same factor. Maxwell's equations have no length of their own, so a structure scaled along
 with its wavelength behaves exactly as it did. A crystal with rods 0.353 µm apart reads the same 97.8% at 1 µm that
-the original reads at 2.833 µm, and at 0.55 µm and 10 µm too, to all the digits we printed. The mesh scales with it.
+the original reads at 2.833 µm, and at 0.55 µm and 10 µm too, to all the digits we printed. The mesh scales with it, since `steps_in` divides each length into the same number of cells at any size.
 The test `scaling_a_structure_with_its_wavelength_changes_nothing` holds this to $10^{-7}$. Chapter 18 tells the story of
 what it took to get there. Resizing is what the page offers when a wavelength doesn't suit a structure.
 

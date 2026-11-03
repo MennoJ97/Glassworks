@@ -9,6 +9,7 @@ report not only an answer, but how that answer changes with every part of the st
 Give each pixel of a region a density $\rho$ between 0 and 1, mixing two materials:
 
 $$\varepsilon = \varepsilon_\text{low} + \rho\,(\varepsilon_\text{high} - \varepsilon_\text{low}).$$
+<!-- code: cell_material "let eps" .. "Polarization::Tm" -->
 
 That turns a question about shapes, which can't be differentiated, into a smooth function of thousands of numbers,
 which can. We then need a final design that's only 0s and 1s, since a real structure has no grey material. The
@@ -26,45 +27,54 @@ A monitor's power from chapter 12 is a quadratic form, $P = u^H B\,u$, with $B$ 
 changes the field by $A\,\delta u = -\delta A\,u$, so
 
 $$\delta P = 2\,\mathrm{Re}(u^H B\,\delta u) = -2\,\mathrm{Re}\big(u^H B\,A^{-1}\delta A\,u\big).$$
+<!-- code: monitor_power "if index == 0" .. "/ (I * 2.0)" -->
 
 Computing $A^{-1}\delta A\,u$ for every pixel is exactly the expensive part. But read from the left instead: only the
 one row vector $u^H B\,A^{-1}$ is needed, and that's a single solve. Taking the transpose gives
 
 $$\delta P = -2\,\mathrm{Re}(w^T \delta A\,u), \qquad A^T w = \overline{B\,u}.$$
+<!-- code: density_gradient "let mut w = vec" .. "dofs.expand(&w)" -->
 
 One solve for $w$ prices every pixel. It costs even less than that sounds. Chapter 11 noted that $A$ is complex symmetric,
 even inside the absorbing layer, so $A^T = A$, and $w$ only needs a back-substitution with the factors we already have.
 For a pixel in $E_z$, $\delta A$ is just $-k_0^2\,\delta\varepsilon$ times its mass matrix, so each pixel's slope is a small
 sum over its cells. Chapter 19 does the same for $H_z$, the polarization most planar chips use. `density_gradient_matches_finite_differences` checks this.
+<!-- code: pixel_slopes "for c in 0..space.n_cells()" .. "Polarization::Te =>" -->
 
 ## From grey to sharp
 
-All of this lives in `web/js/optimizer.js`, outside the solver. Only the physics needs to be in Rust.
+All of this lives in [`web/js/optimizer.js`](../web/js/optimizer.js), outside the solver. Only the physics needs to be in Rust.
 
 **Filter.** If every pixel were free, the optimizer would make patterns at the scale of a single pixel, relying on
 the mesh's errors. A **cone filter** replaces each density by a weighted average of its neighbours, with a weight
 falling linearly to zero at a chosen radius. That sets a smallest feature size. It's linear, so its gradient
 is its transpose: the same weights, carrying slopes the other way.
+<!-- code: coneFilter2d "const weight" .. "w / total" -->
+<!-- code: coneFilter2d "adjoint(g)" .. "return out" -->
 
 **Projection.** Then push the filtered densities toward 0 or 1:
 
 $$\hat\rho = \frac{\tanh(\beta/2) + \tanh\big(\beta(\tilde\rho - \tfrac12)\big)}{2\tanh(\beta/2)}.$$
+<!-- code: project -->
 
 At small $\beta$ this is nearly a straight line. As $\beta$ grows it becomes a step. Starting with a sharp step would make
 the problem nearly impossible, since every pixel's slope would be zero or huge, so $\beta$ doubles in stages, and the
 structure sharpens gradually. The slope of $\hat\rho$ joins the chain rule.
+<!-- code: optimize "for (const beta of SHARPNESS)" .. "x = mma.step" -->
 
 **Optimizer.** With thousands of unknowns and an expensive function, a good step matters. The **method of moving asymptotes**
 ([Svanberg 1987](20-references.md#svanberg-1987)) replaces the objective with a simple convex model for each variable,
 built from its slope and two asymptotes on either side, and minimizing that has a closed form. A variable that keeps
 oscillating gets tighter asymptotes, and a steady one gets looser ones. Since projection amplifies a change in density
 by up to about $\beta/2$, the largest step allowed shrinks as $\beta$ grows.
+<!-- code: Mma "if (prev2)" .. "const best" -->
 
 **Pixels on cells.** Each pixel should be a whole number of mesh cells, and the solver refuses anything else. If a pixel's
 edge runs through a cell, that cell's material depends on where its centre happens to fall. Optimizers are very good at
 exploiting such things, and no real structure reproduces them. In an earlier version, a design's resonance moved by 2% when
 drawn as ordinary rectangles, and it looked far better on the coarse mesh than it was. With pixels on cells, a finished design
 is exactly the same matrix as the same shapes drawn by hand.
+<!-- code: validate.rs "A pixel edge through" .. "line up with the mesh" -->
 
 ### Example: a corner in a slab
 
@@ -81,11 +91,14 @@ pattern from a longer run gives:
 | 0.95 | 5.4% | 23.0% | 97.8% | 97.6% |
 | 1.00 | 5.3% | 28.6% | 99.3% | 99.3% |
 | 1.05 | 5.5% | 34.2% | 99.4% | 99.6% |
+<!-- code: OPTIMIZED_BEND -->
+<!-- code: optimized_bend_survives_a_finer_mesh "for wavelength in" .. "let plain" -->
 
 The page's monitor is closer to the corner, where it still catches some light radiated from the gap: moving only the monitor from there to the far position takes the empty region from 7.1% to 5.4%, and the page's sharp corner reads 35%. The page also uses fewer iterations, 10 for each of 8 sharpness stages, and reaches a mean of 98.1% to 98.4% over three random starts.
 Giving it 25 per stage reached 96.9% to 99.0%, so more iterations can reach higher but aren't more dependable. Skipping every
 other sharpness stage did worse than cutting iterations, reaching only 96.5% to 97.6%. How the design sharpens matters more
 than how long it runs.
+<!-- code: design.js "const SHARPNESS" .. "const bendIterations" -->
 
 For comparison, chapter 12's crystal bend reaches 97.9% to 95.8% over a much wider band, about 13%, in a crystal several periods
 across. So neither wins outright: this pattern is compact and needs no band gap, while the crystal gets its bandwidth from having
