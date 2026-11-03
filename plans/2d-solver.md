@@ -889,7 +889,7 @@ is requests and checks. The mirror and coating needed nothing, since their 1D gr
 - **Pole fit:** three solves for `H_z`, to fit the dipole's near-field background. `E_z` keeps two, and its results are unchanged: start 1 still reads 1,066 and Q 1,512,224.
 - **Grey pixels:** finished designs were resized by up to 10.4%, against 1.2%. Two more sharpness stages looked better on three starts and worse on nine, median 345 against 437, so they were left out.
 - **Chaotic:** start 1 reads 681 in Node and 507 in the browser, and each repeats exactly. It isn't the workers, since three instances in Node still read 681. A single instance in the browser reads 507, and the engines' `Math.cosh(1.7)**2` differs in its last digit. `E_z`'s start 1 reads the same in both, so `H_z`'s path is more sensitive.
-- **Not done:** effective indices, robust sampling on the page, and designing gratings on the page. Chapter 17's tolerance section is `E_z` only, and chapter 19 covers `H_z`.
+- **Not done:** effective indices, and designing gratings on the page. Chapter 17's tolerance section is `E_z` only, and chapter 19 covers `H_z`.
 
 #### Tolerance in `H_z`, measured 2026-11-02
 
@@ -958,8 +958,60 @@ Three variants were tried, so the best went to 18 unseen starts, 101 to 118, eac
 - **It works, and mostly as a better search.** Most of the gain is already there with no disorder, and only some is in the share kept: on starts 1 to 9 that share was level, 0.50 against 0.54 at 5 nm. So 16 of 18 is the firm result, about 0.1% by a sign test, while the share kept is 13 of 18, about 10%.
 - **It doesn't reduce the shift,** so tuning is still needed. LDOS at the original wavelength at 5 nm stays at 4 for both.
 - **The highest reading is real.** Start 107 reads 1,353 on half cells, and 1,335 on `h/4`, with Q 17,400. Three others hold within 3%.
-- **Cost:** about twice the time per run, with six solves per iteration rather than three. No Rust. Not on the page, and the page's own numbers would differ, since a run is chaotic between engines.
+- **Cost:** about twice the solves, with six per iteration rather than three. No Rust.
+- **Now on the page, for the `H_z` cavity only,** in `web/js/cavity-design.js`. `E_z` is untouched: start 1 still reads 1,066 and Q 1,512,224. Starts 1 and 5 match the probe's designs pixel for pixel in Node. Starts 1 to 9 read 482 to 731, median 665, with mode Q from 912 to 48,542, and all beat the crystal's 371. In a browser with its pane visible, start 1 reads 665 in 27.2 s, the same as Node, though only that one start was compared. A plain run wasn't timed in the browser.
 - **Not measured:** other sample counts or correlation lengths, and whether noise of any kind gives the same better search. Only one crystal, though now with 18 draws.
+
+#### Why the `H_z` chart swings, and a better step, measured 2026-11-02
+
+The page's chart swung by up to 100 times late in a run, then jumped on its last step. Tracing start 1: in the last two stages the mode sat over a bandwidth off on 17 and 19 of 20 iterations, by up to 11 bandwidths. Removing the frequency's slope from the goal didn't hold it, because `Mma.step` has no constraint and acts nearly as a sign step: 81 to 90% of variables took the full move, with a cosine of only 0.24 to 0.27 against the direction asked for. That moved the mode 5 to 6 bandwidths per step, and the correction after it hit its limit on 15 to 17 of 20 iterations.
+
+Two changes, from reading Feppon et al. 2020 and Romano et al. 2026:
+
+- **A held step.** The frequency goes inside the MMA step as one multiplier, found by bisection so that the shift predicted through the filter and projection is what's wanted, and the next iteration reads at that predicted peak. This needs no extra solves. Feppon's null-space flow has the same structure, but steps directly, so its orthogonality survives.
+- **Second-order subpixel-smoothed projection, SSP2.** It replaces the tanh projection. Equations 4 to 15 of Romano et al. were read from the PDF and match the code, apart from the Hessian, which uses finite differences on the pixel grid rather than their bicubic interpolation. Its gradient matches finite differences within 0.006%. An edge stays about a pixel wide at any sharpness, and it stays smooth as two edges merge.
+
+Starts 1 to 9 on the page's mesh, with all of these sampling disorder as the page does. Twelve-odd variants were compared, so these only choose what to confirm:
+
+| Variant | LDOS, median (range) | Median Q | Late swing |
+|---|---:|---:|---:|
+| Page, with robust sampling | 665 (482 to 731) | 9,285 | 168 times |
+| Re-solving on the peak, over 0.5 bandwidths off | 598 (400 to 734) | 5,758 | 2 times |
+| Quarter-size steps | 659 (574 to 720) | 14,094 | 380 times |
+| Full-chain correction after the step | 702 (478 to 1,316) | 8,920 | 233 times |
+| SSP alone | 669 (488 to 1,274) | 4,983 | 2 times |
+| SSP2 alone | 1,028 (624 to 1,578) | 12,667 | 2 times |
+| Held step | 1,248 (628 to 1,390) | 6,063 | 737 times |
+| Held step, half-size steps | 625 (395 to 1,338) | 9,183 | 473 times |
+| Held step, SSP | 1,053 (664 to 1,807) | 4,507 | 295 times |
+| **Held step, SSP2** | **1,348 (908 to 1,660)** | 10,753 | 3 times |
+| Held step, SSP2 at infinite sharpness in the last stage | 1,348 (908 to 1,658) | 10,691 | 3 times |
+| Held step, SSP2 at infinite sharpness throughout | 302 (162 to 1,921) | 3,256 | 1 time |
+
+So a smoother chart alone doesn't make a better design: re-solving calms it and loses LDOS. And infinite sharpness from the start, which Romano et al. suggest can work, fails here.
+
+On 18 unseen starts, 101 to 118, on half cells, with drawn disorder correlated over 100 nm and four draws each:
+
+| | Plain | Page, robust | Held | Held, SSP | **Held, SSP2** | Crystal |
+|---|---:|---:|---:|---:|---:|---:|
+| LDOS, no disorder | 417 | 664 | 1,123 | 1,216 | **1,370** | 382 |
+| LDOS, 2 nm | 308 | 517 | 864 | 998 | **1,137** | 335 |
+| LDOS, 5 nm | 197 | 363 | 414 | 627 | **639** | 269 |
+| Lowest start: none, 2 nm, 5 nm | 47, 48, 39 | 303, 276, 200 | 503, 454, 253 | 467, 343, 204 | **795, 347, 256** | |
+| Beating the crystal: none, 2 nm, 5 nm | 10, 8, 4 | 16, 15, 13 | 18, 18, 17 | 18, 18, 15 | **18, 18, 17** | |
+| Better than the page's robust goal: none, 2 nm, 5 nm | 5, 5, 2 | | 15, 14, 12 | 16, 16, 14 | **17, 17, 16** | |
+| Share kept, 5 nm | 0.43 | 0.51 | 0.48 | 0.48 | **0.47** | 0.70 |
+| Median Q, no disorder | 2,883 | 3,507 | 5,302 | 7,034 | **9,556** | 14,093 |
+| Shift per nm | 0.89% | 0.94% | 0.99% | 0.96% | **0.96%** | 0.59% |
+
+- **It's confirmed on starts that played no part in choosing it.** Paired with the page's robust goal, 2.02 times with no disorder and 1.88 times at 5 nm, better on 16 of 18 at 5 nm. Against SSP alone the margin is small: 13 of 18 at 5 nm, 1.16 times, and 10 of 18 at 2 nm.
+- **These are better designs, not sturdier ones.** The share kept at 5 nm doesn't improve, and stays below the crystal's. The shift doesn't fall, so these designs still need tuning.
+- **Mesh:** the readings hold. Start 6 reads 1,660, 1,664, 1,663 and 1,663 from the page's mesh to `h/4`, start 7 reads 1,527 to 1,505, and start 1 reads 1,323 to 1,271. Six earlier top designs from the other variants hold within about 2%.
+- **What it found:** slots. Start 106 has air channels about two pixels wide, near 87 nm, crossing at the source inside a ring of air. This is the slot effect, where `H_z`'s electric field is strongest in a low-index gap. Minimum features weren't measured, and these channels are narrow for lithography.
+- **Cost:** about the same run time as the robust goal, with no extra solves. In the probe, `hz/variants-optimizer.js` and `hz/variants-cavity-design.js`, about 60 lines of JavaScript and no Rust.
+- **Not tested:** `E_z`, the bend, and whether robust sampling is still needed with this step.
+- **On the page, 2026-11-03,** for `H_z` only: `holdingStep` and `smoothProject` in `optimizer.js`, and a `held` branch in `optimizeCavity`, about 110 lines with comments, where the probe's was about 60 packed. `E_z` keeps its old step. In Node it repeats the probe's designs bit for bit, so the tables above are the page's. That needed `back` to add its terms in the probe's order: added in another order, which changes the gradient by 2e-16, starts 1 to 4 read 1,039, 719, 1,165 and 1,073 rather than 1,323, 1,395, 1,348 and 948. So a single start says almost nothing, and only the 18-start statistics should be quoted. The step is a bisection over a staircase, since each pixel flips between its limits as its slope changes sign, so one flipped pixel changes the path.
+- **Literature:** [held-step-literature.md](held-step-literature.md). It's OC's bisected volume multiplier and MMA's one-constraint dual, aimed at a frequency, relaxed to half the gap. The staircase comes from mixing gradients, `g + λf`, where MMA mixes each pixel's `p` and `q`, which would give an interior optimum moving smoothly with `λ`. Untested: that change, and predicting the shift across a stage change, where the chart still drops for one iteration (61, 81, 101 and 121 on start 1).
 
 ### Vector fields: a line estimate
 

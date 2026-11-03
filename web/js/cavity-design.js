@@ -2,7 +2,7 @@
 // tutorial explains this, and it builds on the optimizer that chapter 13 explains.
 
 import { scaled } from './model.js';
-import { Mma, coneFilter2d, project, randomStart } from './optimizer.js';
+import { Mma, coneFilter2d, holdingStep, project, randomNumbers, randomStart, smoothProject } from './optimizer.js';
 
 // A square of pixels around an emitter, in units of the wavelength, as big as 7 x 7 rods.
 // `stages` raises the bandwidth's Q to a level a sharpening design can follow, then sharpens.
@@ -117,6 +117,59 @@ function cavityShapes(rho, scale) {
   return shapes;
 }
 
+// What each H_z iteration samples: edges moved by this standard deviation, correlated over this
+// distance, both in µm. A fraction of a pixel moves H_z's mode about twice as far as a drawn edge
+// does, so `grey` scales it. Chapter 19 gives the measurements.
+export const DISORDER = { samples: 3, sigma: 0.002, correlation: 0.1, grey: 0.5, waves: 100 };
+
+// A smooth random field, in pixels of a design with pixels of `h`, from a sum of random waves.
+export function edgeField(random, h) {
+  const gaussian = () => Math.sqrt(-2 * Math.log(random() + 1e-300)) * Math.cos(2 * Math.PI * random());
+  const { sigma, correlation, grey, waves: count } = DISORDER;
+  const waves = Array.from({ length: count }, () => [gaussian() / correlation, gaussian() / correlation, 2 * Math.PI * random()]);
+  const size = ((grey * sigma) / h) * Math.sqrt(2 / count);
+  return (x, y) => size * waves.reduce((sum, [a, b, phase]) => sum + Math.cos(a * x * h + b * y * h + phase), 0);
+}
+
+// Moves each edge between pixels by `move(x, y)` of a pixel, with positive growing material. It
+// follows each edge's contrast, so a uniform region stays as it is.
+export function movedEdges(rho, n, move) {
+  const out = Float64Array.from(rho);
+  const edge = (a, b, d) => {
+    const contrast = Math.abs(rho[a] - rho[b]);
+    if (contrast < 1e-6) return;
+    const [high, low] = rho[a] > rho[b] ? [a, b] : [b, a];
+    if (d > 0) out[low] += contrast * d;
+    else out[high] += contrast * d;
+  };
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const a = i + j * n;
+      if (i + 1 < n) edge(a, a + 1, move(i + 1, j + 0.5));
+      if (j + 1 < n) edge(a, a + n, move(i + 0.5, j + 1));
+    }
+  }
+  return out.map((v) => Math.min(1, Math.max(0, v)));
+}
+
+// The slope of the LDOS averaged over disordered copies, each read at the wavelength that `moves`
+// predicts for it, since a copy read on its peak's wing would trade Q for LDOS.
+async function disorderedSlope(s, rho, { Q, poleK, moves, own, iteration }, solve) {
+  const random = randomNumbers(iteration * 7907 + s.design.cavityDesign.seed);
+  const h = (cavitySide * s.wavelength) / CAVITY.pixels;
+  const copies = Array.from({ length: DISORDER.samples }, () => movedEdges(rho, CAVITY.pixels, edgeField(random, h)));
+  const wavelengthOf = (copy) => {
+    const k = copy.reduce((sum, v, q) => sum + moves[q] * (v - rho[q]), poleK);
+    const wavelength = (2 * Math.PI) / k;
+    return Math.abs(wavelength - s.wavelength) < 0.05 * s.wavelength ? wavelength : own;
+  };
+  const reply = await solve(copies.map((copy) => cavityRequest(s, copy, Q, wavelengthOf(copy))));
+  if (!reply || reply.error) return { reply };
+  const mean = new Float64Array(rho.length);
+  reply.results.forEach((r) => r.channels.gradient.forEach((v, k) => { mean[k] += v / reply.results.length; }));
+  return { mean };
+}
+
 // Eight-fold symmetry around the source, which is its own adjoint.
 function mirrored(n) {
   const images = (i, j) => [[i, j], [n - 1 - i, j], [i, n - 1 - j], [n - 1 - i, n - 1 - j], [j, i], [n - 1 - j, i], [j, n - 1 - i], [n - 1 - j, n - 1 - i]];
@@ -129,11 +182,23 @@ function mirrored(n) {
 // has its slope along the frequency removed. A correction along that slope then keeps the
 // resonance on target, and scaling the finished design takes out what sharpening leaves.
 // LDOS is read at the mode's own wavelength: past one linewidth, raising it would lower Q.
+// H_z's step follows disordered copies rather than the design itself, which finds better designs.
+// In H_z, MMA's step is close to a sign step, which ignores the removal, and moved the mode by
+// several bandwidths. So the frequency is held inside MMA's step there, through the projection,
+// and the next iteration is read where that predicts the peak. Its projection is smoothed, which
+// keeps that prediction good as the design sharpens. Chapter 19 gives the measurements.
 export async function optimizeCavity(s, solve, onStep) {
   const n = CAVITY.pixels ** 2;
   const filter = coneFilter2d(CAVITY.pixels, CAVITY.pixels, CAVITY.radius);
   const symmetric = mirrored(CAVITY.pixels);
-  const through = (g, slope) => symmetric(filter.adjoint(g.map((v, k) => v * slope[k])));
+  const held = s.polarization === 'tm';
+  const projected = (a, beta) => {
+    const filtered = filter.apply(symmetric(a));
+    if (held) return smoothProject(filtered, CAVITY.pixels, beta);
+    const { rho, slope } = project(filtered, beta);
+    return { rho, back: (g) => g.map((v, k) => v * slope[k]) };
+  };
+  const through = (g, back) => symmetric(filter.adjoint(back(g)));
   const target = (2 * Math.PI) / s.wavelength;
   let x = randomStart(n, s.design.cavityDesign.seed);
   let iteration = 0;
@@ -142,13 +207,26 @@ export async function optimizeCavity(s, solve, onStep) {
     const reach = Math.min(0.1, 0.2 / beta);
     const mma = new Mma(reach);
     for (let i = 0; i < CAVITY.iterations; i++) {
-      const { rho, slope } = project(filter.apply(symmetric(x)), beta);
+      const { rho, back } = projected(x, beta);
       const { reply, poleK, moves } = await findResonance(s, rho, Q, solve, own);
       if (!reply || reply.error) return reply;
       if (!onStep({ rho, reply, iteration: ++iteration, beta, bandwidth: Q })) return null;
       if (Math.abs((2 * Math.PI) / poleK - s.wavelength) < 0.04 * s.wavelength) own = (2 * Math.PI) / poleK;
-      const goal = through(reply.results[0].channels.gradient.map((v) => (-2 * v) / target), slope);
-      const frequency = through(moves, slope);
+      let gradient = reply.results[0].channels.gradient;
+      if (s.polarization === 'tm') {
+        const copies = await disorderedSlope(s, rho, { Q, poleK, moves, own, iteration }, solve);
+        if (!copies.mean) return copies.reply;
+        gradient = copies.mean;
+      }
+      const goal = through(gradient.map((v) => (-2 * v) / target), back);
+      const frequency = through(moves, back);
+      if (held) {
+        const shift = (a) => projected(a, beta).rho.reduce((sum, v, q) => sum + moves[q] * (v - rho[q]), 0);
+        x = mma.step(x, goal, (stepFor) => holdingStep(stepFor, goal, frequency, shift, 0.5 * (target - poleK)));
+        const predicted = (2 * Math.PI) / (poleK + shift(x));
+        if (Math.abs(predicted - s.wavelength) < 0.04 * s.wavelength) own = predicted;
+        continue;
+      }
       const square = frequency.reduce((sum, v) => sum + v * v, 0);
       const along = goal.reduce((sum, v, k) => sum + v * frequency[k], 0) / square;
       const next = mma.step(x, goal.map((v, k) => v - along * frequency[k]));
