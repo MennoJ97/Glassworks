@@ -15,16 +15,20 @@ An outgoing wave $e^{ikx}$ is an analytic function of $x$. So it can be followed
 leaves the real axis. Replace $x$ by a complex coordinate, with $dx \to s\,dx$ and
 
 $$s = 1 + \frac{i\sigma(x)}{k}.$$
-<!-- code: stretched_matrix "let sigma_max" .. "/ k" -->
+<!-- code: stretched_matrix "let kb" .. "/ kb" -->
 
-Then $e^{ikx}$ becomes $e^{ikx}\,e^{-\int\sigma\,dx}$: the same wave, decaying exponentially. Where
+Here $k = k_0 n_b$ is the background's wavenumber, for its index $n_b$. Then $e^{ikx}$ becomes $e^{ikx}\,e^{-\int\sigma\,dx}$: the same wave, decaying exponentially. Where
 $\sigma = 0$ nothing has changed, and the solution inside the domain is still the exact solution of
 the original equation. So the join is free of reflection at every angle and frequency, which no
 ordinary absorbing material could manage. Dividing by $k$ makes the decay rate the same at every frequency.
 A wall at the far side of the layer reflects what's left, which has been reduced by the round trip.
 
 To get the equations, each derivative along $x$ becomes $\frac{1}{s_x}\partial_x$, and the area
-element becomes $s_x s_y\,dA$. In the weak form, that's only a change of the weights:
+element becomes $s_x s_y\,dA$. In the weak form's $x$ term, that's
+
+$$\int p\,\frac{\partial_x u}{s_x}\,\frac{\partial_x v}{s_x}\,s_x s_y\,dA = \int p\,\frac{s_y}{s_x}\,\partial_x u\,\partial_x v\,dA,$$
+
+and likewise for $y$, while the mass term only gains $s_x s_y$. So it's only a change of the weights:
 
 $$a_x = p\,\frac{s_y}{s_x}, \qquad a_y = p\,\frac{s_x}{s_y}, \qquad b = -k_0^2\,q\,s_x s_y.$$
 <!-- code: stretched_matrix "let t = assemble_split" .. "sx * sy)" -->
@@ -37,7 +41,11 @@ assembly changes. The matrix isn't Hermitian any more, but it's still complex **
 weight only multiplies a symmetric local matrix. Chapter 13 will rely on that.
 
 $\sigma$ grows quadratically into the layer, so that it starts gently, with a strength chosen for a set
-loss over a round trip. On a discrete mesh, the join isn't perfect any more, so the layer can't be
+loss over a round trip. With $\sigma = \sigma_\text{max}(d/L)^2$ at depth $d$ in a layer $L$ thick, $\int\sigma\,dx = \sigma_\text{max}L/3$,
+so a wave crossing it and back at normal incidence keeps $e^{-2\sigma_\text{max}L/3}$ of its amplitude, which is set to $10^{-4}$.
+<!-- code: stretched_matrix "`sigma = sigma_max" .. "let sigma_max" -->
+
+On a discrete mesh, the join isn't perfect any more, so the layer can't be
 arbitrarily steep or thin. In free space, half a wavelength of layer is a good start. A line source
 then matches the exact $\frac{i}{4}H_0^{(1)}(kr)$ to 0.05% with one wavelength of layer at 24 cells
 per wavelength, including at the corners.
@@ -73,15 +81,20 @@ cylinder ([Bohren & Huffman 1983](20-references.md#bohren-huffman-1983)), within
 ## LDOS, at complex frequency
 
 A line source at $\mathbf{r}_0$ gives $A(k)\,u = ik\,e_0$, where $e_0$ reads the field at that point.
-Dividing by $ik$ gives the Green's function, so
+Here $k$ is $k_0$, possibly complex. Dividing by $ik$ gives the Green's function, so
 <!-- code: line_response -->
 
 $$F(k) = 2\,\mathrm{Re}(-u_0)$$
 <!-- code: driven.rs "Source2d::Line" .. "ldos = Some" -->
 
 is $\pi$ times the **local density of states** (LDOS) per unit $k$. It says how many modes the source
-can radiate into, and so how much power it emits. In vacuum it's $k/2$, and the ratio to that is what's
-known as the Purcell enhancement in cavity physics. It's the number a cavity is really trying to raise.
+can radiate into, and so how much power it emits: $\mathrm{Re}(-u_0)$ is the work the source does against
+its own field, which is chapter 7's minus sign. In vacuum, $u = ik\cdot\frac{i}{4}H_0^{(1)}(kr) = -\frac{k}{4}\big(J_0(kr) + i\,Y_0(kr)\big)$.
+At the source, $Y_0$ diverges, but only in the imaginary part, and $J_0(0) = 1$ gives $F = k/2$.
+<!-- code: vacuum_ldos_is_half_of_k -->
+
+The ratio to that is what's known as the Purcell enhancement in cavity physics. It's the number a cavity
+is really trying to raise.
 
 Now a useful fact. The response $u_0(k)$ is analytic above the real axis, because a causal system can't
 respond before it's driven. The stretch keeps that property, since $s = 1 + i\sigma/k$ has no singularity
@@ -96,7 +109,7 @@ which `complex_frequency_is_a_lorentzian_average_of_real_ones` checks.
 
 Two warnings about that average. In 2D, a Lorentzian's slow tail meets an LDOS that grows with $k$, so
 the average carries a small term that grows logarithmically as cells shrink. At $Q = 100$, vacuum reads
-about 1% high, and each halving of the cell adds about 0.2%. At $Q = 20$ it's about 5%, adding 1%. And
+about 1% high. [Chapter 17](17-designing-a-cavity.md) starts at lower $Q$, where it's larger. And
 the tail reaches the sharp modes far above the mesh's cutoff, which a sum over real frequencies can't
 resolve, so the test combines two widths to get a tail that falls off faster.
 
@@ -118,6 +131,11 @@ solves. The mode's sharpness and size then follow ([Joannopoulos et al. 2008](20
 $$Q = \frac{\mathrm{Re}\,k_p}{2\,|\mathrm{Im}\,k_p|}, \qquad
 V = \frac{\int q\,|u|^2\,dA}{\max\,q\,|u|^2}.$$
 <!-- code: mode_volume "let (mut energy" .. "energy / peak" -->
+
+The mode varies in time as $e^{-ikct}$, so its energy decays as $e^{2\,\mathrm{Im}\,k\,ct}$, and $Q$ counts the
+radians of oscillation per e-fold of energy. $V$ is the area the mode would fill at its peak strength. In an
+empty box with walls, $\sin^2\sin^2$ averages to 1/4 and peaks at 1, so $V$ is a quarter of the area.
+<!-- code: mode_area_of_a_box_is_a_quarter_of_it -->
 
 The solve closest to the pole is dominated by the mode, so it provides the field for $V$. The integral
 stops at the layer, whose artificial field isn't part of the mode's energy. Because nothing varies along

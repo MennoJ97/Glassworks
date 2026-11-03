@@ -79,9 +79,11 @@ export class Mma {
         low[i] = x[i] - 2 * this.move;
         high[i] = x[i] + 2 * this.move;
       }
-      const p = (high[i] - x[i]) * Math.sqrt(Math.max(g[i], 0)) + 1e-7;
-      const q = (x[i] - low[i]) * Math.sqrt(Math.max(-g[i], 0)) + 1e-7;
-      const best = (p * low[i] + q * high[i]) / (p + q);
+      // The model P / (high - y) + Q / (y - low) has slope g at x, with P = (high - x)^2 max(g, 0)
+      // and Q = (x - low)^2 max(-g, 0). These hold their square roots, which give its minimum.
+      const rootP = (high[i] - x[i]) * Math.sqrt(Math.max(g[i], 0)) + 1e-7;
+      const rootQ = (x[i] - low[i]) * Math.sqrt(Math.max(-g[i], 0)) + 1e-7;
+      const best = (rootP * low[i] + rootQ * high[i]) / (rootP + rootQ);
       const lower = Math.max(0, x[i] - this.move, low[i] + 0.1 * (x[i] - low[i]));
       const upper = Math.min(1, x[i] + this.move, high[i] - 0.1 * (high[i] - x[i]));
       next[i] = Math.min(upper, Math.max(lower, best));

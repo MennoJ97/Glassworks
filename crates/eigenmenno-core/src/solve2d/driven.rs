@@ -192,7 +192,7 @@ fn port_mode(req: &Request2d, k0: f64, x: f64, y0: f64, y1: f64) -> Result<Vec<(
 /// in units where a unit plane wave in vacuum carries 1/2 per unit length. A derivative is
 /// least accurate at a cell's edge, where a line along the grid would sit. Power is conserved
 /// across a thin strip, so this averages it over two cells, which cancels that error.
-/// `P = u^H B u` for a Hermitian `B`, and the first monitor's `B u` goes into `first`.
+/// `P = u^H B u` for a Hermitian `B`, and the first monitor's `B u` goes into `bu`.
 fn monitor_power(
     space: &H1Triangle,
     coef: &[(C64, C64)],
@@ -201,7 +201,7 @@ fn monitor_power(
     cell: f64,
     pml: f64,
     monitors: &[Monitor],
-    first: &mut [C64],
+    bu: &mut [C64],
 ) -> Result<Vec<f64>, String> {
     let mut d = vec![0; 6];
     monitors
@@ -242,9 +242,10 @@ fn monitor_power(
                     }
                     let weight = coef[space.mesh.region[c]].0.re * length / steps as f64 / 4.0;
                     total += weight * (v.conj() * dn).im;
+                    // `(B u)_j` is the slope of `P` along `conj(u_j)`, from `Im z = (z - conj(z)) / 2i`.
                     if index == 0 {
                         for j in 0..6 {
-                            first[d[j]] += (v * -(gx[j] * nx + gy[j] * ny) + dn * val[j]) * weight
+                            bu[d[j]] += (v * -(gx[j] * nx + gy[j] * ny) + dn * val[j]) * weight
                                 / (2.0 * k0)
                                 / (I * 2.0);
                         }

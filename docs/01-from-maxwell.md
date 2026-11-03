@@ -54,7 +54,18 @@ These are exactly the lines in `Setup::push_field` in
 
 ## The one equation
 
-Eliminating the other components gives the same equation for both polarizations
+Eliminating the other components gives one equation. For TE, use
+$\omega\mu_0 = k_0\eta_0$ and $\omega\varepsilon_0 = k_0/\eta_0$. Since $\partial_z$ becomes
+$ik_t$, the $y$ part of the second curl equation, times $\eta_0$, is
+
+$$ik_t\,\eta_0 H_x - \frac{d}{dx}(\eta_0 H_z) = -ik_0\varepsilon E_y.$$
+
+Substitute $\eta_0 H_x$ and $\eta_0 H_z$ from above and multiply by $ik_0$:
+
+$$-\frac{d}{dx}\left(\frac{1}{\mu}\frac{dE_y}{dx}\right) + \frac{k_t^2}{\mu}E_y - k_0^2\varepsilon E_y = 0.$$
+
+TM works the same way, from the $y$ part of the first curl equation, with
+$\varepsilon$ and $\mu$ swapped. So both polarizations share one form
 ([Jin 2014](20-references.md#jin-2014)):
 
 $$-\frac{d}{dx}\left(p\,\frac{du}{dx}\right) + k_t^2\,p\,u - k_0^2\,q\,u = f$$
@@ -65,7 +76,11 @@ $$-\frac{d}{dx}\left(p\,\frac{du}{dx}\right) + k_t^2\,p\,u - k_0^2\,q\,u = f$$
 | TM | $\eta_0 H_y$ | $1/\varepsilon$ | $\mu$ |
 <!-- code: layer_coef "match pol" .. "Polarization::Tm" -->
 
-The right side $f$ is a source, which is zero unless we add a current.
+The right side $f$ is a source, which is zero unless we add a current. A current
+density $\mathbf{J}$ adds $+\mathbf{J}$ to the right of the second curl equation. In TE,
+a current sheet $J_y = J\,\delta(x - x_0)$ goes through the same steps and gives
+$f = ik_0\eta_0 J\,\delta(x - x_0)$. Chapter 7 uses a unit sheet, $\eta_0 J = 1$.
+<!-- code: driven "Source::Line" -->
 
 Everything Eigenmenno calculates is this one equation with different questions asked
 of it:
@@ -81,8 +96,10 @@ In `solve1d.rs`, `cavity_modes`, `bands`, `waveguide` and `driven` each answer o
 row of this table.
 
 One more thing to notice is the $p$ inside the derivative. It can jump at an
-interface between materials. Where $p$ jumps, $u'$ must jump too, because physics
-requires $p u'$ to be continuous. So $u'$ isn't even defined at an interface, and
+interface between materials. Where $p$ jumps, $u'$ must jump too, because $p u'$ is
+continuous. From the equations above, $p u' = ik_0\,\eta_0 H_z$ in TE and
+$p u' = -ik_0 E_z$ in TM. Both are fields tangential to the interface, and tangential
+fields are continuous across an interface that carries no current sheet. So $u'$ isn't even defined at an interface, and
 $u''$ certainly isn't. That's a real problem for any method that needs second
 derivatives, and it's the reason for the next chapter.
 

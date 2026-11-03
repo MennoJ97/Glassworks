@@ -85,11 +85,13 @@ pub(super) fn stretched_matrix(
 ) -> Csr {
     let (pb, qb) = coef[0];
     // The background's wavenumber, from eps mu = q / p whichever polarization this is.
-    let k = k0 * (qb.re / pb.re).sqrt();
+    let kb = k0 * (qb.re / pb.re).sqrt();
+    // `sigma = sigma_max (depth / pml)^2`, so across the layer `integral(sigma) = sigma_max pml / 3`,
+    // and a round trip at normal incidence keeps `exp(-2 sigma_max pml / 3) = 1e-4` of the amplitude.
     let sigma_max = -3.0 * (1e-4f64).ln() / (2.0 * pml);
     let stretch = |d: f64, size: f64, layer: f64| {
         let depth = (layer - d).max(d - layer - size).max(0.0) / pml;
-        C64::new(1.0, 0.0) + I * strength * (sigma_max * depth * depth) / k
+        C64::new(1.0, 0.0) + I * strength * (sigma_max * depth * depth) / kb
     };
     let t = assemble_split(space, dofs, |c| {
         let (p, q) = cell_material(req, space.mesh, coef, pml, c);

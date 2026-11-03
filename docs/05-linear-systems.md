@@ -7,12 +7,12 @@ makes it fast.
 ## Banded matrices
 
 With the numbering from chapter 3, $A_{ij}$ is zero unless $i$ and $j$ share a cell.
-So all nonzeros sit within a narrow band around the diagonal. For order $p$ in 1D,
-the half-width is $b = p$.
+So all nonzeros sit within a narrow band around the diagonal. For order $r$ in 1D,
+the half-width is $b = r$.
 <!-- code: BandedLu::factor "let mut b = 0" .. "b = b.max" -->
 
-Gaussian elimination never creates nonzeros outside the band, since it only combines
-rows that already overlap. So LU factorization on a band costs
+Without row swaps, Gaussian elimination never creates nonzeros outside the band, since
+it only combines rows that already overlap. So LU factorization on a band costs
 
 $$O(N b^2)$$
 <!-- code: BandedLu::factor "// Eliminate below the pivot" .. "*x -= *m * t" -->
@@ -27,10 +27,27 @@ accuracy, so each step picks the largest available entry in the column and swaps
 into place. That's **partial pivoting** ([Golub & Van Loan 2013](20-references.md#golub-van-loan-2013)).
 <!-- code: BandedLu::factor "// Partial pivoting" .. "ab.swap" -->
 
-Swapping rows can push entries above the original band, up to $2b$. The storage in
+If every candidate is zero, the matrix is singular. In a lossless structure that
+happens exactly when $k_0$ is a resonance, where a driven field has no finite answer,
+so `BandedLu::factor` reports it as an error.
+<!-- code: BandedLu::factor "if ab[col + p] == ZERO" .. "singular matrix" -->
+
+Swapping rows can push entries above the original band, up to $2b$: a row swapped up
+from as far as $b$ rows below reaches $b$ columns past its own diagonal. The storage in
 [`banded.rs`](../crates/eigenmenno-core/src/banded.rs) keeps a column of $3b + 1$
 entries to leave room, the same layout LAPACK uses
-([Anderson et al. 1999](20-references.md#anderson-1999)).
+([Anderson et al. 1999](20-references.md#anderson-1999)). Entry $(i, j)$ is stored at
+row $2b + i - j$ of column $j$. The diagonal sits at row $2b$, $L$ in the $b$ rows
+below it, and $U$ with room for fill in the $2b$ rows above. For a $5 \times 5$
+matrix with $b = 1$, that's 4 rows of 5 columns:
+
+```text
+          col 0   col 1   col 2   col 3   col 4
+row 0       .       .     (0,2)   (1,3)   (2,4)    zero at first, room for fill
+row 1       .     (0,1)   (1,2)   (2,3)   (3,4)    upper diagonal
+row 2     (0,0)   (1,1)   (2,2)   (3,3)   (4,4)    diagonal
+row 3     (1,0)   (2,1)   (3,2)   (4,3)     .      lower diagonal, then L
+```
 <!-- code: BandedLu::factor "let (ld, diag)" .. "ab[diag + r + c * ld - c]" -->
 
 ## Reordering
@@ -47,7 +64,15 @@ now spread out in rings, so neighbours stay close
 
 `rcm` is about 30 lines, and it elegantly fixes the periodic case. A ring of $N$ nodes
 folds flat, with both sides of the ring numbered alternately, giving a bandwidth of
-2. The test `rcm_folds_a_ring_to_a_narrow_band` confirms this.
+2. On a ring of 6 nodes, breadth-first from node 0 visits 0, 1, 5, 2, 4, 3, so ring
+neighbours end up at most 2 apart, and reversing keeps that. The test
+`rcm_folds_a_ring_to_a_narrow_band` confirms this.
+
+`BandedLu::factor` then factors the renumbered matrix $PAP^T$, where the permutation
+$P$ moves old dof `perm[k]` to position $k$. Since $A\mathbf{x} = \mathbf{b}$ is the same
+as $PAP^T(P\mathbf{x}) = P\mathbf{b}$, `solve` permutes the right-hand side on the way
+in and undoes it on the way out.
+<!-- code: BandedLu::factor "let perm = rcm(a)" .. "inv[old] = new" -->
 
 ## How fast is this?
 

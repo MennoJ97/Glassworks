@@ -23,7 +23,8 @@ and the gradient costs one more sum over cells. `ldos_gradient_matches_finite_di
 
 Maximize the LDOS at a line source in the middle of a square, with Liang & Johnson's idea
 ([Liang & Johnson 2013](20-references.md#liang-johnson-2013)): use chapter 11's complex frequency, and start at a low $Q$, whose
-smooth average gives the optimizer something to climb. Raising $Q$ in stages narrows the bandwidth, and leads it toward a sharp
+smooth average gives the optimizer something to climb. That average reads a little high, as chapter 11 warned: in vacuum about 5% at
+$Q = 20$ and 1% at $Q = 100$, and each halving of the cell adds about 1% and 0.2% more. Raising $Q$ in stages narrows the bandwidth, and leads it toward a sharp
 resonance. The gradient is the one that needs no extra solve.
 
 Our benchmark is chapter 11's crystal of 7 × 7 rods with $\varepsilon = 12$, in a region of the same size, 2.67 wavelengths wide, in 64 × 64
@@ -154,6 +155,10 @@ The crystal, with each rod's radius varied instead, which is a different model, 
 | Below 125 nm | 16 | 136 | 7 | 79 |
 
 Cleaning up a design afterwards isn't a fair test of designing with a limit, so we also widened the filter. It doesn't set a strict limit, because isolated thin parts remain, but it does remove most of them. With about 6% of the material thinner than 125 nm, a clear disc reaches a median LDOS of only 279, with half the starts below $Q = 10{,}000$. A larger disc of 417 nm does better, at 492, with 16% thinner than that, $Q$ of 18,000 and a shift of 0.44% per nanometre. The crystal's rods are 151 nm across. So how much of the advantage survives depends on how fine a process is, and on the optimizer as well as the physics.
+
+<a id="the-bend-for-comparison"></a>
+
+**The bend, for comparison.** Chapter 13's bend is far more forgiving. With every pixel edge moved at random, drawn exactly rather than as densities, three starts keep 97.8% to 98.3% at a spread of 1 nm and 94.7% to 98.7% at 5 nm. At 10 nm they fall to 84.9% to 96.8%. It does rely on fine lines, though: removing what's thinner than 83 nm keeps 95% to 98%, while removing what's thinner than 125 nm leaves 5% to 87%.
 
 ### What we don't know
 

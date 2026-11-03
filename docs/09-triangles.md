@@ -15,7 +15,7 @@ $$-\nabla\cdot(p\nabla u) - k_0^2 q\,u = f,$$
 with $p = 1/\mu$, $q = \varepsilon$ for $E_z$, and $p = 1/\varepsilon$, $q = \mu$ for $H_z$. The two
 are chapter 1's two polarizations, and they behave quite differently, as bands below show. The
 page lists them by which field points out of the plane, because the names TE and TM swap
-between communities.
+between communities. In the code, `Te` solves for $E_z$ and `Tm` for $H_z$.
 
 This is chapter 1's equation with $d/dx$ replaced by $\nabla$. Integrating by parts in the same
 way gives the same weak form:
@@ -45,11 +45,41 @@ On a straight triangle, the gradients of the $\lambda_i$ are constant, so the st
 is a polynomial of degree 2, and the mass integrand has degree 4. Chapter 3's quadrature idea
 applies directly, with a small rule on the triangle ([Dunavant 1985](20-references.md#dunavant-1985)).
 [`space.rs`](../crates/eigenmenno-core/src/space.rs) has all of this in `H1Triangle`.
+<!-- code: TRIANGLE_RULE -->
+
+Barycentric coordinates do the job of chapter 3's reference element. A point of the triangle with
+corners $\mathbf{p}_0, \mathbf{p}_1, \mathbf{p}_2$ is
+$\mathbf{x} = \mathbf{p}_0 + \lambda_1(\mathbf{p}_1 - \mathbf{p}_0) + \lambda_2(\mathbf{p}_2 - \mathbf{p}_0)$,
+and `det` is the Jacobian determinant of that map, twice the area. Its sign only records whether the
+corners run anticlockwise, and dividing by it gives the right gradients either way. Each $\lambda_i$
+is linear, 0 on the opposite edge and 1 at vertex $i$, so $\nabla\lambda_i$ points from that edge
+straight towards vertex $i$, with length one over the triangle's height there. On the triangle
+(0, 0), (1, 0), (0, 1), `det` is 1 and the gradients are (−1, −1), (1, 0) and (0, 1). The rule's
+weights add up to 1, so multiplying by the area turns the rule into an integral over the cell.
 <!-- code: H1Triangle::shape -->
 <!-- code: H1Triangle::local_matrices "let (det" .. "mass[i * 6 + j]" -->
 
-On a mesh that fits the geometry, eigenvalue error should fall as $h^{2p}$, as chapter 8 showed.
-With $p = 2$ that's a factor of 16 per halving, and a square cavity's error falls about 15 times.
+Two checks need no integrals. The six basis functions add up to 1 everywhere, and a constant has no
+gradient, so each row of the stiffness matrix sums to 0. For the same reason, all 36 entries of the
+mass matrix add up to the triangle's area.
+
+On a mesh that fits the geometry, eigenvalue error should fall as $h^{2r}$ for order $r$, as chapter 8
+showed. Second-order elements give $h^4$, a factor of 16 per halving, and a square cavity's error falls
+about 15 times.
+
+### Example: an empty box
+
+Take an empty 1 × 1.5 box with perfectly conducting walls, so $E_z = 0$ on them. Its modes are products
+of 1D cavity modes like chapter 3's, $\sin(m\pi x)\sin(n\pi y/1.5)$, with $k_0^2 = \pi^2(m^2 + n^2/2.25)$ for
+$m, n \ge 1$. The lowest is $k_0 = \pi\sqrt{1 + 1/2.25} = 3.776$. For $H_z$ the same walls make its
+normal derivative 0 instead, so its modes are cosines, $m$ or $n$ can be 0, and a constant mode comes
+first, at $k_0 = 0$. The test `rectangular_cavity_matches_mode_formula` checks the first six of each.
+<!-- code: rectangular_cavity_matches_mode_formula -->
+
+A box is also the bridge from 1D. A short one layered along $x$, with magnetic walls, has first modes
+with no $y$ variation at all. Those are exactly the 1D solver's modes, and
+`layered_box_matches_the_1d_solver` checks that the 2D solver finds them.
+<!-- code: layered_box_matches_the_1d_solver -->
 
 ## A mesh that fits the shapes
 
@@ -67,7 +97,8 @@ outline is only ever approximated to first order, with a jump in the wrong place
 | 24 × 24 (2,304) | 6.7e-4 | 9.0e-4 | 9.3e-3 | 1.6e-3 |
 | 48 × 48 (9,216) | 5.9e-4 | 9.6e-5 | 9.7e-3 | 1.2e-4 |
 
-These are errors in a rod lattice's band edges, explained below. `Mesh::fitted_grid` in
+These are errors in the band edges of the rod lattice at the end of this chapter. A staircase can land
+close by luck at one mesh, as $E_z$ does at 24 × 24, but it stops improving. `Mesh::fitted_grid` in
 [`mesh.rs`](../crates/eigenmenno-core/src/mesh.rs) fits the outline instead, in three steps:
 
 1. **Snap nodes onto outlines** (`Mesh::snap`). Corners of a shape take the nearest grid node. Then,
@@ -110,9 +141,12 @@ phases, as chapter 4 showed. The matrix is Hermitian, so Lanczos and shift-inver
 unchanged.
 <!-- code: constraints "let key" .. "&ties)" -->
 
-A **band diagram** repeats that eigenproblem for wavevectors around the edge of the irreducible
-Brillouin zone: from $\Gamma$ ($\mathbf{k} = 0$) to X to M and back to $\Gamma$. For a square lattice, the
-extremes of the bands are usually found on this path, though this isn't guaranteed
+A **band diagram** repeats that eigenproblem for many wavevectors. A phase of $2\pi$ changes nothing,
+so each phase $k_xL_x$, $k_yL_y$ only needs to run from $-\pi$ to $\pi$. A square cell's symmetry, such as
+a centred rod's, cuts that down to a triangle: $\Gamma$ = (0, 0), X = ($\pi$, 0), M = ($\pi$, $\pi$), as
+phases per period. This triangle is called the irreducible Brillouin zone. The code walks its edge from
+$\Gamma$ to X to M and back to $\Gamma$, with `s` from 0 to 3. For a square lattice, the extremes of the
+bands are usually found on this path, though this isn't guaranteed
 ([Harrison et al. 2007](20-references.md#harrison-2007)). Only the phases change between
 wavevectors, so where the nonzeros are stays the same, which the next chapter exploits.
 <!-- code: closed.rs "let points" .. "band.push" -->

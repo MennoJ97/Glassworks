@@ -17,15 +17,17 @@ millions of unknowns, and chapter 5 exploits it directly.
 
 ## Lagrange elements
 
-Take a cell and place $p + 1$ evenly spaced nodes on it, where $p$ is the polynomial
-order. The basis function for node $i$ is the polynomial that equals 1 at node $i$
-and 0 at all the other nodes:
+On the reference cell $\xi \in [-1, 1]$ (mapped onto real cells below), place
+$r + 1$ evenly spaced nodes $\xi_0, \dots, \xi_r$, where $r$ is the polynomial order
+($p$ is already the coefficient from chapter 1). The basis function for node $i$ is
+the polynomial that equals 1 at node $i$ and 0 at all the other nodes:
 
 $$\ell_i(\xi) = \prod_{j \ne i}\frac{\xi - \xi_j}{\xi_i - \xi_j}$$
 <!-- code: H1Line::basis "let node" .. "val[i] *=" -->
 
-This gives the coefficients a physical meaning: $u_i$ is just the value of the field
-at node $i$.
+A global $\phi_i$ is pieced together from the $\ell$'s of the cells that share node
+$i$, so it too is 1 at node $i$ and 0 at every other node. This gives the
+coefficients a physical meaning: $u_i$ is just the value of the field at node $i$.
 
 Neighbouring cells share their end node, and that one shared unknown is what makes
 the field continuous across the boundary. Continuity is built into the basis.
@@ -47,9 +49,10 @@ element** $\xi \in [-1, 1]$, and map to a real cell of length $h$:
 
 $$x = x_0 + \frac{h}{2}(\xi + 1), \qquad dx = \frac{h}{2}\,d\xi, \qquad \frac{d}{dx} = \frac{2}{h}\frac{d}{d\xi}$$
 
-Applying this to the two integrals, the factors of $h$ come out cleanly:
+Applying this to the two integrals over one cell $c$, with $i$ and $j$ its local
+nodes, the factors of $h$ come out cleanly:
 
-$$S^{e}_{ij} = \int \phi_i'\phi_j'\,dx = \frac{2}{h}\int_{-1}^{1}\ell_i'\ell_j'\,d\xi, \qquad M^{e}_{ij} = \int \phi_i\phi_j\,dx = \frac{h}{2}\int_{-1}^{1}\ell_i\ell_j\,d\xi$$
+$$(S_c)_{ij} = \int_c \phi_i'\phi_j'\,dx = \frac{2}{h}\int_{-1}^{1}\ell_i'\ell_j'\,d\xi, \qquad (M_c)_{ij} = \int_c \phi_i\phi_j\,dx = \frac{h}{2}\int_{-1}^{1}\ell_i\ell_j\,d\xi$$
 <!-- code: H1Line::local_matrices "let h" .. "h / 2.0" -->
 
 That scaling is all `local_matrices` does. In 2D this mapping becomes a Jacobian
@@ -64,15 +67,15 @@ $$\int_{-1}^{1} g(\xi)\,d\xi \approx \sum_{q=1}^{n} w_q\,g(\xi_q)$$
 <!-- code: H1Line::new "gauss_legendre" .. "ref_mass[i * n + j]" -->
 
 $n$ points integrate polynomials up to degree $2n - 1$ exactly. The mass integrand
-$\ell_i\ell_j$ has degree $2p$, so $n = p + 1$ points are enough. That's what
+$\ell_i\ell_j$ has degree $2r$, so $n = r + 1$ points are enough. That's what
 `H1Line::new` uses.
 
 ## A worked example you can check by hand
 
-Take order $p = 1$. The basis functions on a cell are two straight lines, and the
+Take order $r = 1$. The basis functions on a cell are two straight lines, and the
 integrals give
 
-$$S^e = \frac{1}{h}\begin{pmatrix}1 & -1\\-1 & 1\end{pmatrix}, \qquad M^e = \frac{h}{6}\begin{pmatrix}2 & 1\\1 & 2\end{pmatrix}.$$
+$$S_c = \frac{1}{h}\begin{pmatrix}1 & -1\\-1 & 1\end{pmatrix}, \qquad M_c = \frac{h}{6}\begin{pmatrix}2 & 1\\1 & 2\end{pmatrix}.$$
 
 Consider a cavity of length 1 in vacuum with perfectly conducting walls, so $u = 0$
 at both ends and $p = q = 1$. The exact lowest mode has $k_0 = \pi \approx 3.1416$.
@@ -93,15 +96,15 @@ chapter 2 predicted. The solver returns exactly this value for this mesh:
 
 ## Why higher order is worth it
 
-For smooth fields, raising $p$ reduces the error far faster than shrinking $h$ does
+For smooth fields, raising $r$ reduces the error far faster than shrinking $h$ does
 ([Babuška et al. 1981](20-references.md#babuska-1981)).
 This table is real output from this solver, on the same cavity problem:
 
 | | Unknowns | Error in $k_0^2$ |
 |---|---|---|
-| $p = 1$, 16 cells | 15 | $3.2 \times 10^{-2}$ |
-| $p = 2$, 8 cells | 15 | $3.2 \times 10^{-4}$ |
-| $p = 4$, 4 cells | 15 | $5.5 \times 10^{-8}$ |
+| $r = 1$, 16 cells | 15 | $3.2 \times 10^{-2}$ |
+| $r = 2$, 8 cells | 15 | $3.2 \times 10^{-4}$ |
+| $r = 4$, 4 cells | 15 | $5.5 \times 10^{-8}$ |
 <!-- code: eigenvalue_error_converges_at_rate_2p "for order in" .. "assert!" -->
 
 All three use 15 unknowns, but the error differs by a factor of about 600,000.

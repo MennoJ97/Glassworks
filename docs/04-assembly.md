@@ -29,19 +29,32 @@ That's what makes 2D an addition rather than a rewrite. The loop itself is in
 ## Storing a sparse matrix
 
 The loop produces a list of `(row, column, value)` triplets, including duplicates.
-`Csr::from_triplets` sorts them and adds the duplicates together, producing
+`Csr::from_triplets` deals them into their rows, sorts each short row by column, and
+adds the duplicates together. That produces
 **compressed sparse row** storage: all the column numbers and values in one long
 array, and a pointer to where each row starts ([Davis 2006](20-references.md#davis-2006)). Multiplying by a vector then takes
 one pass through the nonzeros, as in `Csr::mul`.
 <!-- code: Csr -->
 <!-- code: Csr::from_triplets "for (i, j, v) in sorted" .. "last = Some" -->
 
+Take chapter 3's two cells of order 1, but with natural ends, so all 3 dofs stay. The
+two cells give 8 triplets, two of them at (1, 1), and merging leaves 7 entries. For
+$S$ with $h = 1/2$, row $i$ runs from `ptr[i]` up to `ptr[i + 1]`:
+
+```text
+ptr = [0, 2, 5, 7]
+col = [0, 1, 0, 1, 2, 1, 2]
+val = [2, -2, -2, 4, -2, -2, 2]
+```
+
 ## Two kinds of boundary condition
 
 Recall the boundary term from the weak form: $-[p u' v]_a^b$.
 
 **Essential (Dirichlet) conditions** fix the value of $u$, for example $u = 0$. You
-have to impose these explicitly, by removing that unknown from the system.
+have to impose these explicitly, by removing that unknown from the system. Removing
+the dof also removes its test function. Every remaining $\phi_i$ is zero at the wall,
+so the boundary term vanishes there too, whatever $pu'$ is.
 
 **Natural (Neumann) conditions** specify $p u'$. These need no special handling: if
 $p u' = 0$ at a boundary, the boundary term vanishes, and leaving it out of the
@@ -80,16 +93,31 @@ phase: $u(L) = e^{ikL}u(0)$
 $e^{ikL}$.
 <!-- code: Setup::new "let tie" .. "DofMap::new" -->
 
-During assembly, each entry becomes
+With a Bloch tie, the basis function for dof 0 is $\psi = \phi_0 + e^{ikL}\phi_N$,
+where $N$ is the last dof, and $\psi$ is complex. Complex functions pair as
+$\int u\,\overline{v}\,dx$, so we test with $\overline\psi$. That puts $\overline{f}$
+on the row side. During assembly, each cell $c$ adds
 
-$$A_{ij} = \overline{f_i}\,\left(a S + b M\right)_{ij}\,f_j.$$
+$$A_{r_ir_j} \mathrel{+}= \overline{f_i}\,\left(a_c S_c + b_c M_c\right)_{ij}\,f_j,$$
 <!-- code: assemble_split "let Some((ri, fi))" .. "t.push" -->
 
-The complex conjugate on the test side comes from using a conjugated test function.
-It keeps the matrix Hermitian, so its eigenvalues stay real, as a lossless structure's
-frequencies must. Without it, the eigensolver of chapter 6 wouldn't apply.
+where $i$ and $j$ are the cell's local dofs, $r_i$ is the reduced index of $i$, and
+$f_i$ its factor. Testing with $\overline\psi$ also cancels the boundary terms at the
+two ends: $\overline\psi$ is 1 at $x = 0$ and $e^{-ikL}$ at $x = L$, while
+$u'(L) = e^{ikL}u'(0)$.
 
-One wrinkle: tying the last dof to the first connects the two ends of the line, so
-the matrix is no longer banded. Chapter 5 deals with that.
+The conjugate keeps the matrix Hermitian, so its eigenvalues stay real, as a lossless
+structure's frequencies must. Without it, the eigensolver of chapter 6 wouldn't apply.
+
+Take order 1 and three cells of length $h$, with dofs 0 to 3 and $u_3 = e^{i\theta}u_0$,
+where $\theta = kL$. The third cell's entries for dof 3 land in row and column 0, so
+
+$$S = \frac{1}{h}\begin{pmatrix}2 & -1 & -e^{-i\theta}\\-1 & 2 & -1\\-e^{i\theta} & -1 & 2\end{pmatrix}.$$
+<!-- code: DofMap::new "for &(slave, master, phase)" .. "d.map[slave]" -->
+
+The two corners are conjugates, so $S$ is Hermitian. Entry $(0, 0)$ still sums to
+$2/h$, because the third cell adds $\overline{e^{i\theta}}\,e^{i\theta}/h = 1/h$. But
+the corners break the band: tying the last dof to the first connects the two ends of
+the line. Chapter 5 deals with that.
 
 Next: [solving linear systems](05-linear-systems.md).

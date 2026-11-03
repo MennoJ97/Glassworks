@@ -260,6 +260,7 @@ impl Mesh {
                         let (ux, uy, vx, vy) = (u.0 - o.0, u.1 - o.1, v.0 - o.0, v.1 - o.1);
                         (ux * vx + uy * vy) / (ux * vy - uy * vx).abs().max(1e-300)
                     };
+                    // A negative sum means the angles at opp and far add up to more than 180°.
                     if cot(opp) + cot(far) < -1e-9 && !self.crosses(opp, far, outlines) {
                         // Keeps the counter-clockwise orientation: a, far, opp and far, b, opp.
                         self.cells[3 * c..3 * c + 3].copy_from_slice(&[a, far, opp]);

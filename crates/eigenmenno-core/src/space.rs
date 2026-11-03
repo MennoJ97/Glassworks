@@ -1,5 +1,5 @@
-//! Finite element spaces. Assembly only sees the `Space` trait, so 2D Lagrange
-//! and Nedelec elements can be added as new implementations.
+//! Finite element spaces: Lagrange elements on lines and on triangles. Assembly only sees
+//! the `Space` trait, so other elements, such as Nedelec's, can be added as new implementations.
 
 use crate::mesh::Mesh;
 use crate::{C64, ZERO};
@@ -38,7 +38,7 @@ fn gauss_legendre(n: usize) -> Vec<(f64, f64)> {
         .collect()
 }
 
-/// Continuous Lagrange elements of order p on a line. Neighbouring cells share
+/// Continuous Lagrange elements of order r on a line. Neighbouring cells share
 /// their end dof, which is what makes the field continuous.
 pub struct H1Line<'a> {
     pub mesh: &'a Mesh,
@@ -72,6 +72,8 @@ impl<'a> H1Line<'a> {
         for i in 0..n {
             for j in (0..n).filter(|&j| j != i) {
                 let w = 1.0 / (node(i) - node(j));
+                // Product rule: multiplying val by (xi - x_j) w scales der by the same factor
+                // and adds val * w.
                 der[i] = der[i] * (xi - node(j)) * w + val[i] * w;
                 val[i] *= (xi - node(j)) * w;
             }
@@ -135,7 +137,7 @@ pub struct H1Triangle<'a> {
     pub mesh: &'a Mesh,
     n_vertices: usize,
     edges: Vec<[usize; 2]>,
-    /// The edge opposite each pair: `(v0, v1)`, `(v1, v2)`, `(v2, v0)`.
+    /// The edge joining each pair: `(v0, v1)`, `(v1, v2)`, `(v2, v0)`.
     cell_edges: Vec<[usize; 3]>,
 }
 

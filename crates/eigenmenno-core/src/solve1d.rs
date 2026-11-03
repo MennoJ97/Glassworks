@@ -105,8 +105,10 @@ impl<'a> Setup<'a> {
                 let xi = -1.0 + 2.0 * s as f64 / (per_cell - 1) as f64;
                 let (v, d) = self.space.eval(cell, xi, u);
                 let (second, third) = if te {
+                    // eta0 Hx and eta0 Hz.
                     (-v * kt * scale / c(layer.mu), -I * d * scale / c(layer.mu))
                 } else {
+                    // Ex and Ez.
                     (v * kt * scale / c(layer.eps), I * d * scale / c(layer.eps))
                 };
                 x.push(x0 + h * (xi + 1.0) / 2.0);
@@ -195,7 +197,9 @@ fn cavity_modes(
 ) -> Result<Vec<(f64, Vec<C64>)>, String> {
     let a = s.matrix(|p, _| (p, ZERO));
     let b = s.matrix(|_, q| (ZERO, q));
-    // A negative shift keeps the operator definite when searching up from k0 = 0.
+    // A zero shift would make S singular whenever a static mode exists, as in a TM
+    // cavity with PEC walls. A negative shift keeps S - sigma Q positive definite,
+    // and the lowest modes are still the ones closest to it.
     let sigma = target_k0.map_or(-(PI / length).powi(2), |k| k * k);
     eigs_near(&a, &b, sigma, n, EIG_TOL)
 }

@@ -29,13 +29,16 @@ reference.
 
 Testing one mesh can pass by luck. A much stronger check is that the error shrinks at
 the theoretically predicted **rate** ([Oberkampf & Roy 2010](20-references.md#oberkampf-roy-2010)).
-According to [Strang & Fix 2008](20-references.md#strang-fix-2008), eigenvalue error should scale as
+According to [Strang & Fix 2008](20-references.md#strang-fix-2008), eigenvalue error for
+elements of order $r$ should scale as
 
-$$|\lambda_h - \lambda| \propto h^{2p}.$$
+$$|\lambda_h - \lambda| \propto h^{2r}.$$
 <!-- code: eigenvalue_error_converges_at_rate_2p "let (e1, e2)" .. "assert!" -->
 
-So halving $h$ should divide the error by $2^{2p}$. This table is real output, for the
-lowest mode of a unit cavity, showing the error in $k_0^2$:
+So halving $h$ should divide the error by $2^{2r}$. This table is real output, for the
+lowest mode of a unit cavity, showing the error in $k_0^2$. The measured rate is
+$\log_2$ of the 4-cell error over the 8-cell error, or 2-cell over 4-cell for order 5.
+The test checks 2 against 4 cells for orders 1 to 4.
 
 | Order | 2 cells | 4 cells | 8 cells | 16 cells | Measured rate | Predicted |
 |---|---|---|---|---|---|---|
@@ -77,8 +80,8 @@ ever fix it**. *Fix: wider cladding, and a bound in the test based on that expon
 <!-- code: slab_waveguide_te_and_tm_satisfy_dispersion "Modes near cutoff" .. "close(res" -->
 
 **Current sheet test.** The result had the opposite sign to the test's formula. A
-derivation by hand showed the *test* was wrong, as chapter 7 describes. The solver was
-right. Tests can have bugs too.
+derivation by hand showed the *test* was wrong: its formula had the wrong slope jump
+across the sheet (chapter 7). The solver was right. Tests can have bugs too.
 <!-- code: line_source_radiates_the_free_space_green_function "-u'' - k^2 u" .. "let exact" -->
 
 Investigating those failures also exposed **a real bug in the solver**. Trying wider

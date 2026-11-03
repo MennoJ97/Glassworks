@@ -11,8 +11,8 @@ Give each pixel of a region a density $\rho$ between 0 and 1, mixing two materia
 $$\varepsilon = \varepsilon_\text{low} + \rho\,(\varepsilon_\text{high} - \varepsilon_\text{low}).$$
 <!-- code: cell_material "let eps" .. "Polarization::Tm" -->
 
-That turns a question about shapes, which can't be differentiated, into a smooth function of thousands of numbers,
-which can. We then need a final design that's only 0s and 1s, since a real structure has no grey material. The
+That turns a question about shapes, which can't be differentiated, into a smooth function of hundreds of numbers,
+576 for the bend below, which can. We then need a final design that's only 0s and 1s, since a real structure has no grey material. The
 rest of this chapter is about the gradient, then about getting from grey to sharp.
 
 The page does this for layers on the **Mirror** and **Broadband coating** views, and in 2D on the **2D waveguide bend**
@@ -23,27 +23,32 @@ view under **Inverse design**. Chapter 17 designs a cavity the same way.
 Hundreds of pixels would take hundreds of solves by finite differences. The **adjoint method** needs one more,
 however many pixels there are ([Jensen & Sigmund 2011](20-references.md#jensen-sigmund-2011)).
 
-A monitor's power from chapter 12 is a quadratic form, $P = u^H B\,u$, with $B$ Hermitian. A change to the matrix
-changes the field by $A\,\delta u = -\delta A\,u$, so
+A monitor's power from chapter 12 is a quadratic form. Writing $\mathrm{Im}\,z = (z - \bar z)/2i$ turns chapter 12's
+integral into $P = u^H B\,u$, and $B$ equals its own conjugate transpose: it's Hermitian. Differentiating $Au = f$, where
+the source doesn't depend on the structure, a change to the matrix changes the field by $A\,\delta u = -\delta A\,u$, so
 
 $$\delta P = 2\,\mathrm{Re}(u^H B\,\delta u) = -2\,\mathrm{Re}\big(u^H B\,A^{-1}\delta A\,u\big).$$
 <!-- code: monitor_power "if index == 0" .. "/ (I * 2.0)" -->
 
+The first step holds because $\delta u^H B\,u$ is the conjugate of $u^H B\,\delta u$ when $B$ is Hermitian.
 Computing $A^{-1}\delta A\,u$ for every pixel is exactly the expensive part. But read from the left instead: only the
-one row vector $u^H B\,A^{-1}$ is needed, and that's a single solve. Taking the transpose gives
+one row vector $u^H B\,A^{-1}$ is needed, and that's a single solve. Its transpose is $A^{-T}B^T\bar u = A^{-T}\,\overline{B u}$,
+because $B^T = \bar B$. Calling that $w$ gives
 
 $$\delta P = -2\,\mathrm{Re}(w^T \delta A\,u), \qquad A^T w = \overline{B\,u}.$$
 <!-- code: density_gradient "let mut w = vec" .. "dofs.expand(&w)" -->
 
 One solve for $w$ prices every pixel. It costs even less than that sounds. Chapter 11 noted that $A$ is complex symmetric,
-even inside the absorbing layer, so $A^T = A$, and $w$ only needs a back-substitution with the factors we already have.
+even inside the absorbing layer, so $A^T = A$, and $w$ only needs a back-substitution with the factors we already have. For chapter 11's LDOS,
+[chapter 17](17-designing-a-cavity.md) shows that $w = -u/(ik)$, with no solve at all.
 For a pixel in $E_z$, $\delta A$ is just $-k_0^2\,\delta\varepsilon$ times its mass matrix, so each pixel's slope is a small
 sum over its cells. Chapter 19 does the same for $H_z$, the polarization most planar chips use. `density_gradient_matches_finite_differences` checks this.
 <!-- code: pixel_slopes "for c in 0..space.n_cells()" .. "Polarization::Te =>" -->
 
 ## From grey to sharp
 
-All of this lives in [`web/js/optimizer.js`](../web/js/optimizer.js), outside the solver. Only the physics needs to be in Rust.
+The filter, projection and MMA are in [`web/js/optimizer.js`](../web/js/optimizer.js), and [`design.js`](../web/js/design.js) runs the
+loop, outside the solver. Only the physics needs to be in Rust.
 
 **Filter.** If every pixel were free, the optimizer would make patterns at the scale of a single pixel, relying on
 the mesh's errors. A **cone filter** replaces each density by a weighted average of its neighbours, with a weight
@@ -62,12 +67,34 @@ the problem nearly impossible, since every pixel's slope would be zero or huge, 
 structure sharpens gradually. The slope of $\hat\rho$ joins the chain rule.
 <!-- code: optimize "for (const beta of SHARPNESS)" .. "x = mma.step" -->
 
-**Optimizer.** With thousands of unknowns and an expensive function, a good step matters. The **method of moving asymptotes**
+The optimizer's own variables $x$ are the densities before filtering, so $\tilde\rho = Wx$, where $W$ holds the filter's
+weights. A goal $J$ then has the slope
+
+$$\frac{\partial J}{\partial x} = W^T\Big(\hat\rho\,'(\tilde\rho)\odot\frac{\partial J}{\partial\hat\rho}\Big),$$
+
+where $\odot$ multiplies entry by entry. For the bend below, $J$ is minus the mean transmission over three wavelengths, each
+a monitor's power divided by a straight guide's at that wavelength. So $\partial J/\partial\hat\rho$ is the adjoint's slope
+times $-1/(3P_\text{straight})$, summed over the wavelengths.
+<!-- code: goalGradient "-1 / straightPower" .. "return gradient" -->
+
+**Optimizer.** With hundreds of unknowns and an expensive function, a good step matters. The **method of moving asymptotes**
 ([Svanberg 1987](20-references.md#svanberg-1987)) replaces the objective with a simple convex model for each variable,
-built from its slope and two asymptotes on either side, and minimizing that has a closed form. A variable that keeps
-oscillating gets tighter asymptotes, and a steady one gets looser ones. Since projection amplifies a change in density
-by up to about $\beta/2$, the largest step allowed shrinks as $\beta$ grows.
-<!-- code: Mma "if (prev2)" .. "const best" -->
+built from its slope and two asymptotes on either side, and minimizing that has a closed form. For a variable at $x$,
+with slope $g$ and asymptotes $L < x < U$, the model is
+
+$$\frac{P}{U - y} + \frac{Q}{y - L}, \qquad P = (U - x)^2 g^+, \quad Q = (x - L)^2 g^-,$$
+
+with $g^+ = \max(g, 0)$ and $g^- = \max(-g, 0)$, so it has slope $g$ at $x$. Setting its derivative to zero gives
+
+$$y = \frac{\sqrt P\,L + \sqrt Q\,U}{\sqrt P + \sqrt Q}.$$
+
+The code stores $\sqrt P$ and $\sqrt Q$, and then keeps $y$ within $[0, 1]$, within the largest step, and clear of each
+asymptote by a tenth of its distance from $x$.
+<!-- code: Mma "The model P" .. "next[i] =" -->
+
+A variable that keeps oscillating gets tighter asymptotes, and a steady one gets looser ones. Since projection amplifies
+a change in density by up to about $\beta/2$, the largest step allowed shrinks as $\beta$ grows.
+<!-- code: Mma "if (prev2)" .. "high[i] = x[i] + 2" -->
 
 **Pixels on cells.** Each pixel should be a whole number of mesh cells, and the solver refuses anything else. If a pixel's
 edge runs through a cell, that cell's material depends on where its centre happens to fall. Optimizers are very good at
@@ -94,10 +121,11 @@ pattern from a longer run gives:
 <!-- code: OPTIMIZED_BEND -->
 <!-- code: optimized_bend_survives_a_finer_mesh "for wavelength in" .. "let plain" -->
 
-The page's monitor is closer to the corner, where it still catches some light radiated from the gap: moving only the monitor from there to the far position takes the empty region from 7.1% to 5.4%, and the page's sharp corner reads 35%. The page also uses fewer iterations, 10 for each of 8 sharpness stages, and reaches a mean of 98.1% to 98.4% over three random starts.
-Giving it 25 per stage reached 96.9% to 99.0%, so more iterations can reach higher but aren't more dependable. Skipping every
-other sharpness stage did worse than cutting iterations, reaching only 96.5% to 97.6%. How the design sharpens matters more
-than how long it runs.
+The page differs in two ways. Its monitor is closer to the corner, where it still catches some light radiated from the gap,
+so its empty region reads 7.1% rather than 5.4%, and its sharp corner 35%. And it runs 10 iterations for each of 8 sharpness
+stages, reaching a mean of 98.1% to 98.4% over three random starts. How the design sharpens matters more than how long it
+runs: 25 iterations per stage reached 96.9% to 99.0%, higher but less dependable, while skipping every other stage reached
+only 96.5% to 97.6%.
 <!-- code: design.js "const SHARPNESS" .. "const bendIterations" -->
 
 For comparison, chapter 12's crystal bend reaches 97.8% to 95.8% over a much wider band, about 13%, in a crystal several periods
@@ -108,7 +136,7 @@ Optimizers are known to exploit a mesh's errors, so `optimized_bend_survives_a_f
 resolution, and it holds. Around it, the power entering and leaving a closed loop balances to 0.02%. Optimizing for a single wavelength
 reached only 43% to 82% at the band's edges, which is why this asks for three.
 
-This pattern also tolerates small errors. With every pixel edge moved at random, drawn exactly rather than as densities, three starts keep 97.8% to 98.3% at a spread of 1 nm and 94.7% to 98.7% at 5 nm, for a wavelength of 1 µm. At 10 nm they fall to 84.9% to 96.8%. It does rely on fine lines, though: removing what's thinner than 83 nm keeps 95% to 98%, while removing what's thinner than 125 nm leaves 5% to 87%. [Chapter 17](17-designing-a-cavity.md#would-it-work-if-you-built-it) tests a much more sensitive design the same way.
+This pattern also tolerates small errors in its edges, though at a wavelength of 1 µm it relies on lines thinner than 125 nm. [Chapter 17](17-designing-a-cavity.md#the-bend-for-comparison) gives the numbers, and tests a much more sensitive design the same way.
 
 The structure and its mesh scale with the middle of the band, so 1.9 to 2.1 µm gets the same design as 0.95 to 1.05 µm, at twice the
 size. Chapter 12 explains why that's exact.

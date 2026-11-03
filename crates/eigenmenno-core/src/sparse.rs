@@ -269,6 +269,8 @@ impl<'a> SparseLu<'a> {
                 partial_lu(&mut f, m, p, scale)
             };
             weak |= front_weak;
+            // After elimination, the trailing block of `f` is the Schur complement, which the
+            // parent adds in.
             let (mut upper, mut update) =
                 (Vec::with_capacity(p * (m - p)), Vec::with_capacity((m - p) * (m - p)));
             for column in f[p * m..].chunks_exact(m) {

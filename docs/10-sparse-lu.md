@@ -46,9 +46,22 @@ ordering of such a mesh can do better than $N^{3/2}$ ([Hoffman et al. 1973](20-r
 Eliminating a separator's unknowns is a dense problem, because by then they're all coupled to each
 other. The **multifrontal** method makes this explicit ([Duff & Reid 1983](20-references.md#duff-reid-1983)). Each separator gets a dense matrix, its
 **front**, for its own unknowns and whatever they couple to later. It starts from the matrix entries
-that first appear there, and adds the block that each of its two children left behind. Eliminating the
-separator's unknowns from its front leaves a smaller dense block, which it passes up to its parent.
-<!-- code: SparseLu::factor_as "let mut f = vec![ZERO" .. "updates[i] = update" -->
+that first appear there, and adds the block that each of its two children left behind. Each entry of a
+child's block goes to the row and column of the same unknown in the parent's front, which is called
+**extend-add**. Eliminating the separator's unknowns from its front leaves a smaller dense block, which
+it passes up to its parent.
+<!-- code: SparseLu::factor_as "for &child in &node.children" .. "f[target + r] += *v" -->
+
+Take three unknowns in a row, 1 – 3 – 2, with 3 as the separator. The front of 1 holds unknowns 1 and 3:
+
+$$\begin{pmatrix}a_{11} & a_{13}\\ a_{31} & 0\end{pmatrix}.$$
+
+Its (3, 3) entry starts at 0, because $a_{33}$ first appears in the front of 3. Eliminating 1 leaves
+$-a_{31}a_{13}/a_{11}$ there, and the front of 2 likewise leaves $-a_{32}a_{23}/a_{22}$. The front of 3
+adds both to $a_{33}$, which gives exactly the pivot that plain elimination would. In general, a front
+$F$ with its own unknowns first, split into blocks $F_{11}$ for those and $F_{22}$ for the rest, leaves
+the **Schur complement** $F_{22} - F_{21}F_{11}^{-1}F_{12}$.
+<!-- code: SparseLu::factor_as "let (mut upper" .. "updates[i] = update" -->
 
 So the whole sparse factorization becomes a tree of small dense LUs, and dense loops are about the
 fastest code a computer can run. On driven problems in WebAssembly, this was 2 to 6 times faster
@@ -56,7 +69,16 @@ than [`faer`](https://docs.rs/faer)'s general sparse LU, which has to find its o
 knowledge of the geometry. `faer` remains in the test suite as an independent reference.
 
 Fronts stay small until the last few, and a front's cost grows as the cube of its size, so most of the
-work is in those last fronts. That's why thinning separators mattered as much as it did.
+work is in those last fronts. The very last is the top separator, about $\sqrt N$ unknowns, and its
+dense front costs about $(\sqrt N)^3 = N^{3/2}$, which is where the estimate above comes from. That's why
+thinning separators mattered as much as it did.
+
+A solve with these factors walks the same tree twice. Forward substitution goes up from the leaves:
+each front solves with its $L$ for its own unknowns, then subtracts their effect from the boundary
+unknowns that later fronts hold. Back substitution comes down from the root: each front subtracts $U$
+times the boundary values found above it, then solves for its own unknowns. Each factor entry is used
+once, so a solve is far cheaper than factoring.
+<!-- code: SparseLu::solve_once -->
 
 ## Pivoting, and its price
 
@@ -71,6 +93,10 @@ refinement**: compute what the answer gets wrong, solve for that, and add it ([G
 `sparse_lu_recovers_when_a_part_sits_on_its_own_resonance` builds this case on purpose. The error is
 0.008 without refinement and $10^{-12}$ with it.
 <!-- code: SparseLu::refined "if self.weak" .. "rhs.iter_mut().zip(&r)" -->
+
+When $A^T = A$, as it will be with chapter 11's absorbing layer, `SparseLu::factor_symmetric` factors
+$A = LDL^T$ instead, with no pivoting and about half the work. If a pivot is unusable, it falls back to
+this pivoted LU. Chapter 16 has the details.
 
 ## How big can a mesh be?
 

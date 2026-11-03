@@ -33,10 +33,13 @@ integrated. A function with a kink is fine, so a field with a jump in slope at a
 interface fits naturally. The jump is handled without any special code.
 
 **Interface conditions came for free.** We never wrote "$p u'$ is continuous" in the
-code. The weak form enforces it automatically, as long as cell boundaries line up
-with material boundaries. That's why
+code. The weak form enforces it automatically. To see why, integrate by parts on each
+layer separately. Each interface leaves a term proportional to the jump in $p u'$,
+times $v$ there. The weak form has no such term, so if it holds for every $v$, the
+jump is zero.
 [`Mesh::layered_line`](../crates/eigenmenno-core/src/mesh.rs) puts a vertex on every
-interface.
+interface for a different reason: a polynomial can't have a kink inside a cell, only
+at its ends.
 <!-- code: Mesh::layered_line "let n = (t / h)" .. "start += t" -->
 
 **The boundary term appeared.** $[p u' v]_a^b$ is the only place the domain's ends
@@ -70,20 +73,31 @@ A differential equation has become a matrix equation. All three of $S$, $P$ and 
 are of the same two kinds, so one function can build them all. See `assemble` in
 [`assemble.rs`](../crates/eigenmenno-core/src/assemble.rs), which builds
 $\sum_c (a_c S_c + b_c M_c)$, where the coefficients $a_c$ and $b_c$ are per cell.
+$S_c$ and $M_c$ are $\int\phi_i'\phi_j'\,dx$ and $\int\phi_i\phi_j\,dx$ over cell $c$
+alone. Since $p$ and $q$ are constant on each cell, with values $p_c$ and $q_c$,
+$S = \sum_c p_c S_c$, $P = \sum_c p_c M_c$ and $Q = \sum_c q_c M_c$.
 For example, `cavity_modes` in [`solve1d.rs`](../crates/eigenmenno-core/src/solve1d.rs)
-gets $S$ with $(a_c, b_c) = (p, 0)$ and $Q$ with $(0, q)$.
+gets $S$ with $(a_c, b_c) = (p_c, 0)$ and $Q$ with $(0, q_c)$.
 <!-- code: cavity_modes "let a = s.matrix" .. "let b = s.matrix" -->
 
 ## Why Galerkin is a good choice
 
-When the problem is real, symmetric and positive definite, Galerkin's method has a strong property. The
-error $u - u_h$ is orthogonal to the whole basis, so the solution is the *best
-possible* approximation available in that basis, measured in the problem's natural
-energy norm ([Céa 1964](20-references.md#cea-1964)).
+Write $u_h = \sum_j u_j\phi_j$ for the Galerkin solution and $u$ for the exact one.
+Subtracting their equations shows that the error $u - u_h$ is orthogonal to every
+$\phi_i$, in the sense that the left side of the weak form gives zero for the pair
+$u - u_h$ and $\phi_i$. When the problem is real, symmetric and positive, such as
+$\int p\,u'v'\,dx$ with $p > 0$ and $u = 0$ at both ends, that orthogonality makes $u_h$
+the *best possible* approximation in the basis
+([Céa 1964](20-references.md#cea-1964)). Best is measured in the problem's energy
+norm, $\sqrt{\int p\,|u'|^2\,dx}$. A driven problem's $S + k_t^2P - k_0^2Q$ is not
+positive, so this guarantee doesn't carry over to it directly.
 
-There's a matching property for eigenvalues: the approximate eigenvalues are never
-below the true ones for this kind of problem, and their error converges twice as
-fast as the error in the field
+For lossless materials, the eigenproblem $S\mathbf{u} = k_0^2 Q\mathbf{u}$ is of the positive
+kind: $S$ and $Q$ are real and symmetric, $Q$ is positive and $S$ is never negative.
+It has a matching property. The approximate eigenvalues are
+never below the true ones, and their error shrinks like the square of the field's
+energy-norm error. For polynomials of order $r$ (chapter 3), that is $h^{2r}$ rather
+than $h^r$
 ([Strang & Fix 2008](20-references.md#strang-fix-2008); [Boffi 2010](20-references.md#boffi-2010)). We measure both effects in chapter 8.
 
 Next: [elements](03-elements.md), which choose the $\phi_i$.

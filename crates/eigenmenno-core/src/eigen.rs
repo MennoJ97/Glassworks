@@ -92,6 +92,7 @@ fn lanczos(lu: &dyn Factors, b: &Csr, found: &[Mode], want: usize, tol: f64, see
     let mut bu = vec![ZERO; n];
     loop {
         b.mul(&u, &mut bu);
+        // The B-norm of what's left: beta_j, coupling the last vector to this one.
         let norm = dot(&u, &bu).re.max(0.0).sqrt();
         let scale = alpha.iter().fold(0.0, |m: f64, a| m.max(a.abs()));
         // Out of room, or the basis already spans an invariant subspace.

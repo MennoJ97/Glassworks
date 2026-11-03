@@ -87,6 +87,8 @@ impl BandedLu {
                 );
             }
             piv[j] = j + p;
+            // The pivot row ends by last_col: the row swapped in from j + p reaches b
+            // columns past its own diagonal, and earlier fill stops at the old last_col.
             last_col = last_col.max((j + p + b).min(n - 1));
             if p != 0 {
                 for c in j..=last_col {
@@ -98,6 +100,7 @@ impl BandedLu {
             let (left, right) = ab.split_at_mut((j + 1) * ld);
             let l = &mut left[col + 1..col + 1 + below];
             l.iter_mut().for_each(|x| *x *= inv_pivot);
+            // a[r][c] -= l[r] * a[j][c], for the rows r below j and columns c up to last_col.
             for c in j + 1..=last_col {
                 let start = (c - j - 1) * ld + diag + j - c;
                 let t = right[start];
