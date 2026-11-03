@@ -77,7 +77,8 @@ fn a_flat_interface_at_an_angle_matches_fresnel() {
 
 #[test]
 fn a_grating_matches_the_fourier_modal_method() {
-    // From plans/probe-grating/rcwa.py, which has no mesh or layer, and is steady to 1e-6 at 320 orders.
+    // From a separate Fourier modal method, which has no mesh or layer, and is steady to 1e-6
+    // at 320 orders.
     let expected: [(Polarization, [f64; 3], [f64; 4]); 2] = [
         (Polarization::Te, [0.002538, 0.053613, 0.138772], [0.284394, 0.218096, 0.118276, 0.184311]),
         (Polarization::Tm, [0.010134, 0.047082, 0.123978], [0.055278, 0.168438, 0.265488, 0.329601]),

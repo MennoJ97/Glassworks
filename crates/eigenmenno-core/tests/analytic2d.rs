@@ -143,7 +143,7 @@ fn layered_box_matches_the_1d_solver() {
 fn rod_lattice_matches_a_plane_wave_expansion() {
     // Square lattice, eps 12, r = 0.2a. Reference: an independent plane-wave expansion
     // with 2401 waves, using the inverse rule for H_z, whose X value was still rising by
-    // about 4e-5 per step. See plans/2d-solver.md. Straight cells around the curved rod
+    // about 4e-5 per step. Straight cells around the curved rod
     // limit this to second order, and 48 cells per period leave about 3e-4.
     let cell = 1.0 / 48.0;
     let (m, x) = ([PI, PI], [PI, 0.0]);
@@ -416,7 +416,7 @@ fn removing_a_rod_puts_one_mode_in_the_gap() {
     );
     assert_eq!(f.iter().filter(|&&v| v > 0.28066 && v < 0.41716).count(), 1, "{f:?}");
     // Reference: an independent plane-wave expansion of this supercell, with 4489 waves.
-    // See plans/2d-solver.md. Straight cells around the rods keep this mesh above it.
+    // Straight cells around the rods keep this mesh above it.
     close(f[2], 0.3746, 1.5e-3);
 }
 

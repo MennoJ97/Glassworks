@@ -2,7 +2,7 @@
 //! domain in two along its longer side leaves two parts joined only through a separator, so
 //! each can be eliminated without touching the other. Doing that recursively is nested
 //! dissection ([George 1973]). Each separator's unknowns are then eliminated in a dense "front",
-//! which also holds whatever its two parts left behind. See `plans/2d-solver.md` for timings.
+//! which also holds whatever its two parts left behind. Chapter 10 of the tutorial has its timings.
 //!
 //! Pivoting stays inside each front's own unknowns, because a pivot from elsewhere would
 //! change which fronts need what. A part walled in by its separator can sit on a resonance of
