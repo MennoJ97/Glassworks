@@ -68,4 +68,4 @@ The files follow the chapters. Whatever only a Going further chapter needs has a
 | 15 | [`solve2d/grating.rs`](../crates/eigenmenno-core/src/solve2d/grating.rs), [`sparse/transposed.rs`](../crates/eigenmenno-core/src/sparse/transposed.rs), [`tests/gratings.rs`](../crates/eigenmenno-core/tests/gratings.rs) |
 | 16 | [`sparse/symmetric.rs`](../crates/eigenmenno-core/src/sparse/symmetric.rs) |
 | 17 | `web/js/cavity-design.js`, on the website rather than in the solver |
-| 19 | [`solve2d/dipole.rs`](../crates/eigenmenno-core/src/solve2d/dipole.rs), [`tests/hz_design.rs`](../crates/eigenmenno-core/tests/hz_design.rs) |
+| 19 | [`solve2d/dipole.rs`](../crates/eigenmenno-core/src/solve2d/dipole.rs), [`tests/hz_design.rs`](../crates/eigenmenno-core/tests/hz_design.rs), and on the website, `web/js/hz-design.js` |

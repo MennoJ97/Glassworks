@@ -2,7 +2,7 @@
 // bend, each with a density that mixes two materials. The solver supplies the adjoint gradient,
 // and `optimizer.js` does the rest. Cavities have their own file, `cavity-design.js`.
 
-import { CAVITY, cavityGeometry, cavityRequest, optimizeCavity, tuned } from './cavity-design.js';
+import { CAVITY, cavityGeometry, cavityReferences, cavityRequest, optimizeCavity, tuned } from './cavity-design.js';
 import { MATERIALS, scaled, toShape } from './model.js';
 import { Mma, coneFilter, coneFilter2d, project, randomStart } from './optimizer.js';
 
@@ -159,53 +159,9 @@ const measure = ({ meta, channels }) => (meta.fields[0].ldos != null
   : meta.fields[0].power[0]);
 export const meanReflection = (results) => results.reduce((sum, r) => sum + measure(r), 0) / results.length;
 
-// E_z's crystal: rods with one removed. A period of 0.3781 puts its mode on the wavelength.
-function rodCrystal(s) {
-  const a = 0.3781 * s.wavelength;
-  const { margin, pml } = CAVITY;
-  const edge = margin * s.wavelength;
-  const rods = [];
-  for (let i = 0; i < 49; i++) {
-    if (i !== 24) rods.push({ type: 'circle', x: edge + (i % 7 + 0.5) * a, y: edge + (Math.floor(i / 7) + 0.5) * a, w: 0.4 * a, h: 0.4 * a, n: Math.sqrt(CAVITY.eps) });
-  }
-  const size = 7 * a + 2 * edge;
-  return {
-    name: 'Crystal of 7 x 7 rods',
-    requests: [{
-      width: size, height: size, cell: a / 12, background: { eps: 1, mu: 1 }, shapes: rods.map(toShape), polarization: 'te', walls: 'absorbing', monitors: [],
-      analysis: { type: 'driven', wavelength: s.wavelength, source: { type: 'line', x: size / 2, y: size / 2 }, pml: pml * s.wavelength, average_q: CAVITY.Q },
-    }],
-  };
-}
-
-// H_z's crystal, since rods have no use for it: a triangular lattice of air holes filling the
-// design's own square, with the middle one filled. The best period and hole size found by scanning.
-function holeCrystal(s) {
-  const a = 0.2759 * s.wavelength;
-  const r = 0.4 * a;
-  const g = cavityGeometry(s.wavelength);
-  const { x0, width: side } = g.region;
-  const [c, end] = [g.size / 2, x0 + side];
-  const shapes = [{ type: 'rect', x0, y0: x0, x1: end, y1: end, material: { eps: CAVITY.eps, mu: 1 } }];
-  for (let j = -12; j <= 12; j++) {
-    for (let i = -12; i <= 12; i++) {
-      const [x, y] = [c + a * (i + j / 2), c + (a * j * Math.sqrt(3)) / 2];
-      const inside = x - r > x0 && x + r < end && y - r > x0 && y + r < end;
-      if ((i || j) && inside) shapes.push({ type: 'circle', x, y, r, material: { eps: 1, mu: 1 } });
-    }
-  }
-  return {
-    name: 'Crystal of air holes',
-    requests: [{
-      width: g.size, height: g.size, cell: side / CAVITY.pixels, background: { eps: 1, mu: 1 }, shapes, polarization: 'tm', walls: 'absorbing', monitors: [],
-      analysis: { type: 'driven', wavelength: s.wavelength, source: { type: 'dipole', x: c, y: c, angle_deg: 0 }, pml: CAVITY.pml * s.wavelength, average_q: CAVITY.Q },
-    }],
-  };
-}
-
 // The structures a designer would try by hand, solved at the same wavelengths.
 export function references(s) {
-  if (s.analysis === 'cavityDesign') return [s.polarization === 'tm' ? holeCrystal(s) : rodCrystal(s)];
+  if (s.analysis === 'cavityDesign') return cavityReferences(s);
   if (s.analysis === 'bend2d') {
     return [
       { name: 'Empty region', requests: gradientRequests(s, new Float64Array(BEND.pixels ** 2)) },

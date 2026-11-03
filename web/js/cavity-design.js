@@ -1,8 +1,9 @@
 // Designing a cavity: LDOS as the goal, with its frequency held on target. Chapter 17 of the
 // tutorial explains this, and it builds on the optimizer that chapter 13 explains.
 
-import { scaled } from './model.js';
-import { Mma, coneFilter2d, holdingStep, project, randomNumbers, randomStart, smoothProject } from './optimizer.js';
+import { scaled, toShape } from './model.js';
+import { HeldMma, disorderedSlope, holdingStep, smoothProject } from './hz-design.js';
+import { Mma, coneFilter2d, project, randomStart } from './optimizer.js';
 
 // A square of pixels around an emitter, in units of the wavelength, as big as 7 x 7 rods.
 // `stages` raises the bandwidth's Q to a level a sharpening design can follow, then sharpens.
@@ -100,6 +101,53 @@ export async function findResonance(s, rho, Q, solve, wavelength = s.wavelength)
   };
 }
 
+// E_z's crystal: rods with one removed. A period of 0.3781 puts its mode on the wavelength.
+function rodCrystal(s) {
+  const a = 0.3781 * s.wavelength;
+  const { margin, pml } = CAVITY;
+  const edge = margin * s.wavelength;
+  const rods = [];
+  for (let i = 0; i < 49; i++) {
+    if (i !== 24) rods.push({ type: 'circle', x: edge + (i % 7 + 0.5) * a, y: edge + (Math.floor(i / 7) + 0.5) * a, w: 0.4 * a, h: 0.4 * a, n: Math.sqrt(CAVITY.eps) });
+  }
+  const size = 7 * a + 2 * edge;
+  return {
+    name: 'Crystal of 7 x 7 rods',
+    requests: [{
+      width: size, height: size, cell: a / 12, background: { eps: 1, mu: 1 }, shapes: rods.map(toShape), polarization: 'te', walls: 'absorbing', monitors: [],
+      analysis: { type: 'driven', wavelength: s.wavelength, source: { type: 'line', x: size / 2, y: size / 2 }, pml: pml * s.wavelength, average_q: CAVITY.Q },
+    }],
+  };
+}
+
+// H_z's crystal, since rods have no use for it: a triangular lattice of air holes filling the
+// design's own square, with the middle one filled. The best period and hole size found by scanning.
+function holeCrystal(s) {
+  const a = 0.2759 * s.wavelength;
+  const r = 0.4 * a;
+  const g = cavityGeometry(s.wavelength);
+  const { x0, width: side } = g.region;
+  const [c, end] = [g.size / 2, x0 + side];
+  const shapes = [{ type: 'rect', x0, y0: x0, x1: end, y1: end, material: { eps: CAVITY.eps, mu: 1 } }];
+  for (let j = -12; j <= 12; j++) {
+    for (let i = -12; i <= 12; i++) {
+      const [x, y] = [c + a * (i + j / 2), c + (a * j * Math.sqrt(3)) / 2];
+      const inside = x - r > x0 && x + r < end && y - r > x0 && y + r < end;
+      if ((i || j) && inside) shapes.push({ type: 'circle', x, y, r, material: { eps: 1, mu: 1 } });
+    }
+  }
+  return {
+    name: 'Crystal of air holes',
+    requests: [{
+      width: g.size, height: g.size, cell: side / CAVITY.pixels, background: { eps: 1, mu: 1 }, shapes, polarization: 'tm', walls: 'absorbing', monitors: [],
+      analysis: { type: 'driven', wavelength: s.wavelength, source: { type: 'dipole', x: c, y: c, angle_deg: 0 }, pml: CAVITY.pml * s.wavelength, average_q: CAVITY.Q },
+    }],
+  };
+}
+
+// The crystal a designer would try by hand for each polarization.
+export const cavityReferences = (s) => [s.polarization === 'tm' ? holeCrystal(s) : rodCrystal(s)];
+
 // Pixels as ordinary rectangles, which need nothing of densities to solve.
 function cavityShapes(rho, scale) {
   const { pixels, margin } = CAVITY;
@@ -115,59 +163,6 @@ function cavityShapes(rho, scale) {
     }
   }
   return shapes;
-}
-
-// What each H_z iteration samples: edges moved by this standard deviation, correlated over this
-// distance, both in µm. A fraction of a pixel moves H_z's mode about twice as far as a drawn edge
-// does, so `grey` scales it. Chapter 19 gives the measurements.
-export const DISORDER = { samples: 3, sigma: 0.002, correlation: 0.1, grey: 0.5, waves: 100 };
-
-// A smooth random field, in pixels of a design with pixels of `h`, from a sum of random waves.
-export function edgeField(random, h) {
-  const gaussian = () => Math.sqrt(-2 * Math.log(random() + 1e-300)) * Math.cos(2 * Math.PI * random());
-  const { sigma, correlation, grey, waves: count } = DISORDER;
-  const waves = Array.from({ length: count }, () => [gaussian() / correlation, gaussian() / correlation, 2 * Math.PI * random()]);
-  const size = ((grey * sigma) / h) * Math.sqrt(2 / count);
-  return (x, y) => size * waves.reduce((sum, [a, b, phase]) => sum + Math.cos(a * x * h + b * y * h + phase), 0);
-}
-
-// Moves each edge between pixels by `move(x, y)` of a pixel, with positive growing material. It
-// follows each edge's contrast, so a uniform region stays as it is.
-export function movedEdges(rho, n, move) {
-  const out = Float64Array.from(rho);
-  const edge = (a, b, d) => {
-    const contrast = Math.abs(rho[a] - rho[b]);
-    if (contrast < 1e-6) return;
-    const [high, low] = rho[a] > rho[b] ? [a, b] : [b, a];
-    if (d > 0) out[low] += contrast * d;
-    else out[high] += contrast * d;
-  };
-  for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) {
-      const a = i + j * n;
-      if (i + 1 < n) edge(a, a + 1, move(i + 1, j + 0.5));
-      if (j + 1 < n) edge(a, a + n, move(i + 0.5, j + 1));
-    }
-  }
-  return out.map((v) => Math.min(1, Math.max(0, v)));
-}
-
-// The slope of the LDOS averaged over disordered copies, each read at the wavelength that `moves`
-// predicts for it, since a copy read on its peak's wing would trade Q for LDOS.
-async function disorderedSlope(s, rho, { Q, poleK, moves, own, iteration }, solve) {
-  const random = randomNumbers(iteration * 7907 + s.design.cavityDesign.seed);
-  const h = (cavitySide * s.wavelength) / CAVITY.pixels;
-  const copies = Array.from({ length: DISORDER.samples }, () => movedEdges(rho, CAVITY.pixels, edgeField(random, h)));
-  const wavelengthOf = (copy) => {
-    const k = copy.reduce((sum, v, q) => sum + moves[q] * (v - rho[q]), poleK);
-    const wavelength = (2 * Math.PI) / k;
-    return Math.abs(wavelength - s.wavelength) < 0.05 * s.wavelength ? wavelength : own;
-  };
-  const reply = await solve(copies.map((copy) => cavityRequest(s, copy, Q, wavelengthOf(copy))));
-  if (!reply || reply.error) return { reply };
-  const mean = new Float64Array(rho.length);
-  reply.results.forEach((r) => r.channels.gradient.forEach((v, k) => { mean[k] += v / reply.results.length; }));
-  return { mean };
 }
 
 // Eight-fold symmetry around the source, which is its own adjoint.
@@ -205,7 +200,7 @@ export async function optimizeCavity(s, solve, onStep) {
   let own = s.wavelength;
   for (const [Q, beta] of CAVITY.stages) {
     const reach = Math.min(0.1, 0.2 / beta);
-    const mma = new Mma(reach);
+    const mma = held ? new HeldMma(reach) : new Mma(reach);
     for (let i = 0; i < CAVITY.iterations; i++) {
       const { rho, back } = projected(x, beta);
       const { reply, poleK, moves } = await findResonance(s, rho, Q, solve, own);
@@ -214,7 +209,8 @@ export async function optimizeCavity(s, solve, onStep) {
       if (Math.abs((2 * Math.PI) / poleK - s.wavelength) < 0.04 * s.wavelength) own = (2 * Math.PI) / poleK;
       let gradient = reply.results[0].channels.gradient;
       if (s.polarization === 'tm') {
-        const copies = await disorderedSlope(s, rho, { Q, poleK, moves, own, iteration }, solve);
+        const pixel = { request: cavityRequest, h: (cavitySide * s.wavelength) / CAVITY.pixels, n: CAVITY.pixels };
+        const copies = await disorderedSlope(s, rho, { Q, poleK, moves, own, iteration }, solve, pixel);
         if (!copies.mean) return copies.reply;
         gradient = copies.mean;
       }

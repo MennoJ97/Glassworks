@@ -1106,7 +1106,7 @@ So **about 100 to 180 lines of Rust**, all in the `solve2d` files that the essen
 
 #### The probe, measured 2026-11-03: don't build it
 
-`hz/aniso/tensor.patch` holds the averaging, with no gradient, at 60 added lines against the 40 guessed. It applies to a copy of the crate, with `MAX_DOFS` raised for finer meshes. With no normals given, the solver repeats today's readings exactly.
+`hz/aniso/tensor.patch` holds the averaging, with no gradient, at 60 added lines against the 40 guessed. The same patch now also carries the smaller-pixel probe's `dipole_step` and `examples/serve.rs`, below. It applies to a copy of the crate, with `MAX_DOFS` raised for finer meshes. With no normals given, the solver repeats today's readings exactly.
 
 **On a moved edge, the tensor helps but doesn't match.** `greyedge2.mjs` grows every edge of a finished design by 1 or 2 nm as grey pixels and fits the mode's shift, in % per nm, against the drawn shift measured before:
 
@@ -1131,6 +1131,35 @@ The tensor does halve the error in where the mode sits, which is what the resize
 **Why: these designs depend on detail finer than any pixel model holds.** Drawings of one grey design disagree with each other. Start 3 of the page's step reads 1,317 snapped, 329 drawn twice as finely, and 272 drawn four times as finely. Drawing twice and four times as finely agree within about 10% on the four designs checked (1,263 and 1,355, 1,054 and 1,033, 2,223 and 2,048), so the finer drawing is near convergence, and it's the grey models that are off, not the drawing. A mode with Q of 10,000 and a shift near 1% per nm needs its edges right to about a nanometre, and a pixel is 44 nm. Neither average gets that close at corners and in slots two pixels wide. That's the same sensitivity that the tolerance results measure, seen from the other side.
 
 **Verdict: don't build the full version.** It would cost 100 to 180 lines of Rust to halve the frequency error, without making the finish reliable. The finish gap is a sensitivity of these designs, not a flaw in the solver's grey pixels. What would address it is what already works: judging by drawn edges, and tuning after fabrication. Possibly also a goal that rewards designs less sensitive at the sub-pixel scale, such as sampling sub-pixel disorder, which the page's robust sampling already does at 2 nm.
+
+#### Smaller pixels, measured 2026-11-03
+
+Out of curiosity: the page's step on the same area with more, smaller pixels. `PIXELS` in `variants3-cavity-design.js` keeps the cavity's side at 64/24 wavelengths and the filter the same physical size, at a radius of `2 × pixels / 64`. Each run begins from the 64-pixel start, upsampled. Cells stay a pixel wide, as the solver requires.
+
+**Limits on this machine,** with 24 GB of RAM and 12 cores. One solve on the cavity:
+
+| Pixels | Unknowns | Solve | WebAssembly memory |
+|---:|---:|---:|---:|
+| 64 | 31k | 0.06 s | 67 MB |
+| 128 | 123k | 0.34 s | 294 MB |
+| 256 | 494k | 2.3 s | 1.3 GB |
+| 384 | 1.1M | 7.6 s | 3.1 GB |
+| 512, native | 2.0M | about 20 s of CPU | 3.9 GB |
+
+WebAssembly can address 4 GB, so 384 pixels is its limit. `hz/native.mjs` drives a native build of the probe crate's `examples/serve.rs` past it, and it repeats the WebAssembly solve bit for bit. A run takes about 1,100 solves, so 512 pixels would take about 6 hours, and 768 most of a day. Neither was run. The JavaScript needs room too. At 384 pixels the filter's table of neighbours, one array per pixel and neighbour, outgrew Node's default 4 GB heap, so those runs take `--max-old-space-size`, and the run used 9.3 GB in all.
+
+**The dipole broke first.** Its two points sit half a cell apart, so on a finer mesh they close in, and the near field's background grows about as the square of that. An empty cavity read at Q 10 gives 4.7 on the page's mesh, 15 at 128 pixels and 57 at 256. The three-solve fit then lost broad modes, with errors of 2 to 3.6 bandwidths in the first three stages, where the page's are 0.02 to 0.24. The runs fell behind by iteration 60 and never caught up, reading 677 at the median. At 384 pixels the fitted wavelengths were nonsense, so that run was stopped. With the spacing fixed at the page's λ/48 by a probe-only `dipole_step`, the empty cavity reads 4.7, 7.6 and 8.8, and the errors fall to 0.86, 0.47 and 0.06. The page's own mesh doesn't change, since half a cell is λ/48 there. If finer meshes ever reach the page, the dipole's spacing should be fixed like this.
+
+**Results,** with the spacing fixed, each design read at its own peak at Q 1000 on its own cells. The 64-pixel designs are read on cells of λ/96 by `evalpixa.mjs`, the same as the 256-pixel ones. Reading the 128-pixel designs there too changes them by under 3%. Pairs are by start, from 1 to 6:
+
+| Pixels | Starts | LDOS, median (range) | Beat 64 pixels, paired |
+|---:|---:|---:|---:|
+| 64 | 6 | 1,336 (918 to 1,709) | |
+| 128 | 9 | 1,705 (881 to 2,548) | 4 of 6 |
+| 256 | 7 | 1,999 (781 to 2,922) | 5 of 6 |
+| 384 | 1 | running when this was written | |
+
+So smaller pixels find better designs, by about 1.3 times at 128 and 1.5 times at 256, with as wide a spread as ever. The best reach mode Q of 25,000 to 39,000. Finer pixels allow finer slots and edges, which `H_z` rewards, as before. They're no easier to make, and each 256-pixel run took about 45 minutes in Node, against 2.5 minutes on the page's pixels.
 
 ### Vector fields: a line estimate
 

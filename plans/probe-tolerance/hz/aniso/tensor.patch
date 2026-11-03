@@ -1,6 +1,36 @@
-Only in crates: .DS_Store
-Only in crates/eigenmenno-core: .DS_Store
-diff -ru crates/eigenmenno-core/src/assemble.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/assemble.rs
+Binary files crates/.DS_Store and /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/.DS_Store differ
+Binary files crates/eigenmenno-core/.DS_Store and /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/.DS_Store differ
+diff -ruN crates/eigenmenno-core/examples/serve.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/examples/serve.rs
+--- crates/eigenmenno-core/examples/serve.rs	1970-01-01 01:00:00
++++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/examples/serve.rs	2026-11-03 10:57:12
+@@ -0,0 +1,26 @@
++//! Probe: one JSON request on stdin, then a JSON header line and the channels as raw
++//! little-endian f64 on stdout, so the optimizer can run natively, past WebAssembly's 4 GB.
++use eigenmenno_core::problem::Request2d;
++use std::io::{BufWriter, Read, Write};
++
++fn main() {
++    let mut text = String::new();
++    std::io::stdin().read_to_string(&mut text).unwrap();
++    let mut out = BufWriter::new(std::io::stdout().lock());
++    let result = serde_json::from_str::<Request2d>(&text)
++        .map_err(|e| e.to_string())
++        .and_then(|req| eigenmenno_core::solve2d::solve(&req));
++    match result {
++        Err(e) => writeln!(out, "{}", serde_json::json!({ "error": e })).unwrap(),
++        Ok(mut o) => {
++            // The optimizer only reads the slopes, and the mesh is most of the bytes on a fine one.
++            o.channels.retain(|(n, _)| n.starts_with("gradient"));
++            let names: Vec<_> = o.channels.iter().map(|(n, v)| (n.clone(), v.len())).collect();
++            let meta = serde_json::to_string(&o.meta).unwrap();
++            writeln!(out, "{{\"meta\":{meta},\"channels\":{}}}", serde_json::to_string(&names).unwrap()).unwrap();
++            for (_, v) in &o.channels {
++                v.iter().for_each(|x| out.write_all(&x.to_le_bytes()).unwrap());
++            }
++        }
++    }
++}
+diff -ruN crates/eigenmenno-core/src/assemble.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/assemble.rs
 --- crates/eigenmenno-core/src/assemble.rs	2026-11-02 14:05:45
 +++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/assemble.rs	2026-11-03 10:28:08
 @@ -110,25 +110,31 @@
@@ -39,9 +69,9 @@ diff -ru crates/eigenmenno-core/src/assemble.rs /private/tmp/claude-501/-Users-m
              }
          }
      }
-diff -ru crates/eigenmenno-core/src/problem.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/problem.rs
+diff -ruN crates/eigenmenno-core/src/problem.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/problem.rs
 --- crates/eigenmenno-core/src/problem.rs	2026-11-02 15:47:04
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/problem.rs	2026-11-03 10:29:32
++++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/problem.rs	2026-11-03 11:54:33
 @@ -214,6 +214,9 @@
      pub eps_low: f64,
      pub eps_high: f64,
@@ -52,9 +82,28 @@ diff -ru crates/eigenmenno-core/src/problem.rs /private/tmp/claude-501/-Users-me
  }
  
  /// A 2D problem on `[0, width] x [0, height]`. `cell` is the largest grid spacing.
-diff -ru crates/eigenmenno-core/src/solve2d/dipole.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/dipole.rs
+@@ -232,6 +235,9 @@
+     pub monitors: Vec<Monitor>,
+     #[serde(default)]
+     pub density: Option<Density>,
++    /// Probe: the distance between a dipole's two points, fixed whatever the mesh. Half a cell if absent.
++    #[serde(default)]
++    pub dipole_step: Option<f64>,
+ }
+ 
+ #[derive(Deserialize, Clone)]
+diff -ruN crates/eigenmenno-core/src/solve2d/dipole.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/dipole.rs
 --- crates/eigenmenno-core/src/solve2d/dipole.rs	2026-11-02 15:47:04
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/dipole.rs	2026-11-03 10:28:08
++++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/dipole.rs	2026-11-03 11:54:33
+@@ -17,7 +17,7 @@
+     (x, y, angle_deg): (f64, f64, f64),
+     k0: f64,
+ ) -> Result<[(f64, f64, usize, f64); 2], String> {
+-    let step = req.cell / 2.0;
++    let step = req.dipole_step.unwrap_or(req.cell / 2.0);
+     let (ny, nx) = angle_deg.to_radians().sin_cos();
+     let weight = 2f64.sqrt() / k0 / (2.0 * step);
+     let point = |sign: f64| {
 @@ -39,7 +39,8 @@
  ) -> Result<Vec<(usize, f64)>, String> {
      let mut load = vec![];
@@ -65,7 +114,7 @@ diff -ru crates/eigenmenno-core/src/solve2d/dipole.rs /private/tmp/claude-501/-U
          load.extend(cell_load(space, dofs, c, px, py).into_iter().map(|(r, v)| (r, v * p * weight)));
      }
      Ok(load)
-diff -ru crates/eigenmenno-core/src/solve2d/open.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/open.rs
+diff -ruN crates/eigenmenno-core/src/solve2d/open.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/open.rs
 --- crates/eigenmenno-core/src/solve2d/open.rs	2026-11-02 15:47:04
 +++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d/open.rs	2026-11-03 10:29:32
 @@ -61,6 +61,32 @@
@@ -114,19 +163,19 @@ diff -ru crates/eigenmenno-core/src/solve2d/open.rs /private/tmp/claude-501/-Use
      });
      Csr::from_triplets(dofs.n_free, t)
  }
-diff -ru crates/eigenmenno-core/src/solve2d.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d.rs
+diff -ruN crates/eigenmenno-core/src/solve2d.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d.rs
 --- crates/eigenmenno-core/src/solve2d.rs	2026-11-02 15:47:04
-+++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d.rs	2026-11-03 10:28:08
++++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/solve2d.rs	2026-11-03 10:54:31
 @@ -26,7 +26,7 @@
  
  /// Refuses meshes likely to exhaust WebAssembly's 4 GiB. An eigenmode solve, the heaviest,
  /// took 3.2 GiB at 579,121 unknowns and 1.7 GiB at 314,721, and a driven one about half that.
 -const MAX_DOFS: usize = 400_000;
-+const MAX_DOFS: usize = 3_000_000;
++const MAX_DOFS: usize = 20_000_000;
  
  pub fn solve(req: &Request2d) -> Result<Output, String> {
      validate::validate(req)?;
-diff -ru crates/eigenmenno-core/src/space.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/space.rs
+diff -ruN crates/eigenmenno-core/src/space.rs /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/space.rs
 --- crates/eigenmenno-core/src/space.rs	2026-11-02 09:23:12
 +++ /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-core/src/space.rs	2026-11-03 10:28:08
 @@ -13,6 +13,10 @@
@@ -160,4 +209,4 @@ diff -ru crates/eigenmenno-core/src/space.rs /private/tmp/claude-501/-Users-menn
      fn n_dofs(&self) -> usize {
          self.n_vertices + self.edges.len()
      }
-Only in crates/eigenmenno-wasm: .DS_Store
+Binary files crates/eigenmenno-wasm/.DS_Store and /private/tmp/claude-501/-Users-mennojansen-source-eigenmenno/80ec6553-75a9-46eb-882a-7198826fdca4/scratchpad/aniso/crates/eigenmenno-wasm/.DS_Store differ

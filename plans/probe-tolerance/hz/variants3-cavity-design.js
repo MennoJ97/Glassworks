@@ -8,12 +8,13 @@ import { Mma, coneFilter2d, holdingStep, project, randomNumbers, randomStart, sm
 // `stages` raises the bandwidth's Q to a level a sharpening design can follow, then sharpens.
 export const CAVITY_Q = 1000;
 export const CAVITY = {
-  pixels: 64, margin: 0.25, pml: 0.25, eps: 12, radius: 2, iterations: 20,
+  // Variant PIXELS: smaller pixels over the same area, with the filter the same physical size.
+  pixels: +(process.env.PIXELS ?? 64), margin: 0.25, pml: 0.25, eps: 12, radius: (2 * +(process.env.PIXELS ?? 64)) / 64, iterations: 20,
   stages: [[10, 1], [20, 2], [50, 4], [100, 8], [200, 16], [300, 32], [500, 64], [500, 128]],
   // Measured at this Q once finished, and in the table.
   Q: CAVITY_Q,
 };
-const cavitySide = CAVITY.pixels / 24;
+const cavitySide = 64 / 24;
 // How much a finished design was resized to put its resonance on the target, by its densities.
 export const tuned = new WeakMap();
 
@@ -46,6 +47,8 @@ export function cavityRequest(s, rho, Q, wavelength = s.wavelength) {
     walls: 'absorbing',
     monitors: [],
     analysis: { type: 'driven', wavelength, source: emitter(s, g), pml: CAVITY.pml * scale, average_q: Q },
+    // Variant DSTEP: the dipole's two points a fixed λ/48 apart, as on the page's mesh, whatever the cells.
+    ...(process.env.DSTEP ? { dipole_step: scale / 48 } : {}),
     density: { ...g.region, nx: Math.round(Math.sqrt(rho.length)), ny: Math.round(Math.sqrt(rho.length)), eps_low: 1, eps_high: CAVITY.eps, rho: Array.from(rho) },
   };
 }
@@ -215,7 +218,9 @@ export async function optimizeCavity(s, solve, onStep) {
   };
   const through = (g, back) => symmetric(filter.adjoint(back(g)));
   const target = (2 * Math.PI) / s.wavelength;
-  let x = randomStart(n, s.design.cavityDesign.seed);
+  // The 64-pixel start, upsampled, so that every pixel size begins from the same design.
+  const coarse = randomStart(64 * 64, s.design.cavityDesign.seed), f = CAVITY.pixels / 64;
+  let x = Float64Array.from({ length: n }, (_, k) => coarse[Math.floor((k % CAVITY.pixels) / f) + Math.floor(Math.floor(k / CAVITY.pixels) / f) * 64]);
   let iteration = 0;
   let own = s.wavelength;
   // Variant TRUST: the move limit follows how much of each step's predicted gain the next solve found.
@@ -316,7 +321,8 @@ export async function optimizeCavity(s, solve, onStep) {
   // Checks it as a drawn structure, with the search for leaky modes, which shares nothing of this.
   const scale = tuned.get(rho) * s.wavelength;
   const g = cavityGeometry(scale);
-  const found = await solve([{ width: g.size, height: g.size, cell: g.region.width / Math.round(Math.sqrt(rho.length)), background: { eps: 1, mu: 1 }, shapes: cavityShapes(rho, scale), polarization: s.polarization, walls: 'absorbing', monitors: [], analysis: { type: 'resonance', target_k0: target, x: g.mark[0], y: g.mark[1], pml: CAVITY.pml * scale, dipole_deg: s.polarization === 'tm' ? 0 : null } }]);
+  let found = null;
+  try { found = await solve([{ width: g.size, height: g.size, cell: g.region.width / Math.round(Math.sqrt(rho.length)), background: { eps: 1, mu: 1 }, shapes: cavityShapes(rho, scale), ...(process.env.DSTEP ? { dipole_step: scale / 48 } : {}), polarization: s.polarization, walls: 'absorbing', monitors: [], analysis: { type: 'resonance', target_k0: target, x: g.mark[0], y: g.mark[1], pml: CAVITY.pml * scale, dipole_deg: s.polarization === 'tm' ? 0 : null } }]); } catch (e) { /* the mode search can fail on fine meshes */ }
   const field = found?.results?.[0]?.meta.fields[0];
   const mode = field && { wavelength: (2 * Math.PI) / field.k0, q: field.q, volume: field.volume / s.wavelength ** 2 };
   onStep({ rho, reply, iteration, beta: Infinity, mode, bandwidth: CAVITY.Q });

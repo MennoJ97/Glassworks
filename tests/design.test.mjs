@@ -5,10 +5,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { defaultState } from '../web/js/model.js';
-import { DISORDER, edgeField, findResonance, movedEdges } from '../web/js/cavity-design.js';
+import { findResonance } from '../web/js/cavity-design.js';
+import { DISORDER, HeldMma, edgeField, holdingStep, movedEdges, smoothProject } from '../web/js/hz-design.js';
 import { randomNumbers } from '../web/js/optimizer.js';
 import { goalGradient, gradientRequests, meanReflection, optimize, pixelCount, prepareDesign, references, totalIterations } from '../web/js/design.js';
-import { Mma, coneFilter, coneFilter2d, holdingStep, project, smoothProject } from '../web/js/optimizer.js';
+import { Mma, coneFilter, coneFilter2d, project } from '../web/js/optimizer.js';
 import { initSync, solve as solve1d, solve_2d } from '../web/pkg/eigenmenno_wasm.js';
 
 initSync({ module: readFileSync(new URL('../web/pkg/eigenmenno_wasm_bg.wasm', import.meta.url)) });
@@ -63,6 +64,16 @@ test('MMA finds a bowl\'s minimum, stays in bounds, and respects its move limit'
   x.forEach((v, k) => assert.ok(Math.abs(v - best[k]) < 1e-2, `${v} against ${best[k]}`));
 });
 
+test('chapter 19\'s MMA steps exactly as chapter 13\'s does, when nothing is held', () => {
+  const [plain, held] = [new Mma(0.05), new HeldMma(0.05)];
+  let [x, y] = [noise(40, 8), noise(40, 8)];
+  for (let i = 0; i < 6; i++) {
+    const g = noise(40, 9 + i).map((v) => v - 0.5);
+    [x, y] = [plain.step(x, g), held.step(y, g)];
+    x.forEach((v, k) => assert.equal(v, y[k]));
+  }
+});
+
 // Each variable's step flips from one limit to the other as its slope changes sign, so the shift
 // comes in steps, and a held step can only get within the largest of them.
 test('a held MMA step makes the shift asked for, within one variable\'s move', () => {
@@ -72,7 +83,7 @@ test('a held MMA step makes the shift asked for, within one variable\'s move', (
   const shift = (step) => step.reduce((sum, v, k) => sum + along[k] * (v - x[k]), 0);
   const jump = 2 * move * along.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
   for (const want of [-0.5, 0, 1]) {
-    const next = new Mma(move).step(x, goal, (stepFor) => holdingStep(stepFor, goal, along, shift, want));
+    const next = new HeldMma(move).step(x, goal, (stepFor) => holdingStep(stepFor, goal, along, shift, want));
     assert.ok(Math.abs(shift(next) - want) <= jump, `${shift(next)} against ${want}`);
     next.forEach((v, k) => assert.ok(Math.abs(v - x[k]) <= move + 1e-12));
   }
