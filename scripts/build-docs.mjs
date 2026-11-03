@@ -231,7 +231,11 @@ const chapters = readdirSync(docs)
     title: /^# (.+)$/m.exec(readFileSync(join(docs, file), 'utf8'))[1],
   }));
 
-function layout({ title, body, current, prefix = '', panel = '' }) {
+// What each kind of page may be reused under: the tutorial's text, or the solver's code.
+const TEXT_LICENSE = 'Text by Menno Jansen, under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. The code it shows is under the MIT License.';
+const CODE_LICENSE = 'Code by Menno Jansen, under the MIT License.';
+
+function layout({ title, body, current, prefix = '', panel = '', license = TEXT_LICENSE }) {
   const links = chapters
     .map((c) => `${c.file.startsWith(FIRST_OPTIONAL) ? '<li class="part">Going further</li>\n        ' : ''}<li><a href="${prefix}${c.href}"${c.href === current ? ' aria-current="page"' : ''}>${escapeHtml(c.title)}</a></li>`)
     .join('\n        ');
@@ -267,6 +271,7 @@ function layout({ title, body, current, prefix = '', panel = '' }) {
   </nav>
   <main>
 ${body}
+    <footer class="learn-footer">${license}</footer>
   </main>${panel ? `\n  ${panel}` : ''}
 </div>
 </body>
@@ -314,7 +319,7 @@ for (const file of ['README.md', ...chapters.map((c) => c.file)]) {
 
 for (const file of index) {
   const body = `<article class="source"><h1>${file.name}</h1><p>Solver source code, referenced by the tutorial.</p><pre><code>${codeLines(file, true)}</code></pre></article>`;
-  write(join('source', `${file.name}.html`), layout({ title: file.name, body, prefix: '../' }));
+  write(join('source', `${file.name}.html`), layout({ title: file.name, body, prefix: '../', license: CODE_LICENSE }));
 }
 
 console.log(`${check ? 'Checked' : 'Wrote'} ${chapters.length + 1} tutorial pages and ${sources.length} source pages${check ? '' : ' to web/learn'}`);

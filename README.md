@@ -158,5 +158,5 @@ Cholesky on band diagrams. `faer` is a dependency of the tests only, as an indep
 
 ## License
 
-The code is released under the [MIT License](LICENSE). The tutorial's text in `docs/` doesn't
-have a licence yet.
+The code is released under the [MIT License](LICENSE). The tutorial's text in `docs/` is released
+under [CC BY 4.0](docs/LICENSE): reuse it freely, with credit. Code it quotes stays under MIT.

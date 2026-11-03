@@ -14,6 +14,8 @@ body.learn { max-width: 1120px; font-size: 16px; line-height: 1.6; }
 .learn nav a[aria-current=page] { background: var(--panel); color: var(--ink); font-weight: 500; box-shadow: inset 3px 0 0 var(--glass); }
 
 .learn article { max-width: 72ch; min-width: 0; }
+.learn-footer { max-width: 72ch; margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.learn-footer a { color: var(--muted); }
 .learn article h1 { font-size: 34px; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 18px; }
 .learn article h2 { font-size: 22px; line-height: 1.25; margin: 34px 0 10px; }
 .learn article p, .learn article ul, .learn article ol { margin: 0 0 14px; }
