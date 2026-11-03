@@ -416,7 +416,7 @@ export class FieldMap {
     }
     this.values = { re, im, peak: peak || 1 };
     const rgb = (name) => [1, 3, 5].map((i) => parseInt(css(name).slice(i, i + 2), 16));
-    const [low, mid, high] = [rgb('--series-2'), rgb('--surface'), rgb('--series-1')];
+    const [low, mid, high] = [rgb('--series-2'), rgb('--bg'), rgb('--series-1')];
     this.colors = new Uint8ClampedArray(3 * 511);
     for (let n = -255; n <= 255; n++) {
       const [end, f] = n < 0 ? [low, -n / 255] : [high, n / 255];
@@ -512,7 +512,7 @@ export class FieldMap {
 
   drawSource(ctx, x, y) {
     ctx.fillStyle = css('--ink');
-    ctx.strokeStyle = css('--surface');
+    ctx.strokeStyle = css('--bg');
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(x, y, 5, 0, 2 * Math.PI);
@@ -526,7 +526,7 @@ export class FieldMap {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 4;
-    ctx.strokeStyle = css('--surface');
+    ctx.strokeStyle = css('--bg');
     ctx.strokeText(text, x, y);
     ctx.fillStyle = css('--ink');
     ctx.fillText(text, x, y);
@@ -546,7 +546,7 @@ export class FieldMap {
     };
     ctx.lineCap = 'round';
     ctx.lineWidth = 6;
-    ctx.strokeStyle = css('--surface');
+    ctx.strokeStyle = css('--bg');
     shape();
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = css('--ink');
@@ -619,7 +619,7 @@ export function drawDensity(canvas, { x0, y0, width, height, nx, ny }, shapes, r
   const [w, h] = [nx + 2 * margin, ny + 2 * margin];
   Object.assign(canvas, { width: w, height: h });
   const rgb = (name) => [1, 3, 5].map((i) => parseInt(css(name).slice(i, i + 2), 16));
-  const [from, to] = [rgb('--surface'), rgb('--glass')];
+  const [from, to] = [rgb('--bg'), rgb('--glass')];
   const image = new ImageData(w, h);
   for (let py = 0; py < h; py++) {
     for (let px = 0; px < w; px++) {
@@ -665,7 +665,7 @@ export class EvolutionMap {
     Object.assign(this, { pixels, total, length, stages, drawn: 0, marker: null });
     this.image = Object.assign(document.createElement('canvas'), { width: total, height: pixels });
     const rgb = (name) => [1, 3, 5].map((i) => parseInt(css(name).slice(i, i + 2), 16));
-    this.colors = [rgb('--surface'), rgb('--glass')];
+    this.colors = [rgb('--bg'), rgb('--glass')];
   }
 
   add(rho) {
@@ -844,7 +844,7 @@ export class LineChart {
     ctx.globalAlpha = 1;
     const s = series[seriesIndex];
     ctx.fillStyle = s.color;
-    ctx.strokeStyle = css('--surface');
+    ctx.strokeStyle = css('--bg');
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(x, sy(s.y[index]), 5, 0, 2 * Math.PI);

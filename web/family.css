@@ -1,0 +1,68 @@
+/* The base this site shares with the family of sites it is published alongside: the
+   typeface, one set of neutral greys, and the accent named by data-site on <html>.
+
+   This copy keeps the site whole on its own. When .publish-family names the family's
+   home, scripts/publish.sh points every page at the shared family.css instead, and adds
+   family.js (the light/dark switch, which fills the empty .theme-toggle buttons) and a
+   link back to that home in the top bar. So keep these values in step with the shared
+   file, and keep page rules out of here: they belong in style.css.
+
+   Dark follows the system, unless the reader flips the switch, which sets data-theme on
+   <html>. A media query and an attribute selector cannot share one rule, so each dark
+   palette is written twice: keep the two blocks identical. */
+
+:root {
+  --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --bg: #F5F5F3;
+  --surface: #FFFFFF;
+  --ink: #111111;
+  --muted: #666663;
+  --rule: #D6D6D2;
+  --glassworks: #0F6E78;
+  --accent: var(--ink);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161616;
+    --surface: #1E1E1E;
+    --ink: #ECECE9;
+    --muted: #9C9C98;
+    --rule: #2F2F2F;
+    --glassworks: #4CC2CF;
+  }
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #161616;
+  --surface: #1E1E1E;
+  --ink: #ECECE9;
+  --muted: #9C9C98;
+  --rule: #2F2F2F;
+  --glassworks: #4CC2CF;
+}
+[data-site="glassworks"] { --accent: var(--glassworks); }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+}
+.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.mark { display: inline-block; height: 1.35em; width: auto; vertical-align: -0.3em; margin-right: 0.4em; overflow: visible; }
+
+.theme-toggle {
+  font: inherit; color: var(--muted); background: none; border: 0;
+  padding: .35rem; margin: -.35rem; line-height: 0; align-self: center; cursor: pointer;
+}
+.theme-toggle:hover { color: var(--ink); }
+.theme-toggle svg { width: 1em; height: 1em; transition: transform .2s; }
+.theme-toggle[data-showing="dark"] svg { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle svg { transition: none; }
+}

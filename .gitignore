@@ -5,3 +5,4 @@ web/learn/
 node_modules/
 .DS_Store
 .publish-target
+.publish-family

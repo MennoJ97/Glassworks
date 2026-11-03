@@ -87,7 +87,7 @@ function follow() {
 addEventListener('scroll', follow, { passive: true });
 
 // The chapter list moves above the text when the panel needs its column.
-const nav = document.querySelector('.learn nav details');
+const nav = document.querySelector('.chapters details');
 const narrow = matchMedia('(max-width: 1399px)');
 const fold = () => (nav.open = !(showing() && narrow.matches));
 wide.addEventListener('change', fold);
@@ -108,7 +108,7 @@ toggle.addEventListener('click', () => {
   follow();
 });
 label();
-document.querySelector('.learn-header .open-solver').before(toggle);
+document.querySelector('.topnav .links').before(toggle);
 
 fold();
 follow();

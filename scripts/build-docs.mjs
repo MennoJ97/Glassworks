@@ -235,16 +235,20 @@ const chapters = readdirSync(docs)
 const TEXT_LICENSE = 'Text by the Glassworks authors, under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. The code it shows is under the MIT License.';
 const CODE_LICENSE = 'Code by the Glassworks authors, under the MIT License.';
 
+// The site's mark, as the top bar of the solver page draws it.
+const MARK = '<svg class="mark" aria-hidden="true" focusable="false" viewBox="0 0 32 24"><rect x="12" y="2" width="3" height="20" style="fill:var(--glassworks)"/><rect x="17" y="2" width="3" height="20" style="fill:var(--muted)"/><rect x="22" y="2" width="3" height="20" style="fill:var(--glassworks)"/><rect x="27" y="2" width="3" height="20" style="fill:var(--muted)"/><path d="M1 12C2.5 5 4.5 5 6 12S9.5 19 11 12S13.5 7.5 15 12S17.5 14.5 19 12" fill="none" stroke-width="1.6" stroke-linecap="round" style="stroke:var(--ink)"/></svg>';
+
 function layout({ title, body, current, prefix = '', panel = '', license = TEXT_LICENSE }) {
   const links = chapters
     .map((c) => `${c.file.startsWith(FIRST_OPTIONAL) ? '<li class="part">Going further</li>\n        ' : ''}<li><a href="${prefix}${c.href}"${c.href === current ? ' aria-current="page"' : ''}>${escapeHtml(c.title)}</a></li>`)
     .join('\n        ');
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-site="glassworks">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)} | Glassworks</title>
+<link rel="stylesheet" href="${prefix}../family.css">
 <link rel="stylesheet" href="${prefix}../style.css">
 <link rel="stylesheet" href="${prefix}../learn.css">${
     panel
@@ -255,12 +259,20 @@ function layout({ title, body, current, prefix = '', panel = '', license = TEXT_
   }
 </head>
 <body class="learn${panel ? ' with-code' : ''}">
-<header class="learn-header">
-  <a class="brand" href="${prefix}index.html">Glassworks tutorial</a>
-  <a class="open-solver" href="${prefix}../index.html">Open the solver</a>
-</header>
-<div class="learn-layout">
-  <nav aria-label="Tutorial chapters">
+<nav class="topnav">
+  <div class="wrap">
+    <div class="brand"><!--apex--><a class="home" href="${prefix}../index.html">${MARK}Glassworks</a></div>
+    <div class="navright">
+      <div class="links">
+        <a href="${prefix}../index.html">Solver</a>
+        <a href="${prefix}index.html" aria-current="${current === 'index.html' ? 'page' : 'true'}">Tutorial</a>
+      </div>
+      <button class="theme-toggle" hidden></button>
+    </div>
+  </div>
+</nav>
+<div class="learn-layout page">
+  <nav class="chapters" aria-label="Tutorial chapters">
     <details open>
       <summary>Chapters</summary>
       <ul>

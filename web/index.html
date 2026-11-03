@@ -1,18 +1,32 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-site="glassworks">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Glassworks</title>
 <meta name="description" content="Build a layered optical structure and watch its electromagnetic modes, solved in your browser with the finite element method.">
+<link rel="stylesheet" href="family.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
+<nav class="topnav">
+  <div class="wrap">
+    <div class="brand"><!--apex--><a class="home" href="index.html"><svg class="mark" aria-hidden="true" focusable="false" viewBox="0 0 32 24"><rect x="12" y="2" width="3" height="20" style="fill:var(--glassworks)"/><rect x="17" y="2" width="3" height="20" style="fill:var(--muted)"/><rect x="22" y="2" width="3" height="20" style="fill:var(--glassworks)"/><rect x="27" y="2" width="3" height="20" style="fill:var(--muted)"/><path d="M1 12C2.5 5 4.5 5 6 12S9.5 19 11 12S13.5 7.5 15 12S17.5 14.5 19 12" fill="none" stroke-width="1.6" stroke-linecap="round" style="stroke:var(--ink)"/></svg>Glassworks</a></div>
+    <div class="navright">
+      <div class="links">
+        <a href="index.html" aria-current="page">Solver</a>
+        <a href="learn/index.html">Tutorial</a>
+      </div>
+      <button class="theme-toggle" hidden></button>
+    </div>
+  </div>
+</nav>
+
+<div class="page">
+<header class="masthead">
   <div>
-    <h1>Glassworks</h1>
+    <h1>Light in layered glass</h1>
     <p>Stack up layers of material and watch how light behaves inside them. Everything is solved on your own computer.</p>
-    <p><a href="learn/index.html">Learn how it works</a></p>
   </div>
   <label class="field">Start from an example
     <select id="preset"><option value="">Choose an example</option></select>
@@ -197,6 +211,7 @@
     </details>
   </section>
 </main>
+</div>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

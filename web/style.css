@@ -1,74 +1,103 @@
+/* The solver page. The typeface, the greys (--bg, --surface, --ink, --muted, --rule) and
+   --accent come from family.css, linked first; the tokens here are this site's own, and
+   follow the family's light/dark switch the same way: each dark block is written twice,
+   once for the system setting and once for data-theme="dark". Keep the two identical.
+   plot.js reads --bg, --ink, --muted, --grid, --glass and the series at draw time. */
 :root {
-  --surface: #f3f5f2;
-  --panel: #e7ece8;
-  --ink: #16232b;
-  --muted: #55656d;
-  --grid: #d3dbd6;
-  --line: #b6c2bc;
-  --glass: #0f6e78;
+  --panel: #EDEDE9;
+  --grid: #E2E2DE;
+  --line: #C4C4BF;
+  --glass: var(--accent);
   --series-1: #b5173f;
   --series-2: #2458d3;
   --series-3: #9a6a00;
-  --tooltip: #16232b;
-  --tooltip-ink: #f3f5f2;
+  --tooltip: var(--ink);
+  --tooltip-ink: var(--bg);
   --error: #9b1236;
-  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  color-scheme: light dark;
+  --sans: var(--font);
+  --page-max: 1320px;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #141b1f;
-    --panel: #1d262b;
-    --ink: #e6ecea;
-    --muted: #9db0b3;
-    --grid: #2b373c;
-    --line: #42525a;
-    --glass: #4cc2cf;
+  :root:not([data-theme="light"]) {
+    --panel: #262626;
+    --grid: #2A2A2A;
+    --line: #444441;
     --series-1: #e04f6e;
     --series-2: #5a85ea;
     --series-3: #b5881c;
-    --tooltip: #e6ecea;
-    --tooltip-ink: #141b1f;
     --error: #ff8fa5;
   }
 }
+:root[data-theme="dark"] {
+  --panel: #262626;
+  --grid: #2A2A2A;
+  --line: #444441;
+  --series-1: #e04f6e;
+  --series-2: #5a85ea;
+  --series-3: #b5881c;
+  --error: #ff8fa5;
+}
 
 * { box-sizing: border-box; }
+/* family.css sets this too; repeated so the page has its colours before that file arrives. */
 body {
-  margin: 0 auto;
-  max-width: 1320px;
-  padding: 28px 28px 56px;
-  background: var(--surface);
+  margin: 0;
+  background: var(--bg);
   color: var(--ink);
   font: 15px/1.45 var(--sans);
 }
-h1, h2 { font-weight: 600; margin: 0; }
-h1 { font-size: 38px; line-height: 1.1; letter-spacing: -0.02em; }
-h2 { font-size: 18px; margin-bottom: 12px; }
-header { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; margin-bottom: 20px; }
-header p { margin: 6px 0 0; max-width: 62ch; color: var(--muted); font-size: 16px; }
-header a { color: var(--ink); font-weight: 500; text-underline-offset: 2px; }
+.page { max-width: var(--page-max); margin: 0 auto; padding: 0 28px 56px; }
+h1, h2 { font-weight: 700; margin: 0; }
+h1 { font-size: clamp(2rem, 4.4vw, 2.7rem); line-height: 1.05; letter-spacing: -0.03em; }
+h2 { font-size: 18px; letter-spacing: -0.01em; margin-bottom: 12px; }
+a { color: inherit; text-underline-offset: .18em; }
+a:hover { text-decoration-color: var(--accent); }
 
-.problems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
-.problems [role=tab] {
-  appearance: none; display: grid; gap: 3px; align-content: start; text-align: left;
-  background: none; border: 1px solid var(--line); border-radius: 8px;
-  color: var(--muted); font: 14px/1.4 var(--sans); padding: 12px 16px; cursor: pointer;
+/* The top bar every site in the family has: the brand on the left, the pages on the
+   right with the current one underlined in the accent, the light/dark switch last.
+   publish.sh puts the family's home in front of the brand, as "home / Glassworks". */
+.topnav { background: var(--bg); border-bottom: 1px solid var(--rule); }
+.topnav .wrap {
+  max-width: var(--page-max); margin: 0 auto; padding: .7rem 28px .6rem;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1.5rem;
 }
-.problems strong { color: var(--ink); font-size: 17px; font-weight: 600; }
-.problems [role=tab]:hover { background: var(--panel); }
-.problems [role=tab][aria-selected=true] { background: var(--panel); border-color: var(--glass); box-shadow: inset 0 0 0 1px var(--glass); color: var(--ink); }
+.brand { font-size: 16px; font-weight: 700; white-space: nowrap; }
+.brand a { text-decoration: none; }
+.brand .apex { color: var(--muted); font-weight: 400; }
+.brand .apex:hover { color: var(--ink); }
+.navright { display: flex; align-items: center; gap: 1.4rem; }
+.links { display: flex; gap: 1.4rem; }
+.links a { color: var(--muted); text-decoration: none; white-space: nowrap; padding-bottom: .2rem; border-bottom: 2px solid transparent; }
+.links a:hover { color: var(--ink); }
+.links a[aria-current] { color: var(--ink); border-bottom-color: var(--accent); }
+
+.masthead { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; padding: 34px 0 24px; }
+.masthead p { margin: 10px 0 0; max-width: 62ch; color: var(--muted); font-size: 17px; line-height: 1.5; }
+
+.problems {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-bottom: 18px;
+  background: var(--rule); border: 1px solid var(--rule);
+}
+.problems [role=tab] {
+  appearance: none; display: grid; gap: 4px; align-content: start; text-align: left;
+  background: var(--surface); border: 0; border-radius: 0; min-height: 0;
+  color: var(--muted); font: 14px/1.4 var(--sans); padding: 14px 18px 15px; cursor: pointer;
+}
+.problems strong { color: var(--ink); font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.problems [role=tab]:hover { background: var(--surface); color: var(--ink); }
+.problems [role=tab]:hover strong { text-decoration: underline 2px var(--accent); text-underline-offset: .2em; }
+.problems [role=tab][aria-selected=true] { box-shadow: inset 0 -3px 0 var(--accent); color: var(--ink); }
 
 .views { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
 .views[hidden] { display: none; }
 .views [role=tab] {
-  appearance: none; background: none; border: 0; border-bottom: 3px solid transparent;
-  border-radius: 0; color: var(--muted); font: 500 15px var(--sans); padding: 8px 14px 9px; cursor: pointer;
+  appearance: none; background: none; border: 0; border-bottom: 2px solid transparent;
+  border-radius: 0; min-height: 0; color: var(--muted); font: 15px var(--sans); padding: 8px 14px 9px; cursor: pointer;
 }
-.views [role=tab]:hover { color: var(--ink); }
-.views [role=tab][aria-selected=true] { color: var(--ink); border-bottom-color: var(--glass); }
+.views [role=tab]:hover { color: var(--ink); background: none; }
+.views [role=tab][aria-selected=true] { color: var(--ink); font-weight: 700; border-bottom-color: var(--accent); }
 #view-help { color: var(--muted); font-size: 14px; margin: 10px 0 18px; max-width: 90ch; }
-#view-help a { color: var(--ink); text-underline-offset: 2px; white-space: nowrap; }
+#view-help a { color: var(--ink); white-space: nowrap; }
 
 main {
   display: grid; gap: 28px 32px;
@@ -88,7 +117,8 @@ canvas[hidden] { display: none; }
 #field-map { height: clamp(320px, 56vh, 560px); }
 #design-run { margin: 0 0 12px; }
 #design-run[hidden] { display: none; }
-#design-start { font-weight: 500; }
+#design-start { font-weight: 700; background: var(--ink); border-color: var(--ink); color: var(--bg); }
+#design-start:hover { border-color: var(--accent); }
 #design-progress { flex-basis: 100%; width: 100%; height: 6px; accent-color: var(--glass); }
 #design-progress[hidden] { display: none; }
 .settings h2:not(:first-child) { margin-top: 10px; }
@@ -102,7 +132,7 @@ canvas { display: block; width: 100%; touch-action: pan-y; }
 #evolution { height: 170px; cursor: ew-resize; margin-top: 6px; }
 #design-film { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 #design-film:empty { display: none; }
-#design-film button { padding: 2px; min-height: 0; border: 1px solid var(--line); border-radius: 4px; background: none; font: 12px var(--sans); color: var(--muted); cursor: pointer; }
+#design-film button { padding: 2px; min-height: 0; border: 1px solid var(--line); border-radius: 2px; background: none; font: 12px var(--sans); color: var(--muted); cursor: pointer; }
 #design-film button[aria-current="true"] { border-color: var(--ink); color: var(--ink); }
 #design-film canvas { width: 64px; height: 64px; image-rendering: pixelated; }
 .replay { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
@@ -115,7 +145,7 @@ canvas { display: block; width: 100%; touch-action: pan-y; }
 .swatch { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
 
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-th { font-weight: 500; font-size: 13px; color: var(--muted); text-align: left; padding: 4px 8px 6px 0; }
+th { font-weight: 700; font-size: 13px; color: var(--muted); text-align: left; padding: 4px 8px 6px 0; }
 td { padding: 3px 8px 3px 0; }
 #results td, #results th { border-bottom: 1px solid var(--grid); padding: 5px 8px; }
 tr.pickable { cursor: pointer; }
@@ -126,12 +156,11 @@ tr.selected { background: var(--panel); box-shadow: inset 3px 0 0 var(--glass); 
 
 input, select, button {
   font: inherit; color: inherit; background: var(--surface);
-  border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; min-height: 32px;
+  border: 1px solid var(--line); border-radius: 2px; padding: 5px 8px; min-height: 32px;
 }
 input[type=number] { width: 86px; }
 button, .file-button { cursor: pointer; }
 button:hover, .file-button:hover { background: var(--panel); }
-:focus-visible { outline: 2px solid var(--glass); outline-offset: 1px; }
 .field { display: grid; gap: 3px; font-size: 13.5px; color: var(--muted); }
 .field input, .field select { color: var(--ink); width: 100%; font-size: 15px; }
 .field[hidden], .pair[hidden] { display: none; }
@@ -145,11 +174,11 @@ summary { cursor: pointer; }
 .repeat { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); }
 .repeat input { width: 58px; color: var(--ink); }
 .file-button {
-  border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; min-height: 32px;
+  border: 1px solid var(--line); border-radius: 2px; padding: 5px 8px; min-height: 32px;
   display: inline-flex; align-items: center;
 }
 .file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; min-height: 0; padding: 0; }
-.file-button:focus-within { outline: 2px solid var(--glass); }
+.file-button:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
 #status { color: var(--muted); font-size: 13.5px; margin: 12px 0; }
 #result-note { font-size: 14px; margin: 12px 0 8px; }
 #result-scale[hidden] { display: none; }
@@ -158,10 +187,10 @@ summary { cursor: pointer; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
 @media (max-width: 960px) {
-  body { padding: 18px 16px 40px; }
-  h1 { font-size: 32px; }
+  .page { padding: 0 16px 40px; }
+  .topnav .wrap { padding-left: 16px; padding-right: 16px; }
   main, main.design { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "readout" "builder" "settings"; grid-template-rows: none; }
   .problems { grid-template-columns: minmax(0, 1fr); }
 }
-#design-caveat { border-left: 3px solid var(--line); padding-left: 12px; }
+#design-caveat { border-left: 3px solid var(--rule); padding-left: 12px; }
 #design-caveat a { color: inherit; }

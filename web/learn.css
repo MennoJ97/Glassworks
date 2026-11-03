@@ -1,30 +1,27 @@
-/* The tutorial pages. Colours and base controls come from style.css. */
-body.learn { max-width: 1120px; font-size: 16px; line-height: 1.6; }
-.learn-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-.learn a { color: var(--ink); text-underline-offset: 2px; }
-.learn .brand { font-size: 18px; font-weight: 600; text-decoration: none; }
-.learn .open-solver { font-weight: 500; }
+/* The tutorial pages. Colours, the top bar and base controls come from family.css and style.css. */
+body.learn { --page-max: 1120px; font-size: 16px; line-height: 1.6; }
+.learn-layout.page { padding-top: 32px; }
 .learn main { display: block; }
 .learn-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 44px; align-items: start; }
-.learn nav { position: sticky; top: 16px; font-size: 14.5px; line-height: 1.35; }
-.learn nav summary { font-weight: 600; margin-bottom: 8px; }
-.learn nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.learn nav a { display: block; padding: 5px 9px; border-radius: 5px; text-decoration: none; color: var(--muted); }
-.learn nav a:hover { background: var(--panel); color: var(--ink); }
-.learn nav a[aria-current=page] { background: var(--panel); color: var(--ink); font-weight: 500; box-shadow: inset 3px 0 0 var(--glass); }
+.chapters { position: sticky; top: 16px; font-size: 14.5px; line-height: 1.35; }
+.chapters summary { font-weight: 700; margin-bottom: 8px; }
+.chapters ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.chapters a { display: block; padding: 5px 10px; text-decoration: none; color: var(--muted); }
+.chapters a:hover { color: var(--ink); }
+.chapters a[aria-current=page] { color: var(--ink); font-weight: 700; box-shadow: inset 2px 0 0 var(--accent); }
 
 .learn article { max-width: 72ch; min-width: 0; }
-.learn-footer { max-width: 72ch; margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.learn-footer { max-width: 72ch; margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--rule); font-size: 14px; color: var(--muted); }
 .learn-footer a { color: var(--muted); }
-.learn article h1 { font-size: 34px; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 18px; }
-.learn article h2 { font-size: 22px; line-height: 1.25; margin: 34px 0 10px; }
+.learn article h1 { font-size: clamp(2rem, 4.4vw, 2.6rem); line-height: 1.05; letter-spacing: -0.03em; margin: 0 0 20px; }
+.learn article h2 { font-size: 1.45rem; line-height: 1.2; letter-spacing: -0.015em; margin: 2.6rem 0 .8rem; }
 .learn article p, .learn article ul, .learn article ol { margin: 0 0 14px; }
 .learn article li { margin-bottom: 4px; }
 .learn article li:has(> a:target) { background: var(--panel); box-shadow: 0 0 0 4px var(--panel); border-radius: 2px; }
-.learn code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; background: var(--panel); padding: 1px 4px; border-radius: 3px; }
+.learn code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86em; background: var(--panel); border: 1px solid var(--rule); padding: .06em .35em; border-radius: 2px; }
 .learn p code, .learn li code, .learn td code { overflow-wrap: anywhere; }
-.learn pre { background: var(--panel); padding: 12px 14px; border-radius: 6px; overflow-x: auto; margin: 0 0 16px; line-height: 1.45; }
-.learn pre code { background: none; padding: 0; font-size: 13.5px; }
+.learn pre { background: var(--panel); border: 1px solid var(--rule); padding: 12px 14px; border-radius: 2px; overflow-x: auto; margin: 0 0 16px; line-height: 1.45; }
+.learn pre code { background: none; border: 0; padding: 0; font-size: 13.5px; }
 .learn .table-scroll { margin: 0 0 18px; }
 .learn article table { font-size: 15px; }
 .learn article th, .learn article td { border-bottom: 1px solid var(--grid); padding: 6px 12px 6px 0; vertical-align: top; }
@@ -40,10 +37,10 @@ body.learn { max-width: 1120px; font-size: 16px; line-height: 1.6; }
 
 @media (max-width: 860px) {
   .learn-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .learn nav { position: static; }
+  .chapters { position: static; }
   .learn article h1 { font-size: 28px; }
 }
-.learn-layout nav .part { color: var(--muted); font-size: 0.85em; font-weight: 600; margin-top: 12px; list-style: none; }
+.chapters .part { color: var(--muted); font-size: 0.85em; font-weight: 600; margin-top: 12px; list-style: none; }
 
 /* The code panel beside a chapter, from learn.js. Below 1100px, or when hidden, the names
    in the text are ordinary links to the source pages. */
@@ -54,15 +51,15 @@ body.learn { max-width: 1120px; font-size: 16px; line-height: 1.6; }
 .code-panel, .code-hint, .code-toggle { display: none; }
 
 @media (min-width: 1100px) {
-  html:not(.code-off) body.learn.with-code { max-width: 1760px; }
+  html:not(.code-off) body.learn.with-code { --page-max: 1760px; }
   html:not(.code-off) .with-code .learn-layout { grid-template-columns: minmax(0, 72ch) minmax(360px, 1fr); gap: 36px; }
-  html:not(.code-off) .with-code .learn-layout nav { grid-column: 1 / -1; position: static; }
-  html:not(.code-off) .with-code .learn-layout nav ul { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); column-gap: 12px; }
+  html:not(.code-off) .with-code .chapters { grid-column: 1 / -1; position: static; }
+  html:not(.code-off) .with-code .chapters ul { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); column-gap: 12px; }
   .with-code .code-toggle { display: inline-block; margin-left: auto; min-height: 0; padding: 3px 10px; font-size: 14px; }
   html:not(.code-off) .code-hint { display: block; color: var(--muted); font-size: 14.5px; }
   html:not(.code-off) .code-panel {
     display: flex; flex-direction: column; position: sticky; top: 16px; height: calc(100vh - 32px); min-width: 0;
-    border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden;
+    border: 1px solid var(--rule); border-radius: 2px; background: var(--panel); overflow: hidden;
   }
 
   /* A passage that points into the code gets a bar in the margin, lit while it's shown. */
@@ -74,17 +71,17 @@ body.learn { max-width: 1120px; font-size: 16px; line-height: 1.6; }
 }
 @media (min-width: 1400px) {
   html:not(.code-off) .with-code .learn-layout { grid-template-columns: 220px minmax(0, 68ch) minmax(420px, 1fr); }
-  html:not(.code-off) .with-code .learn-layout nav { grid-column: auto; position: sticky; }
-  html:not(.code-off) .with-code .learn-layout nav ul { grid-template-columns: none; }
+  html:not(.code-off) .with-code .chapters { grid-column: auto; position: sticky; }
+  html:not(.code-off) .with-code .chapters ul { grid-template-columns: none; }
 }
 
-.code-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.code-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--rule); font-size: 13.5px; }
 .code-tabs { display: flex; gap: 2px; overflow-x: auto; min-width: 0; }
 .code-tabs button { border: 0; background: none; min-height: 0; padding: 3px 8px; color: var(--muted); white-space: nowrap; }
-.code-tabs button[aria-selected=true] { background: var(--surface); color: var(--ink); font-weight: 500; }
+.code-tabs button[aria-selected=true] { background: var(--bg); color: var(--ink); font-weight: 700; }
 .code-full { white-space: nowrap; color: var(--muted) !important; }
-.code-body { position: relative; flex: 1; overflow: auto; background: var(--surface); }
-.code-panel pre { margin: 0; padding: 10px 0; border-radius: 0; background: none; overflow: visible; counter-reset: line; }
+.code-body { position: relative; flex: 1; overflow: auto; background: var(--bg); }
+.code-panel pre { margin: 0; padding: 10px 0; border: 0; border-radius: 0; background: none; overflow: visible; counter-reset: line; }
 .code-panel pre code { font-size: 12.5px; }
 /* Long lines wrap under themselves, past the line number, so nothing hides off to the side. */
 .code-panel .line { display: block; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 12px 0 4.2em; text-indent: -4.2em; counter-increment: line; }

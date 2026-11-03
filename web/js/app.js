@@ -1182,10 +1182,14 @@ function animate(now) {
 const resized = new ResizeObserver(() => { fieldPlot.draw(); fieldMap.draw(); chart.draw(); evolution.draw(); });
 resized.observe($('field-plot'));
 resized.observe($('field-map'));
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+// Colours are baked in at draw time, so redraw when the theme changes: the system
+// setting, or the family's light/dark switch, which fires themechange on window.
+const recolour = () => {
   if (design.frames.length) restartEvolution();
   if (results) showResults();
-});
+};
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', recolour);
+addEventListener('themechange', recolour);
 
 $('play').textContent = playing ? 'Pause' : 'Play';
 renderLayers();
