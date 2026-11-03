@@ -118,7 +118,8 @@ for (const [analysis, goal, radius] of [['mirror', (t) => -t, 4], ['antireflecti
     const s = state(analysis);
     await prepareDesign(s, solve);
     const n = pixelCount(s.design[analysis]);
-    const filter = analysis === 'bend2d' ? coneFilter2d(24, 24, radius) : coneFilter(n, radius);
+    const side = Math.sqrt(n);
+    const filter = analysis === 'bend2d' ? coneFilter2d(side, side, radius) : coneFilter(n, radius);
     const beta = 4;
     const x = noise(n, 3).map((v) => 0.3 + 0.4 * v);
     const value = async (at) => goal(meanReflection((await solve(gradientRequests(s, project(filter.apply(at), beta).rho))).results));
@@ -166,15 +167,16 @@ test('a coating ends sharp, and beats both no coating and one quarter-wave layer
   assert.ok(seen.at(-1) < single && single < none, `${seen.at(-1)}, ${single}, ${none}`);
 });
 
-test('a bend ends sharp, and beats both an empty region and a sharp corner', async () => {
+test('a bend ends sharp, and beats an empty region, a sharp corner and a curved bend', async () => {
   const s = state('bend2d');
   const { seen, grey } = await run(s);
   assert.ok(grey < 0.05, `grey ${grey}`);
-  const [empty, corner] = await referenceValues(s);
-  assert.ok(empty < 0.1, `empty ${empty}`);
+  const [empty, corner, curved] = await referenceValues(s);
+  assert.ok(empty < 0.15, `empty ${empty}`);
   assert.ok(corner > 0.2 && corner < 0.5, `corner ${corner}`);
-  // Three starts in plans/2d-solver.md reach 98.1 to 98.4%.
-  assert.ok(seen.at(-1) > 0.97, `T ${seen.at(-1)}`);
+  // Chapter 13 gives 93.2% for the curved bend, and 98.3 to 99.2% over three starts.
+  assert.ok(curved > 0.92 && curved < 0.945, `curved ${curved}`);
+  assert.ok(seen.at(-1) > curved + 0.03, `${seen.at(-1)} against ${curved}`);
 });
 
 test('the same start makes the same design, which a band at twice the size also gets', async () => {
@@ -182,12 +184,12 @@ test('the same start makes the same design, which a band at twice the size also 
     const s = state('bend2d');
     s.design = { ...s.design, bend2d: { ...s.design.bend2d, from, to } };
     await prepareDesign(s, solve);
-    const rho = noise(576, 4);
+    const rho = noise(324, 4);
     return { rho, s, results: (await solve(gradientRequests(s, rho))).results };
   };
   const [a, again, big] = [await at(0.95, 1.05), await at(0.95, 1.05), await at(1.9, 2.1)];
   assert.equal(meanReflection(a.results), meanReflection(again.results));
-  const slope = new Float64Array(576).fill(1);
+  const slope = new Float64Array(324).fill(1);
   const relative = (x) => { const g = goalGradient(x.s, x.results, slope); const peak = Math.max(...g.map(Math.abs)); return g.map((v) => v / peak); };
   const [ga, gb] = [relative(a), relative(big)];
   assert.ok(Math.abs(meanReflection(a.results) - meanReflection(big.results)) < 1e-10);
@@ -244,14 +246,15 @@ test('a cavity beats the crystal in its footprint, on target, and as drawn recta
   assert.ok(last.mode.q > 1000, `Q ${last.mode.q}`);
 });
 
-test('in H_z, a bend beats a sharp corner, staying in one wider guide', async () => {
+test('in H_z, a bend beats a sharp corner and a curved bend, staying in one wider guide', async () => {
   const s = { ...state('bend2d'), polarization: 'tm' };
   const { seen, grey } = await run(s);
   assert.ok(grey < 0.05, `grey ${grey}`);
-  const [, corner] = await referenceValues(s);
-  // Six starts in plans/2d-solver.md reach 94 to 98%.
+  const [, corner, curved] = await referenceValues(s);
+  // Chapter 19 gives 93.2% for the curved bend, and 98.3 to 98.5% over three starts.
   assert.ok(corner < 0.5, `corner ${corner}`);
-  assert.ok(seen.at(-1) > 0.93, `T ${seen.at(-1)}`);
+  assert.ok(curved > 0.92 && curved < 0.945, `curved ${curved}`);
+  assert.ok(seen.at(-1) > curved + 0.03, `${seen.at(-1)} against ${curved}`);
 });
 
 test('a disordered copy moves only edges, by a smooth field of about the size asked for', () => {

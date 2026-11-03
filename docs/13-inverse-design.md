@@ -121,16 +121,22 @@ pattern from a longer run gives:
 <!-- code: OPTIMIZED_BEND -->
 <!-- code: optimized_bend_survives_a_finer_mesh "for wavelength in" .. "let plain" -->
 
-The page differs in two ways. Its monitor is closer to the corner, where it still catches some light radiated from the gap,
-so its empty region reads 7.1% rather than 5.4%, and its sharp corner 35%. And it runs 10 iterations for each of 8 sharpness
-stages, reaching a mean of 98.1% to 98.4% over three random starts. How the design sharpens matters more than how long it
-runs: 25 iterations per stage reached 96.9% to 99.0%, higher but less dependable, while skipping every other stage reached
-only 96.5% to 97.6%.
+A sharp corner is an easy target, though. What a designer would draw in that square is a curved bend: a quarter circle of
+radius $0.5\lambda$ passes 95.8% on the page's mesh, and one of $0.4\lambda$ passes 97.0%. Against that, the optimizer gains
+only about 1%. So the page sets a turn that a smooth bend can't take well. Its guides meet the square a quarter wavelength from
+its inner corner, so a curved bend there has a radius of $0.25\lambda$, and passes 93.2%. The square reaches half a wavelength
+past the corner, three quarters of a wavelength in all, and the design can use all of it. The page's monitor is also closer to
+the corner, where it still catches some light radiated from the gap, so its empty region reads 11.1% and its sharp corner 29.7%.
+<!-- code: curvedBend -->
+
+The page runs 10 iterations for each of 8 sharpness stages, and three random starts reach a mean of 98.3% to 99.2%, about 5%
+above the curve. More iterations don't help: 25 per stage reached 98.1% to 99.2%, while 5 reached only 95.6% to 98.4%. How the
+design sharpens matters too: in the first square, skipping every other stage reached only 96.5% to 97.6%, against 98.1% to 98.4%.
 <!-- code: design.js "const SHARPNESS" .. "const bendIterations" -->
 
 For comparison, chapter 12's crystal bend reaches 97.8% to 95.8% over a much wider band, about 13%, in a crystal several periods
 across. So neither wins outright: this pattern is compact and needs no band gap, while the crystal gets its bandwidth from having
-nowhere else for light to go. We only optimized over 10% here, and over 0.85 to 1.15 this reached about 80 to 85%.
+nowhere else for light to go. We only optimized over 10% here, and over 0.85 to 1.15 the first square reached about 80 to 85%.
 
 Optimizers are known to exploit a mesh's errors, so `optimized_bend_survives_a_finer_mesh` checks the finished pattern at twice the
 resolution, and it holds. Around it, the power entering and leaving a closed loop balances to 0.02%. Optimizing for a single wavelength

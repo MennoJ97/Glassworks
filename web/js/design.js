@@ -11,8 +11,8 @@ const AMBIENT = 0.3;
 const SHARPNESS = [1, 2, 4, 8, 16, 32, 64, 128];
 const ITERATIONS_PER_STAGE = 40;
 // A 2D solve costs far more than a 1D one, and these converge sooner: for E_z, 25 did no better
-// over three starts, while 7 sometimes fell short, and so did skipping every other sharpness.
-// H_z converges more slowly: its mean over three starts rose from 81% at 10 to 96% at 40.
+// over three starts, while 5 sometimes fell short. H_z converges more slowly: its mean over
+// three starts rose from 97.2% at 10 to 98.0% at 20 and 98.4% at 40.
 const bendIterations = (s) => (s.polarization === 'tm' ? 40 : 10);
 export const stageLength = (s) => (s.analysis === 'cavityDesign' ? CAVITY.iterations : s.analysis === 'bend2d' ? bendIterations(s) : ITERATIONS_PER_STAGE);
 const sharpnessOf = (s) => (s.analysis === 'cavityDesign' ? CAVITY.stages.map(([, beta]) => beta) : SHARPNESS);
@@ -27,10 +27,12 @@ const solverLayer = (thickness, e) => ({ thickness, eps: [e, 0], mu: [1, 0] });
 export const pixelCount = (d) => (d.cavity ? CAVITY.pixels ** 2 : d.thickness === undefined ? BEND.pixels ** 2 : Math.max(1, Math.round(d.thickness / PIXEL)));
 
 // A slab of index 3.5 turning a corner through a square of pixels, in units of the band's
-// centre wavelength, so a band anywhere gets the same design at its own size.
+// centre wavelength, so a band anywhere gets the same design at its own size. The guides meet
+// the square `turn` from its inner corner, which keeps a smooth bend tight, and the rest of the
+// square reaches past the corner for the design to use.
 // Everything lies on a grid of 1/24, so each pixel is a whole number of pairs of triangles.
-const BEND = { pixels: 24, x0: 1, y0: 0.5, size: 1, domain: 2.5, n: 3.5, pml: 0.5, span: 0.35 };
-const bendCentre = { x: BEND.x0 + BEND.size / 2, y: BEND.y0 + BEND.size / 2 };
+const BEND = { pixels: 18, x0: 1, y0: 0.75, size: 0.75, turn: 0.25, domain: 2.5, n: 3.5, pml: 0.5, span: 0.35 };
+const bendCentre = { x: BEND.x0 + BEND.turn, y: BEND.y0 + BEND.size - BEND.turn };
 const rectangle = (x0, y0, x1, y1) => ({ type: 'rect', x: (x0 + x1) / 2, y: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, n: BEND.n });
 
 export const bendScale = (s) => (s.design.bend2d.from + s.design.bend2d.to) / 2;
@@ -57,17 +59,31 @@ export function bendWarning(s) {
   return null;
 }
 
-// What the plot needs, and each solve shares.
-export function bendGeometry(straight, scale, polarization, meeting) {
+// A quarter circle joining the guides through the square, as wide as fits: a ring about the
+// square's inner corner, with air laid over the three quarters not wanted, under the straight guides.
+function curvedBend(width) {
+  const [cx, cy, r] = [BEND.x0, BEND.y0 + BEND.size, BEND.turn];
+  const [outer, inner] = [r + width / 2, r - width / 2];
+  const disc = (radius, n) => ({ type: 'circle', x: cx, y: cy, w: 2 * radius, h: 2 * radius, n });
+  const air = (x0, y0, x1, y1) => ({ ...rectangle(x0, y0, x1, y1), n: 1 });
+  return [disc(outer, BEND.n), disc(inner, 1), air(cx - outer, cy - outer, cx, cy + outer), air(cx, cy, cx + outer, cy + outer)];
+}
+
+// What the plot needs, and each solve shares. `corner`, if given, fills the square with a
+// 'sharp' corner or a 'curved' bend for comparison.
+export function bendGeometry(straight, scale, polarization, corner) {
   const { x0, y0, size, domain, span } = BEND;
   const width = bendWidth(polarization);
   const { x, y } = bendCentre;
   const far = domain + 3;
   const shapes = straight
     ? [rectangle(-3, y - width / 2, far, y + width / 2)]
-    : meeting
+    : corner === 'sharp'
     ? [rectangle(-3, y - width / 2, x + width / 2, y + width / 2), rectangle(x - width / 2, y - width / 2, x + width / 2, far)]
-    : [rectangle(-3, y - width / 2, x0, y + width / 2), rectangle(x - width / 2, y0 + size, x + width / 2, far)];
+    : [
+      ...(corner === 'curved' ? curvedBend(width) : []),
+      rectangle(-3, y - width / 2, x0, y + width / 2), rectangle(x - width / 2, y0 + size, x + width / 2, far),
+    ];
   const end = domain - 0.4;
   return scaled({
     size: domain, shapes,
@@ -78,9 +94,9 @@ export function bendGeometry(straight, scale, polarization, meeting) {
   }, scale);
 }
 
-function bendRequest(s, wavelength, straight, rho, meeting) {
+function bendRequest(s, wavelength, straight, rho, corner) {
   const scale = bendScale(s);
-  const g = bendGeometry(straight, scale, s.polarization, meeting);
+  const g = bendGeometry(straight, scale, s.polarization, corner);
   const n2 = BEND.n ** 2;
   return {
     width: g.size,
@@ -165,7 +181,8 @@ export function references(s) {
   if (s.analysis === 'bend2d') {
     return [
       { name: 'Empty region', requests: gradientRequests(s, new Float64Array(BEND.pixels ** 2)) },
-      { name: 'Sharp corner', requests: goalWavelengths(s).map((wavelength) => bendRequest(s, wavelength, false, undefined, true)) },
+      { name: 'Sharp corner', requests: goalWavelengths(s).map((wavelength) => bendRequest(s, wavelength, false, undefined, 'sharp')) },
+      { name: 'Curved bend', requests: goalWavelengths(s).map((wavelength) => bendRequest(s, wavelength, false, undefined, 'curved')) },
     ];
   }
   const d = s.design[s.analysis];

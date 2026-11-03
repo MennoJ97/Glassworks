@@ -29,12 +29,16 @@ Copying the $E_z$ setup gave only 79 to 85%, and more iterations reached only 85
 Twice as wide gives $H_z$ an effective index of 2.92, which asks a comparable thing of the design. It also carries a weak second mode, with an index of 1.10, and a monitor's total power wouldn't show light converted into it. But two modes would beat along the guide, and over six starts, transmission varies by under 2% from 2.1 to 3.3 wavelengths along it, against about 0.5% for $E_z$. So very little light is in the second mode.
 <!-- code: bendWidth -->
 
-| | Plain sharp corner | Six starts |
-|---|---:|---:|
-| $H_z$, width $0.25\lambda$ | 33% | 94.1 to 97.8% |
+These were measured in chapter 13's first square, one wavelength wide with the guides meeting at its middle. There, six starts reached 94.1 to 97.8%, but a plain curved bend of radius $0.5\lambda$ reads 97.7%, as well as the best of them. A guide this wide holds its mode well enough that a smooth turn loses little when it has room. So the page uses chapter 13's tighter turn, where it doesn't:
+
+| | Plain sharp corner | Curved bend | Three starts |
+|---|---:|---:|---:|
+| $H_z$, width $0.25\lambda$ | 33.8% | 93.2% | 98.3 to 98.5% |
 
 These are means over the band on the page's mesh, with its closer monitor. $H_z$ also needs more iterations: 40 per stage, where $E_z$ takes 10.
 <!-- code: bendIterations -->
+
+A tighter turn still, of $0.15\lambda$ in a square one wavelength wide, shows where $H_z$ gets harder. The curved bend reads 84.5% there, and $E_z$ designs 96.2 to 99.4%, but $H_z$ designs read 88 to 92% before the last grey pixels go, and 64 to 88% after. Its field crosses each edge, so rounding those pixels changes it more.
 
 ## An emitter that's electric
 
