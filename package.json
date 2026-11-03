@@ -1,6 +1,7 @@
 {
   "name": "eigenmenno-docs",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Build-time tools that turn docs/ into the website's tutorial pages",
   "scripts": {

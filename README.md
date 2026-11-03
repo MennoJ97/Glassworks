@@ -79,6 +79,9 @@ Visitors' structures stay on their own computers. They only leave if a visitor s
 link, since the link itself contains the structure. The page loads nothing from third
 parties.
 
+`plans/` holds development notes, measurements and probes. It isn't part of the website,
+and nothing on the site links to it.
+
 ## How it fits together
 
 ```text
@@ -122,6 +125,7 @@ web/                     The page
 docs/                    The tutorial, in Markdown
 scripts/build-docs.mjs   Turns docs/ into web/learn, with equations as MathML
 scripts/code-index.mjs   Finds the lines each name in the tutorial points at
+plans/                   Development notes and probes, not published with the site
 ```
 
 ## Why it's built this way
@@ -151,3 +155,8 @@ Cholesky on band diagrams. `faer` is a dependency of the tests only, as an indep
   [chapter 6](docs/06-eigenproblems.md) and [chapter 8](docs/08-verification.md).
 - Very large problems are limited by the visitor's memory: 1D requests over 2 million
   unknowns, and 2D requests over 400,000, are refused.
+
+## License
+
+The code is released under the [MIT License](LICENSE). The tutorial's text in `docs/` doesn't
+have a licence yet.
