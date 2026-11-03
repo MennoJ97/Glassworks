@@ -75,6 +75,16 @@ code, and no server load per visitor beyond serving the files. The host needs to
 `.wasm` files as `application/wasm`, which most do by default. No special headers are
 needed, because the solver is single-threaded.
 
+To build and upload in one step over rsync, put the target (`host:/path/to/site/`) in
+`.publish-target`, which git ignores, and run:
+
+```bash
+./scripts/publish.sh
+```
+
+It publishes only committed work, and moves the new files into place all at once, so
+visitors never get the new page with the old solver.
+
 Visitors' structures stay on their own computers. They only leave if a visitor shares a
 link, since the link itself contains the structure. The page loads nothing from third
 parties.
