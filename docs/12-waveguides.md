@@ -9,7 +9,8 @@ A **port** is a current sheet with a mode's shape. A straight guide is layered a
 chapter 7's 1D solver already finds its modes, and `port_mode` in
 [`solve2d/driven.rs`](../crates/glassworks-core/src/solve2d/driven.rs) simply reads the layers along the sheet and asks it.
 
-Modes are orthogonal with weight $p$, so a sheet of $p\,\phi(y)$ excites only the mode $\phi$, with
+The modes are eigenvectors of chapter 6's problem, with the weighted mass matrix $P$ on the right, so
+they're orthogonal with weight $p$ ([Parlett 1998](20-references.md#parlett-1998)). A sheet of $p\,\phi(y)$ excites only the mode $\phi$, with
 
 $$u = -\frac{k_0}{2\beta}\,\phi(y)\,e^{i\beta|x - x_0|},$$
 <!-- code: port "for pair in profile.windows" .. "rhs[row] += I * k" -->
@@ -24,14 +25,17 @@ the same job, since nothing else exists in the gap for it to excite.
 
 ## Monitors
 
-A **monitor** integrates the Poynting flux across a line:
+A **monitor** integrates the Poynting flux across a line ([Jackson 1999](20-references.md#jackson-1999)):
 
 $$P = \frac{1}{2k_0}\int p\,\mathrm{Im}\!\left(u^*\frac{\partial u}{\partial n}\right)ds.$$
 <!-- code: monitor_power "let (values, (d_dx, d_dy))" .. "total += weight" -->
 
-There's a trap here. A second-order element's derivative is least accurate at the edge of a cell, which is
-exactly where a line along the grid sits: this read 2% high on a slab. Power is conserved across a thin strip,
-so the monitor averages over two cells instead. Around a line source, the power crossing a closed loop then
+There's a trap here. A finite element solution's derivative is most accurate at particular points inside a
+cell ([Barlow 1976](20-references.md#barlow-1976)), and it jumps from one cell to the next, so on a cell's edge it
+isn't even single-valued. A line along the grid sits exactly on those edges, and there this read 2% high on a slab.
+Averaging a derivative over a patch of cells recovers a better one than any single point gives
+([Zienkiewicz & Zhu 1992](20-references.md#zienkiewicz-zhu-1992)). Power is conserved across a thin strip, so
+the monitor averages over a strip two cells wide instead. Around a line source, the power crossing a closed loop then
 matches $F/4$, with the LDOS $F$ from chapter 11, within 0.3%. `power_around_a_line_source_matches_its_ldos` checks this.
 <!-- code: monitor_power "for i in 0..steps" .. "offset * cell_size * normal_y + pml" -->
 
@@ -42,7 +46,7 @@ corner of zero radius. Their crystal has rods of index 3.4 and radius $0.18a$ on
 removed to make the guide. No extended mode exists in the band gap for light to radiate into, so what doesn't
 get through must come back.
 
-The page's **2D waveguide bend** view, under **Driven response**, does this. Outside the band gap a ratio like this stops meaning anything, and chapter 18 shows how the page knows. A line source in the guide excites
+The page's **2D waveguide bend** view, under **Driven response**, does this. Outside the band gap a ratio like this stops meaning anything, and chapter 18 shows how the page checks for that. A line source in the guide excites
 the one guided mode, and transmission is the power through a monitor, divided by the same source's power
 through a straight guide:
 <!-- code: sharp_bends_transmit_as_in_mekis "let (straight, bend)" .. "let t =" -->
@@ -62,16 +66,16 @@ through a straight guide:
 
 Frequencies are in units of $a/\lambda$. The paper states the band, the 100% and the bounds in its text. The
 90% is read off its plot of reflection, so it is good to a few percent. They computed these with a time-domain method, so the agreement is
-between two quite different solvers. The slab row is the weakest: they don't give that guide's width, so this
-uses a width of $0.143\lambda$, from their other bend. Thinner slabs do exceed 30%, reaching 57% at $0.06\lambda$,
-because the mode is then mostly in the air. A wider monitor also collects some of the radiated light, which
-reads about 18% to 23%.
+between two quite different solvers. The slab row is the weakest, because they don't give that guide's width.
+This uses a width of $0.143\lambda$, from their other bend.
 
-Getting this right took a thicker layer than free space needs. The rods run through the layer, as they must,
-and they reflect the guided mode a little: 1.6% of its power at $2a$ of layer, 0.06% at $4a$, and 0.001% at $6a$.
-That small reflection formed a resonance with the bend, and gave a transmission over 100%. Asking for weaker
-absorption also helps, because a steep layer reflects more. Close to the guide's cutoff, below about
-$\omega = 0.35$, light travels slowly enough that reflection returns, so these numbers shouldn't be trusted there.
+The crystal needs a thicker absorbing layer than free space does. The rods run through the layer, as they must, but a
+periodic structure isn't uniform along the layer, so the layer is no longer reflectionless. Its reflection falls
+as the layer is made thicker and its absorption more gradual ([Oskooi et al. 2008](20-references.md#oskooi-2008)).
+Here the guided mode loses 1.6% of its power to reflection at $2a$ of layer, 0.06% at $4a$, and 0.001% at $6a$.
+Even the first is enough to form a resonance with the bend and give a transmission over 100%. Close to the
+guide's cutoff, below about $\omega = 0.35$, light slows down, and slow light makes the layer reflect far more
+([Oskooi et al. 2008](20-references.md#oskooi-2008)), so these numbers shouldn't be trusted there.
 <!-- code: lattice_guide "let (arm, clad, pml)" .. "let rods" -->
 
 ## Scale invariance
@@ -84,8 +88,8 @@ $$-\frac{1}{s^2}\nabla\cdot(p\nabla u) - \frac{k_0^2}{s^2}\,q\,u = 0.$$
 Both terms pick up the same factor. Maxwell's equations have no length of their own, so a structure scaled along
 with its wavelength behaves exactly as it did ([Joannopoulos et al. 2008](20-references.md#joannopoulos-2008)). A crystal with rods 0.353 µm apart reads the same 97.8% at 1 µm that
 the original reads at 2.833 µm, and at 0.55 µm and 10 µm too, to all the digits we printed. The mesh scales with it, since `steps_in` divides each length into the same number of cells at any size.
-The test `scaling_a_structure_with_its_wavelength_changes_nothing` holds this to $10^{-7}$. Chapter 18 tells the story of
-what it took to get there. Resizing is what the page offers when a wavelength doesn't suit a structure.
+The test `scaling_a_structure_with_its_wavelength_changes_nothing` holds this to $10^{-7}$. Chapter 18 explains what
+that asks of the mesh. Resizing is what the page offers when a wavelength doesn't suit a structure.
 
 This is a real design principle: a design for one wavelength is a design for any, so long as the materials' indices
 stay the same. Real materials' indices don't, so that last condition is where the principle stops.

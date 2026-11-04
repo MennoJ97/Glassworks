@@ -1,8 +1,8 @@
 # 8. Is the answer right?
 
 A wrong field looks just as convincing as a right one, so a solver is only useful
-if its answers are checked. Here's how this one is checked, including what those
-checks turned up while it was being built.
+if its answers are checked. Here's how this one is checked, following standard
+practice in code verification.
 
 ## Test against exact results, not stored numbers
 
@@ -53,42 +53,47 @@ $10^{-12}$. Past that point, a finer mesh can't help, because the limit is now
 floating-point arithmetic rather than the discretization.
 <!-- code: eigenvalue_error_converges_at_rate_2p "Coarse enough" .. "let (e1, e2)" -->
 
-## A real debugging story
+## Reading a failing test
 
-When the tests first ran, 4 of 14 failed, with all four errors being small. The
-tempting move is to loosen the tolerances. Instead, each one was studied by varying
-one parameter and watching the error respond.
+A failing test doesn't say why it failed. The verification literature tells the causes
+apart by how the error responds when one thing changes at a time
+([Oberkampf & Roy 2010](20-references.md#oberkampf-roy-2010)). Discretization error falls
+at the predicted rate as $h$ shrinks, round-off doesn't fall at all, and a modelling error
+responds to the model rather than the mesh. Sometimes the test itself is wrong. Loosening
+the tolerance would hide all four, and this solver's first test run had one of each.
 
-**Cavity test.** The error was $2\times10^{-8}$, against a tolerance of $10^{-8}$.
-Halving $h$ divided it by about 250, close to the predicted $2^8 = 256$. So it was
-ordinary discretization error on a too-coarse mesh. *Fix: a finer mesh in the test,
-with the tolerance unchanged.*
+**Discretization.** The cavity test missed its tolerance of $10^{-8}$ by a factor of 2.
+Halving $h$ divided the error by about 250, close to the predicted $2^8 = 256$, so the
+mesh was simply too coarse. The test now uses a finer mesh, with the tolerance unchanged.
 <!-- code: pec_cavity_matches_mode_formula -->
 
-**TM cavity test.** The test expected $k_0 = 0$ and got $3\times10^{-7}$, which looks
-inaccurate. But the solver computes $k_0^2$, which was $10^{-13}$, right at round-off.
-The square root amplified it. *Fix: compare $k_0^2$, the quantity actually solved for.*
+**Round-off.** The TM cavity test expected $k_0 = 0$ and got $3\times10^{-7}$. But the
+solver computes $k_0^2$, which was $10^{-13}$, at the level of round-off, and taking a
+square root near zero magnifies it. The test now compares $k_0^2$, the quantity actually
+solved for.
 <!-- code: tm_polarization_swaps_pec_and_pmc "Compare k0^2" .. "close(" -->
 
-**Slab waveguide test.** Halving $h$ changed nothing, so the mesh wasn't the cause.
-Doubling the cladding width shrank the error about 100 times. That pointed at the
-walls: the near-cutoff mode decays so slowly that its tail reaches the conductor at
-the domain's edge, with an error scaling as $e^{-2\gamma d}$ for decay rate $\gamma$
-and cladding width $d$ ([Yariv & Yeh 2007](20-references.md#yariv-yeh-2007)). This is a real modelling error, and **no mesh refinement will
-ever fix it**. *Fix: wider cladding, and a bound in the test based on that exponential.*
+**Modelling.** In the slab waveguide test, halving $h$ changed nothing, while doubling
+the cladding shrank the error about 100 times. A guided mode's tail decays as
+$e^{-\gamma x}$ in the cladding ([Yariv & Yeh 2007](20-references.md#yariv-yeh-2007)). A
+mode near cutoff has a small $\gamma$, so its tail still reaches the conducting wall at the
+domain's edge. The wall reflects it, and the reflection has fallen by $e^{-\gamma d}$ on
+the way out and again on the way back, so the error goes as $e^{-2\gamma d}$ for cladding
+width $d$. No mesh refinement can fix that. The test uses wider cladding, and a bound
+based on that exponential.
 <!-- code: slab_waveguide_te_and_tm_satisfy_dispersion "Wide cladding" .. "vec![layer" -->
 <!-- code: slab_waveguide_te_and_tm_satisfy_dispersion "Modes near cutoff" .. "close(res" -->
 
-**Current sheet test.** The result had the opposite sign to the test's formula. A
-derivation by hand showed the *test* was wrong: its formula had the wrong slope jump
-across the sheet (chapter 7). The solver was right. Tests can have bugs too.
+**The test.** The current sheet's result had the opposite sign to the test's formula.
+The formula had the wrong slope jump across the sheet (chapter 7), and the solver was
+right.
 <!-- code: line_source_radiates_the_free_space_green_function "-u'' - k^2 u" .. "let exact" -->
 
-Investigating those failures also exposed **a real bug in the solver**. Trying wider
-cladding made the eigensolver report "converged only 2 of 3 modes". The Krylov basis
-had a fixed small limit, too small for the cluster of box modes around the third mode.
-Loosening tolerances would never have revealed this. *Fix: let the basis grow until
-the wanted modes converge.*
+Widening the cladding also exposed a bug in the solver. The eigensolver reported
+"converged only 2 of 3 modes", because its Krylov basis had a fixed limit, too small for
+the cluster of box modes around the third mode. Lanczos needs more steps to separate
+clustered eigenvalues ([Saad 2011](20-references.md#saad-2011)), so the basis now grows
+until the wanted modes converge.
 <!-- code: MAX_BASIS -->
 <!-- code: lanczos "let max_dim" -->
 

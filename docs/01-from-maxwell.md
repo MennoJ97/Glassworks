@@ -17,7 +17,7 @@ $$\nabla \times \mathbf{E} = i\omega\mu_0\mu\,\mathbf{H}, \qquad \nabla \times \
 
 Here $\varepsilon(x)$ and $\mu(x)$ are the relative permittivity and permeability of
 the material. A material's refractive index $n$ and absorption $k$ give
-$\varepsilon = (n + ik)^2$ when $\mu = 1$.
+$\varepsilon = (n + ik)^2$ when $\mu = 1$ ([Born & Wolf 1999](20-references.md#born-wolf-1999)).
 
 We use two shorthands. The vacuum wavenumber is $k_0 = \omega/c = 2\pi/\lambda$, and
 $\eta_0 = \sqrt{\mu_0/\varepsilon_0} \approx 377\,\Omega$ converts $\mathbf{H}$ into

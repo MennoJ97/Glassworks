@@ -83,15 +83,19 @@ once, so a solve is far cheaper than factoring.
 ## Pivoting, and its price
 
 A pivot can only come from a front's own unknowns, because taking one from elsewhere would change
-which fronts need what. That's a real restriction. A part of the mesh walled in by its separator is a
-small cavity, and it can happen to sit on a resonance of its own. Its front then has only poor pivots,
-even when the whole matrix is fine.
+which fronts need what. That's a real restriction: a front can have only poor pivots even when the
+whole matrix is fine. Multifrontal solvers can pass such a pivot up to the parent front, which
+changes the fronts' sizes as the factorization runs ([Duff & Reid 1983](20-references.md#duff-reid-1983)).
 <!-- code: partial_lu "for i in j..n_pivots" .. "weak |=" -->
 
-So `sparse.rs` notes any weak pivot, and then corrects each solve with two steps of **iterative
-refinement**: compute what the answer gets wrong, solve for that, and add it ([Golub & Van Loan 2013](20-references.md#golub-van-loan-2013)). The test
-`sparse_lu_recovers_when_a_part_sits_on_its_own_resonance` builds this case on purpose. The error is
-0.008 without refinement and $10^{-12}$ with it.
+`sparse.rs` takes the simpler route of **static pivoting** instead
+([Li & Demmel 2003](20-references.md#li-demmel-2003)). It keeps the fronts as they are, replaces a
+pivot too small to divide by, and notes any weak one. Each solve is then corrected with two steps of
+**iterative refinement**: compute what the answer gets wrong, solve for that, and add it
+([Golub & Van Loan 2013](20-references.md#golub-van-loan-2013); [Arioli et al. 1989](20-references.md#arioli-1989)).
+The test `sparse_lu_recovers_when_a_part_sits_on_its_own_resonance` builds such a front on purpose,
+from a region that sits on a resonance of its own. The error is 0.008 without refinement and
+$10^{-12}$ with it.
 <!-- code: SparseLu::refined "if self.weak" .. "rhs.iter_mut().zip(&residual)" -->
 
 When $A^T = A$, as it will be with chapter 11's absorbing layer, `SparseLu::factor_symmetric` factors
@@ -101,8 +105,8 @@ this pivoted LU. Chapter 16 has the details.
 ## How big can a mesh be?
 
 The limit in a browser is memory, since WebAssembly can address at most 4 GiB per instance. So the solver
-refuses meshes above 400,000 unknowns. Chapter 16 shows where that number comes from, and what else was tried
-to make these solves faster.
+refuses meshes above 400,000 unknowns. Chapter 16 shows where that number comes from, and how the
+factorization is made faster.
 <!-- code: solve2d.rs "Refuses meshes" .. "MAX_DOFS: usize" -->
 
 Next: [open boundaries and leaky modes](11-open-boundaries.md).

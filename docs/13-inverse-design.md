@@ -50,8 +50,8 @@ sum over its cells. Chapter 19 does the same for $H_z$, the polarization most pl
 The filter, projection and MMA are in [`web/js/optimizer.js`](../web/js/optimizer.js), and [`design.js`](../web/js/design.js) runs the
 loop, outside the solver. Only the physics needs to be in Rust.
 
-**Filter.** If every pixel were free, the optimizer would make patterns at the scale of a single pixel, relying on
-the mesh's errors. A **cone filter** replaces each density by a weighted average of its neighbours, with a weight
+**Filter.** If every pixel were free, the optimizer would make patterns at the scale of a single pixel, such as
+checkerboards, and its designs would change with the mesh ([Bendsøe & Sigmund 2003](20-references.md#bendsoe-sigmund-2003)). A **cone filter** replaces each density by a weighted average of its neighbours, with a weight
 falling linearly to zero at a chosen radius ([Andreassen et al. 2011](20-references.md#andreassen-2011)). That sets a smallest feature size. It's linear, so its gradient
 is its transpose: the same weights, carrying slopes the other way.
 <!-- code: coneFilter2d "const weight" .. "weight / total" -->
@@ -97,9 +97,9 @@ a change in density by up to about $\beta/2$, the largest step allowed shrinks a
 <!-- code: Mma "if (prev2)" .. "high[i] = x[i] + 2" -->
 
 **Pixels on cells.** Each pixel should be a whole number of mesh cells, and the solver refuses anything else. If a pixel's
-edge runs through a cell, that cell's material depends on where its centre happens to fall. Optimizers are very good at
-exploiting such things, and no real structure reproduces them. In an earlier version, a design's resonance moved by 2% when
-drawn as ordinary rectangles, and it looked far better on the coarse mesh than it was. With pixels on cells, a finished design
+edge runs through a cell, that cell's material depends on where its centre happens to fall. That's a modelling error,
+and optimizers are good at exploiting such errors, as the checkerboards above show
+([Sigmund & Petersson 1998](20-references.md#sigmund-petersson-1998)). No real structure reproduces them. With pixels on cells, a finished design
 is exactly the same matrix as the same shapes drawn by hand.
 <!-- code: validate.rs "A pixel edge through" .. "line up with the mesh" -->
 
@@ -121,28 +121,24 @@ pattern from a longer run gives:
 <!-- code: OPTIMIZED_BEND -->
 <!-- code: optimized_bend_survives_a_finer_mesh "for wavelength in" .. "let plain" -->
 
-A sharp corner is an easy target, though. What a designer would draw in that square is a curved bend: a quarter circle of
-radius $0.5\lambda$ passes 95.8% on the page's mesh, and one of $0.4\lambda$ passes 97.0%. Against that, the optimizer gains
-only about 1%. So the page sets a turn that a smooth bend can't take well. Its guides meet the square a quarter wavelength from
-its inner corner, so a curved bend there has a radius of $0.25\lambda$, and passes 93.2%. The square reaches half a wavelength
-past the corner, three quarters of a wavelength in all, and the design can use all of it. The page's monitor is also closer to
-the corner, where it still catches some light radiated from the gap, so its empty region reads 11.1% and its sharp corner 29.7%.
+A sharp corner is an easy target, though. The fair comparison is what a designer would draw in that square, a curved bend.
+A quarter circle of radius $0.5\lambda$ passes 95.8%, which leaves the optimizer little to gain. So the page sets a tighter
+turn. Its guides meet the square a quarter wavelength from its inner corner, where a curved bend has a radius of $0.25\lambda$
+and passes 93.2%. Its monitor is also closer to the corner, where it still catches some light radiated from the gap, so its
+empty region reads 11.1% and its sharp corner 29.7%. The page runs 10 iterations for each of 8 sharpness stages, and three
+random starts reach a mean of 98.3% to 99.2%.
 <!-- code: curvedBend -->
-
-The page runs 10 iterations for each of 8 sharpness stages, and three random starts reach a mean of 98.3% to 99.2%, about 5%
-above the curve. More iterations don't help: 25 per stage reached 98.1% to 99.2%, while 5 reached only 95.6% to 98.4%. How the
-design sharpens matters too: in the first square, skipping every other stage reached only 96.5% to 97.6%, against 98.1% to 98.4%.
 <!-- code: design.js "const SHARPNESS" .. "const bendIterations" -->
 
-For comparison, chapter 12's crystal bend reaches 97.8% to 95.8% over a much wider band, about 13%, in a crystal several periods
-across. So neither wins outright: this pattern is compact and needs no band gap, while the crystal gets its bandwidth from having
-nowhere else for light to go. We only optimized over 10% here, and over 0.85 to 1.15 the first square reached about 80 to 85%.
+Because optimizers exploit a model's errors ([Sigmund & Petersson 1998](20-references.md#sigmund-petersson-1998)),
+a finished design is worth checking with a model it wasn't optimized on. `optimized_bend_survives_a_finer_mesh` checks
+this pattern at twice the resolution, and it holds. Around it, the power entering and leaving a closed loop balances to 0.02%.
+The goal asks for three wavelengths at once, as [Christiansen & Sigmund 2021](20-references.md#christiansen-sigmund-2021)
+do for a broadband lens, because a design optimized for one can do much worse away from it. Here, a single-wavelength design reached only
+43% to 82% at the band's edges.
 
-Optimizers are known to exploit a mesh's errors, so `optimized_bend_survives_a_finer_mesh` checks the finished pattern at twice the
-resolution, and it holds. Around it, the power entering and leaving a closed loop balances to 0.02%. Optimizing for a single wavelength
-reached only 43% to 82% at the band's edges, which is why this asks for three.
-
-This pattern also tolerates small errors in its edges, though at a wavelength of 1 µm it relies on lines thinner than 125 nm. [Chapter 17](17-designing-a-cavity.md#the-bend-for-comparison) gives the numbers, and tests a much more sensitive design the same way.
+A real structure's edges also come out slightly wrong. [Chapter 17](17-designing-a-cavity.md#fabrication) shows how to test
+that, and how much it matters for a bend and for a cavity.
 
 The structure and its mesh scale with the middle of the band, so 1.9 to 2.1 µm gets the same design as 0.95 to 1.05 µm, at twice the
 size. Chapter 12 explains why that's exact.

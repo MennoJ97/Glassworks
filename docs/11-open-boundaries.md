@@ -1,8 +1,8 @@
 # 11. Open boundaries and leaky modes
 
 Chapter 7's open end was exact, because in 1D a wave has only one direction to go. In 2D, waves
-hit the edge of the domain at every angle at once, and no local boundary condition is reflectionless
-for all of them ([Engquist & Majda 1977](20-references.md#engquist-majda-1977); [Johnson 2021](20-references.md#johnson-2021)).
+hit the edge of the domain at every angle at once, and the absorbing boundary conditions in use are exact
+only at a few of them ([Engquist & Majda 1977](20-references.md#engquist-majda-1977); [Johnson 2021](20-references.md#johnson-2021)).
 The way out also changes how we can find resonances.
 
 ## Perfectly matched layers
@@ -20,7 +20,8 @@ $$s = 1 + \frac{i\sigma(x)}{k}.$$
 Here $k = k_0 n_b$ is the background's wavenumber, for its index $n_b$. Then $e^{ikx}$ becomes $e^{ikx}\,e^{-\int\sigma\,dx}$: the same wave, decaying exponentially. Where
 $\sigma = 0$ nothing has changed, and the solution inside the domain is still the exact solution of
 the original equation. So the join is free of reflection at every angle and frequency, which no
-ordinary absorbing material could manage. Dividing by $k$ makes the decay rate the same at every frequency.
+ordinary absorbing material could manage. Dividing by $k$ makes the decay rate the same at every frequency,
+in a background without dispersion ([Johnson 2021](20-references.md#johnson-2021)).
 A wall at the far side of the layer reflects what's left, which has been reduced by the round trip.
 
 To get the equations, each derivative along $x$ becomes $\frac{1}{s_x}\partial_x$, and the area
@@ -40,19 +41,21 @@ The stiffness had to split into separate $x$ and $y$ parts, which is `assemble_s
 assembly changes. The matrix isn't Hermitian any more, but it's still complex **symmetric**, since each
 weight only multiplies a symmetric local matrix. Chapter 13 will rely on that.
 
-$\sigma$ grows quadratically into the layer, so that it starts gently, with a strength chosen for a set
-loss over a round trip. With $\sigma = \sigma_\text{max}(d/L)^2$ at depth $d$ in a layer $L$ thick, $\int\sigma\,dx = \sigma_\text{max}L/3$,
+$\sigma$ grows quadratically into the layer, so that it starts gently, as is standard practice
+([Johnson 2021](20-references.md#johnson-2021)), with a strength chosen for a set loss over a round trip. With $\sigma = \sigma_\text{max}(d/L)^2$ at depth $d$ in a layer $L$ thick, $\int\sigma\,dx = \sigma_\text{max}L/3$,
 so a wave crossing it and back at normal incidence keeps $e^{-2\sigma_\text{max}L/3}$ of its amplitude, which is set to $10^{-4}$.
 <!-- code: stretched_matrix "`sigma = sigma_max" .. "let sigma_max" -->
 
 On a discrete mesh, the join isn't perfect any more, so the layer can't be
-arbitrarily steep or thin. In free space, half a wavelength of layer is a good start. A line source
+arbitrarily steep or thin, and a more gradual turn-on reflects less ([Johnson 2021](20-references.md#johnson-2021)).
+In free space, half a wavelength of layer is a good start. A line source
 then matches the exact $\frac{i}{4}H_0^{(1)}(kr)$ to 0.05% with one wavelength of layer at 24 cells
 per wavelength, including at the corners.
 
 ### Structures run through the layer
 
-The derivation assumes the medium continues unchanged into the layer. If a waveguide stopped at the
+The derivation assumes the medium continues unchanged into the layer, and a layer is only reflectionless
+for a medium that does ([Johnson 2021](20-references.md#johnson-2021)). If a waveguide stopped at the
 layer's edge, a wave would meet the end of the guide, reflect from it, and scatter, and the layer
 couldn't help. So anything that reaches the layer must keep going to the outer wall, with the stretch
 applied on top of its material.
@@ -60,9 +63,9 @@ applied on top of its material.
 That's easy to check. A straight slab's power through a monitor reads 0.005735 whether the layer is
 0.5, 1 or 1.5 wavelengths thick. Stop the slab where the layer starts, and it reads 0.004354, 24% lower.
 
-Rods running through a layer are subtler: a periodic structure isn't uniform along the path, so
-stretching it isn't quite the same structure any more, and a thin layer reflects. Chapter 12 measures how
-thick it has to be.
+Rods running through a layer are subtler: a periodic structure isn't uniform along the path, so the
+layer is no longer reflectionless, and only a thick, gradual one reflects little
+([Oskooi et al. 2008](20-references.md#oskooi-2008)). Chapter 12 measures how thick it has to be.
 
 ### Plane waves
 
@@ -93,11 +96,11 @@ its own field, which is chapter 7's minus sign. In vacuum, $u = ik\cdot\frac{i}{
 At the source, $Y_0$ diverges, but only in the imaginary part, and $J_0(0) = 1$ gives $F = k/2$.
 <!-- code: vacuum_ldos_is_half_of_k -->
 
-The ratio to that is what's known as the Purcell enhancement in cavity physics. It's the number a cavity
-is really trying to raise.
+The ratio to that is what's known as the Purcell enhancement in cavity physics
+([Purcell 1946](20-references.md#purcell-1946)). It's the number a cavity is really trying to raise.
 
 Now a useful fact. The response $u_0(k)$ is analytic above the real axis, because a causal system can't
-respond before it's driven. The stretch keeps that property, since $s = 1 + i\sigma/k$ has no singularity
+respond before it's driven ([Jackson 1999](20-references.md#jackson-1999)). The stretch keeps that property, since $s = 1 + i\sigma/k$ has no singularity
 up there. For such a function, the value at $k + i\Gamma$ is exactly the Lorentzian average of its values
 along the real axis, with half-width $\Gamma$.
 
@@ -107,11 +110,11 @@ need many solves to find a sharp peak, or miss it completely. On a fixed mesh th
 which `complex_frequency_is_a_lorentzian_average_of_real_ones` checks.
 <!-- code: driven.rs "let k0 = 2.0 * PI" .. "let k = C64::new" -->
 
-Two warnings about that average. In 2D, a Lorentzian's slow tail meets an LDOS that grows with $k$, so
-the average carries a small term that grows logarithmically as cells shrink. At $Q = 100$, vacuum reads
-about 1% high. [Chapter 17](17-designing-a-cavity.md) starts at lower $Q$, where it's larger. And
-the tail reaches the sharp modes far above the mesh's cutoff, which a sum over real frequencies can't
-resolve, so the test combines two widths to get a tail that falls off faster.
+A Lorentzian falls off slowly, so the average reaches far from its centre. In 2D vacuum, where the
+LDOS grows with $k$, it reads about 1% high at $Q = 100$, and more at the lower $Q$ that
+[chapter 17](17-designing-a-cavity.md) starts from. The tail also reaches modes far above what a
+sum over real frequencies can resolve, so the test combines two widths into a window that falls off
+faster.
 
 ## Leaky modes, with no eigensolver
 
@@ -123,9 +126,12 @@ A leaky mode is a pole of that same response, at a complex $k_p$ below the real 
 
 $$u_0 \approx \frac{R}{k - k_p},$$
 
-so $1/u_0$ is nearly a straight line in $k$, crossing zero at $k_p$. A **secant iteration** finds that zero:
-evaluate $1/u_0$ at two points, follow the straight line through them, and repeat. It takes 6 or 7 driven
-solves. The mode's sharpness and size then follow ([Joannopoulos et al. 2008](20-references.md#joannopoulos-2008)):
+so $1/u_0$ is nearly a straight line in $k$, crossing zero at $k_p$. Finding a resonance as a pole of a
+driven response, rather than as an eigenvalue, is an established approach
+([Lalanne et al. 2018](20-references.md#lalanne-2018)), and iterating on the inverse of the response is one way
+to do it ([Bykov & Doskolovich 2013](20-references.md#bykov-doskolovich-2013)). Here a **secant iteration**
+finds the zero: evaluate $1/u_0$ at two points, follow the straight line through them, and repeat. It takes 6
+or 7 driven solves. The mode's sharpness and size then follow ([Joannopoulos et al. 2008](20-references.md#joannopoulos-2008); [Lalanne et al. 2018](20-references.md#lalanne-2018)):
 <!-- code: leaky.rs "let mut previous" .. "reciprocal = response.inv()" -->
 
 $$Q = \frac{\mathrm{Re}\,k_p}{2\,|\mathrm{Im}\,k_p|}, \qquad
@@ -151,9 +157,11 @@ and reports a plausible-looking $Q$.
 ### Example: one rod missing
 
 Remove one rod from the lattice in chapter 9, and try it on the **2D resonances** view. One mode moves
-into the gap. Chapter 9's plane-wave expansion puts it at $a/\lambda = 0.3746$ in a periodic 5 × 5 supercell, and this solver
-converges to that from above. With open walls, more crystal blocks more leakage, while the mode's shape
-stays put:
+into the gap. [Villeneuve et al. 1996](20-references.md#villeneuve-1996) studied this cavity, with rods of
+$\varepsilon = 11.56$ rather than 12, and found the mode at $a/\lambda = 0.38$, with a $Q$ that grows
+exponentially with the number of rods around it. Chapter 9's plane-wave expansion puts it at
+$a/\lambda = 0.3746$ in a periodic 5 × 5 supercell, and this solver converges to that from above. With open
+walls, more crystal blocks more leakage, while the mode's shape stays put:
 
 | Rods | $a/\lambda$ | $Q$ | $V / a^2$ |
 |---:|---:|---:|---:|
@@ -163,9 +171,10 @@ stays put:
 | 9 × 9 | 0.3781 | 12,700 | 0.65 |
 | 13 × 13 | 0.3781 | 683,000 | 0.65 |
 
-These use 12 cells per period, and finer meshes move $Q$ by about 4%. $Q$ is checked against the
-half-height of the real-frequency LDOS, not a published value, since we couldn't find one for this
-structure. So adding rods changes $Q/V$ only through $Q$. Chapter 17 asks what a free choice of shape
+These use 12 cells per period, and finer meshes move $Q$ by about 4%. $Q$ is also checked against the
+half-height of the real-frequency LDOS. It grows exponentially, as Villeneuve et al. found, who report a $Q$ near
+$10^4$ with four periods of crystal on each side, the 9 × 9 row here. Their rods are slightly weaker and their
+walls a different absorber, so this agreement is only rough. Adding rods changes $Q/V$ only through $Q$. Chapter 17 asks what a free choice of shape
 can do in the same footprint.
 
 Next: [waveguides and bends](12-waveguides.md).

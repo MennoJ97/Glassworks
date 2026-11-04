@@ -43,9 +43,9 @@ Each of these stands on its own, so read any that interest you, or none.
 
 14. [Beyond scalar fields](14-vector-fields.md): why vector fields are harder
 15. [Diffraction gratings](15-gratings.md): Bloch ties and absorbing layers at once, and transposed solves
-16. [Making it faster](16-making-it-faster.md): what was tried, and which of it was worth keeping
-17. [Designing a cavity](17-designing-a-cavity.md): holding a resonance still while the optimizer works
-18. [When numbers lie](18-when-numbers-lie.md): two results that looked wrong, or looked fine and weren't
+16. [Making it faster](16-making-it-faster.md): blocking, symmetry, and asking only for the digits you need
+17. [Designing a cavity](17-designing-a-cavity.md): optimizing the LDOS, and holding a resonance still while the optimizer works
+18. [When numbers lie](18-when-numbers-lie.md): checking a result against an invariance and against energy conservation
 19. [Designing in the other polarization](19-designing-in-hz.md): bends and cavities in $H_z$, where a chip's light usually is
 
 The [references](20-references.md) list every source cited in the chapters.

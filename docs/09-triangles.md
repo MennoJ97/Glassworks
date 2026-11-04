@@ -88,8 +88,8 @@ A general mesher, such as [Triangle](https://www.cs.cmu.edu/~quake/triangle.html
 goes a long way, and it has a useful property that a general mesher lacks.
 
 Start from a structured grid. On a **staircase** mesh, each cell takes the material at its centre,
-so a circle becomes a jagged outline. Errors there stop falling with the mesh, because the shape's
-outline is only ever approximated to first order, with a jump in the wrong place:
+so a circle becomes a jagged outline. That outline is only ever right to first order, with a jump in the
+wrong place, which limits convergence to first order at best ([Farjadpour et al. 2006](20-references.md#farjadpour-2006)):
 
 | Grid (unknowns) | $E_z$ staircase | $E_z$ fitted | $H_z$ staircase | $H_z$ fitted |
 |---|---:|---:|---:|---:|
@@ -99,15 +99,15 @@ outline is only ever approximated to first order, with a jump in the wrong place
 
 These are errors in the band edges of the rod lattice at the end of this chapter. A staircase can land
 close by luck at one mesh, as $E_z$ does at 24 × 24, but it stops improving. `Mesh::fitted_grid` in
-[`mesh.rs`](../crates/glassworks-core/src/mesh.rs) fits the outline instead, in three steps:
+[`mesh.rs`](../crates/glassworks-core/src/mesh.rs) fits the outline instead. Like isosurface stuffing, which
+does this in 3D ([Labelle & Shewchuk 2007](20-references.md#labelle-shewchuk-2007)), it starts from a regular
+grid and moves the grid nodes near an outline onto it. It takes three steps:
 
 1. **Snap nodes onto outlines** (`Mesh::snap`). Corners of a shape take the nearest grid node. Then,
    wherever a grid line crosses an outline, one of its two ends moves onto the outline. Nodes very
    close to an outline join it too, or they'd form slivers against the ones that moved.
 2. **Choose diagonals afterwards.** Each grid square is cut into two triangles. With no grid line
-   crossing an outline any more, at least one diagonal doesn't cross it either. Doing this after
-   snapping matters: an early version snapped along diagonals as well, which pulled two neighbours
-   across a curve onto almost the same point.
+   crossing an outline any more, at least one diagonal doesn't cross it either.
 3. **Flip to Delaunay** (`Mesh::flip_to_delaunay`). Snapping still leaves some thin triangles along
    curves. Two triangles sharing an edge form a quadrilateral with two possible diagonals, and the
    better one is where the angles opposite the edge add up to less than 180° ([Shewchuk 1996](20-references.md#shewchuk-1996)). Repeating this removes
@@ -124,6 +124,7 @@ domain have matching nodes, which is exactly what periodic boundaries need.
 
 Straight cells still cut the corners of a circle, so a curved outline's error falls at second order,
 even with second-order elements. Fitting doesn't undo that: it just gets the outline's position right.
+Removing that limit needs curved cells ([Strang & Fix 2008](20-references.md#strang-fix-2008)).
 
 ## Periodic ties and band diagrams
 
