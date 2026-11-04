@@ -254,10 +254,13 @@ const CODE_LICENSE = 'Code by the Glassworks authors, under the MIT License.';
 // The site's mark, as the top bar of the solver page draws it.
 const MARK = '<svg class="mark" aria-hidden="true" focusable="false" viewBox="0 0 32 24"><rect x="12" y="2" width="3" height="20" style="fill:var(--glassworks)"/><rect x="17" y="2" width="3" height="20" style="fill:var(--muted)"/><rect x="22" y="2" width="3" height="20" style="fill:var(--glassworks)"/><rect x="27" y="2" width="3" height="20" style="fill:var(--muted)"/><path d="M1 12C2.5 5 4.5 5 6 12S9.5 19 11 12S13.5 7.5 15 12S17.5 14.5 19 12" fill="none" stroke-width="1.6" stroke-linecap="round" style="stroke:var(--ink)"/></svg>';
 
+// The button that opens the chapter list over the page.
+const MENU = '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+
 function layout({ title, body, current, prefix = '', panel = '', license = TEXT_LICENSE }) {
   const links = chapters
     .map((c) => `${c.file.startsWith(FIRST_OPTIONAL) ? '<li class="part">Going further</li>\n        ' : ''}<li><a href="${prefix}${c.href}"${c.href === current ? ' aria-current="page"' : ''}>${escapeHtml(c.title)}</a></li>`)
-    .join('\n        ');
+    .join('\n      ');
   return `<!doctype html>
 <html lang="en" data-site="glassworks">
 <head>
@@ -277,7 +280,7 @@ function layout({ title, body, current, prefix = '', panel = '', license = TEXT_
 <body class="learn${panel ? ' with-code' : ''}">
 <nav class="topnav">
   <div class="wrap">
-    <div class="brand"><!--apex--><a class="home" href="${prefix}../index.html">${MARK}Glassworks</a></div>
+    <div class="brand"><button class="chapters-open" type="button" popovertarget="chapters" aria-label="Chapters" title="Chapters">${MENU}</button><!--apex--><a class="home" href="${prefix}../index.html">${MARK}Glassworks</a></div>
     <div class="navright">
       <div class="links">
         <a href="${prefix}../index.html">Solver</a>
@@ -288,15 +291,13 @@ function layout({ title, body, current, prefix = '', panel = '', license = TEXT_
   </div>
 </nav>
 <div class="learn-layout page">
-  <nav class="chapters" aria-label="Tutorial chapters">
-    <details open>
-      <summary>Chapters</summary>
-      <ul>
-        <li><a href="${prefix}index.html"${current === 'index.html' ? ' aria-current="page"' : ''}>Start here</a></li>
-        ${links}
-      </ul>
-    </details>
-    <script>if (matchMedia('(max-width: 860px)').matches) document.currentScript.previousElementSibling.open = false;</script>
+  <nav class="chapters" id="chapters" popover aria-label="Tutorial chapters">
+    <div class="chapters-head">Chapters<button type="button" popovertarget="chapters" popovertargetaction="hide" aria-label="Close">&times;</button></div>
+    <ul>
+      <li><a href="${prefix}index.html"${current === 'index.html' ? ' aria-current="page"' : ''}>Start here</a></li>
+      ${links}
+    </ul>
+    <script>{ const nav = document.currentScript.parentElement; nav.addEventListener('toggle', (e) => e.newState === 'open' && nav.querySelector('[aria-current=page]')?.scrollIntoView({ block: 'center' })); }</script>
   </nav>
   <main>
 ${body}

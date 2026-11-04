@@ -177,16 +177,6 @@ function follow() {
 }
 addEventListener('scroll', follow, { passive: true });
 
-// The chapter list moves above the text when the panel needs its column, and starts
-// folded on a phone, where it would fill the first screen.
-const nav = document.querySelector('.chapters details');
-const narrow = matchMedia('(max-width: 1399px)');
-const phone = matchMedia('(max-width: 860px)');
-const fold = () => (nav.open = !(phone.matches || (showing() && narrow.matches)));
-wide.addEventListener('change', fold);
-narrow.addEventListener('change', fold);
-phone.addEventListener('change', fold);
-
 const toggle = document.createElement('button');
 toggle.type = 'button';
 toggle.className = 'code-toggle';
@@ -197,12 +187,10 @@ toggle.addEventListener('click', () => {
     localStorage.setItem('code-panel', root.classList.contains('code-off') ? 'off' : 'on');
   } catch {}
   label();
-  fold();
   read = null;
   follow();
 });
 label();
 document.querySelector('.topnav .links').before(toggle);
 
-fold();
 follow();
