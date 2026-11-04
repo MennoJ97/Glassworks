@@ -10,7 +10,7 @@ pub(super) fn validate(req: &Request2d) -> Result<(), String> {
     }
     let positive = |material: crate::problem::Material| material.eps > 0.0 && material.mu > 0.0;
     if !positive(req.background) || !req.shapes.iter().all(|shape| positive(shape.material)) {
-        return Err("eigenmode analyses support lossless materials with positive eps and mu".into());
+        return Err("every material needs a positive eps and mu".into());
     }
     if let Some(density) = &req.density {
         let plane_wave =
