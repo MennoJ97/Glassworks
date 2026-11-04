@@ -28,12 +28,15 @@ use symmetric::partial_ldl;
 
 /// Parts this small are eliminated whole.
 const LEAF: usize = 16;
+/// Corrections against the matrix that a solve gets when some pivot was weak.
 const REFINEMENT_STEPS: usize = 2;
 
+/// One separator, or one leaf part, in the dissection tree: a front to eliminate.
 struct Node {
     /// This node's pivots are `start..end` in the new numbering.
     start: usize,
     end: usize,
+    /// Nodes whose leftover updates this front adds in. They come earlier in `nodes`.
     children: Vec<usize>,
     /// New indices of later unknowns this front couples to, sorted.
     boundary: Vec<usize>,
@@ -232,13 +235,16 @@ struct Front {
     lower: Vec<C64>,
     /// Rows `0..n_pivots` of the later columns: `U` to the boundary.
     upper: Vec<C64>,
+    /// Row swaps from pivoting, as `partial_lu` returns them.
     swaps: Vec<u32>,
 }
 
+/// The factors, one front per node of the ordering. The matrix is kept for refinement.
 pub struct SparseLu<'a> {
     matrix: &'a Csr,
     ordering: &'a Ordering,
     fronts: Vec<Front>,
+    /// Whether any front had a weak pivot, in which case solves are refined.
     weak: bool,
 }
 
@@ -247,6 +253,9 @@ impl<'a> SparseLu<'a> {
         Self::factor_as(a, ordering, false).expect("pivoting always finds a usable pivot")
     }
 
+    /// Visits the fronts children first. Each gathers its matrix entries and its children's
+    /// updates, eliminates its own pivots, and leaves an update for its parent. `None` means
+    /// the symmetric factorization met an unusable pivot, and the caller falls back to LU.
     fn factor_as(a: &'a Csr, ordering: &'a Ordering, symmetric: bool) -> Option<Self> {
         let scale = a.val.iter().fold(0.0f64, |largest, v| largest.max(v.norm_sqr())).sqrt();
         // Where each unknown sits in the front being built.
@@ -304,6 +313,8 @@ impl<'a> SparseLu<'a> {
         Some(Self { matrix: a, ordering, fronts, weak })
     }
 
+    /// Forward substitution through the fronts in elimination order, then back substitution
+    /// in reverse, all in the new numbering.
     fn solve_once(&self, rhs: &mut [C64]) {
         let nodes = &self.ordering.nodes;
         let mut x = vec![ZERO; rhs.len()];

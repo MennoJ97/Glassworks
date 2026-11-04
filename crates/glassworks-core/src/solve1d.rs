@@ -10,6 +10,10 @@
 //! TE has `u = E_y`, `p = 1/mu`, `q = eps`. TM has `u = eta0 H_y`, `p = 1/eps`,
 //! `q = mu`. Multiplying by a test function and integrating by parts gives the
 //! matrices `S` (from `p u' v'`) and `M` (from `u v`) that `assemble` builds.
+//!
+//! Chapter 1 derives the equation, chapter 2 the weak form, and chapter 7 the
+//! driven problem. Here `k0` is the vacuum wavenumber `2 pi / wavelength`, `kt` the
+//! wavevector along the layers, and `lambda` an eigenvalue, never a wavelength.
 
 mod gradient;
 mod validate;
@@ -24,6 +28,7 @@ use crate::space::{H1Line, Space};
 use crate::{C64, I, ONE, ZERO};
 use std::f64::consts::PI;
 
+/// Relative residual at which the eigensolver accepts a mode.
 const EIG_TOL: f64 = 1e-11;
 /// Field output cap, so huge meshes cannot flood the plot.
 const MAX_FIELD_POINTS: usize = 20_000;
@@ -49,6 +54,8 @@ struct Setup<'a> {
 }
 
 impl<'a> Setup<'a> {
+    /// Builds the space and its constraints. `bloch_phase` is `k * length` for a periodic
+    /// cell, so that `u(length) = e^{i bloch_phase} u(0)`, and is ignored otherwise.
     fn new(req: &'a Request, mesh: &'a Mesh, bloch_phase: f64) -> Self {
         let space = H1Line::new(mesh, req.mesh.order);
         let last = space.n_dofs() - 1;
@@ -98,6 +105,8 @@ impl<'a> Setup<'a> {
         let mut x = vec![];
         // Real and imaginary parts of the three components, in turn.
         let mut samples = vec![vec![]; 6];
+        // The other components come from the curl equations, which divide by `k0` in
+        // these units. A static field (`k0 = 0`) has none.
         let scale = if k0 > 0.0 { 1.0 / k0 } else { 0.0 };
         for cell in (0..mesh.n_cells()).step_by(stride) {
             let layer = &self.req.layers[mesh.region[cell]];
@@ -192,7 +201,7 @@ pub fn solve(req: &Request) -> Result<Output, String> {
     Ok(out)
 }
 
-/// `S u = k0^2 Q u`, with `Q` the mass matrix weighted by `q`.
+/// `S u = k0^2 Q u`, with `Q` the mass matrix weighted by `q`: chapter 6 finds the modes.
 fn cavity_modes(
     setup: &Setup,
     n_modes: usize,
@@ -208,6 +217,8 @@ fn cavity_modes(
     eigs_near(&a, &b, sigma, n_modes, EIG_TOL)
 }
 
+/// The lowest `n_bands` frequencies at `n_k` Bloch wavevectors from 0 to the zone edge
+/// `pi / length`, one eigenproblem per wavevector.
 fn bands(setup: &Setup, n_bands: usize, n_k: usize, out: &mut Output) -> Result<(), String> {
     let length = out.meta.length;
     let ks: Vec<f64> = (0..n_k).map(|i| PI / length * i as f64 / (n_k - 1) as f64).collect();
@@ -223,7 +234,8 @@ fn bands(setup: &Setup, n_bands: usize, n_k: usize, out: &mut Output) -> Result<
     Ok(())
 }
 
-/// `(k0^2 Q - S) u = beta^2 P u`, with `P` the mass matrix weighted by `p`.
+/// `(k0^2 Q - S) u = beta^2 P u`, with `P` the mass matrix weighted by `p`. Here the layers
+/// are a slab's cross-section, and `beta` is the propagation constant along the slab.
 fn waveguide(setup: &Setup, k0: f64, n_modes: usize, out: &mut Output) -> Result<(), String> {
     let k02 = C64::new(k0 * k0, 0.0);
     let a = setup.matrix(|p, q| (-p, k02 * q));
@@ -252,11 +264,14 @@ struct Driven {
     t_scale: f64,
 }
 
+/// Chapter 7's system: the operator, plus an entry `-i Y` at each open end, where the
+/// admittance `Y = p kx` is `y_left` or `y_right`.
 fn driven(setup: &Setup, k0: f64, angle_deg: f64, source: Source) -> Result<Driven, String> {
     let req = setup.req;
     let n2 = |layer: &Layer| complex(layer.eps) * complex(layer.mu);
     let plane_wave = matches!(source, Source::PlaneWave);
     let (first, last_layer) = (&req.layers[0], &req.layers[req.layers.len() - 1]);
+    // The tangential wavevector is the same in every layer (Snell's law), set by the first.
     let kt = if plane_wave { k0 * n2(first).sqrt().re * angle_deg.to_radians().sin() } else { 0.0 };
     let (k02, kt2) = (C64::new(k0 * k0, 0.0), C64::new(kt * kt, 0.0));
     let mut triplets = assemble(&setup.space, &setup.dofs, |cell| {
@@ -286,6 +301,7 @@ fn driven(setup: &Setup, k0: f64, angle_deg: f64, source: Source) -> Result<Driv
     let lu = BandedLu::factor(&Csr::from_triplets(setup.dofs.n_free, triplets))?;
     lu.solve(&mut rhs);
     let u = setup.dofs.expand(&rhs);
+    // `R = |r|^2` with `r = u(0) - 1`, and `T = |u(end)|^2 Re(Y_b) / Re(Y_a)`.
     let t_scale = if req.right.is_open() { y_right.re / y_left.re } else { 0.0 };
     let power = plane_wave.then(|| {
         let reflected = (u[0] - ONE).norm_sqr();
@@ -295,7 +311,8 @@ fn driven(setup: &Setup, k0: f64, angle_deg: f64, source: Source) -> Result<Driv
     Ok(Driven { u, kt, power, lu, t_scale })
 }
 
-/// Adds `amp * v(x)` to the right-hand side: the weak form of a current sheet.
+/// Adds `amp * v(x)` to the right-hand side: the weak form of a current sheet, a delta
+/// function at `x`, tested against each basis function `v`.
 fn add_point_load(setup: &Setup, x: f64, amp: C64, rhs: &mut [C64]) -> Result<(), String> {
     let mesh = setup.space.mesh;
     let cell = (0..mesh.n_cells())

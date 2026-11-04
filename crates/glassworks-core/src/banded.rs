@@ -56,6 +56,8 @@ pub struct BandedLu {
 }
 
 impl BandedLu {
+    /// Reorders with `rcm`, copies the matrix into band storage, then eliminates column by
+    /// column. Fails only on an exactly singular matrix.
     pub fn factor(a: &Csr) -> Result<Self, String> {
         let n = a.n;
         let perm = rcm(a);
@@ -69,6 +71,7 @@ impl BandedLu {
                 b = b.max(new_index[i].abs_diff(new_index[j]));
             }
         }
+        // `diag` is the row of each stored column that holds the diagonal.
         let (col_len, diag) = (3 * b + 1, 2 * b);
         let mut bands = vec![ZERO; col_len * n];
         for i in 0..n {

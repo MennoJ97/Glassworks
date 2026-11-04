@@ -102,6 +102,8 @@ fn steps_in(size: f64, step: f64) -> usize {
     ((size / step - 1e-9).ceil() as usize).max(1)
 }
 
+/// Cells along x and y. Second-order triangles put a dof on every vertex and edge midpoint,
+/// which is a grid twice as fine: `(2 nx + 1) (2 ny + 1)` dofs.
 fn grid_size(req: &Request2d, width: f64, height: f64) -> Result<(usize, usize), String> {
     let (nx, ny) = (steps_in(width, req.cell), steps_in(height, req.cell));
     if (2 * nx + 1) * (2 * ny + 1) > MAX_DOFS {

@@ -20,6 +20,7 @@ pub(super) fn open_mesh(req: &Request2d, pml: f64) -> Result<Mesh, String> {
     Ok(Mesh::fitted_grid(nx, ny, width, height, &outlines))
 }
 
+/// The dofs, with `u = 0` on the layer's outer edge. By then the field has died away.
 pub(super) fn open_dofs(req: &Request2d, space: &H1Triangle, pml: f64) -> DofMap {
     let (width, height) = (req.width + 2.0 * pml, req.height + 2.0 * pml);
     let positions = space.dof_positions();
@@ -105,6 +106,7 @@ pub(super) fn stretched_matrix(
     Csr::from_triplets(dofs.n_free, triplets)
 }
 
+/// The cell holding a point, if any. A plain search: it runs a handful of times per solve.
 pub(super) fn locate(space: &H1Triangle, x: f64, y: f64) -> Option<usize> {
     (0..space.n_cells()).find(|&cell| space.contains(cell, x, y))
 }
@@ -120,6 +122,8 @@ pub(super) fn point_load(
     Ok(cell_load(space, dofs, cell, x, y))
 }
 
+/// Each basis function's value at a point in `cell`, as `(free unknown, value)`. It's both the
+/// weak form of a delta function there and how to read `u` at that point.
 pub(super) fn cell_load(space: &H1Triangle, dofs: &DofMap, cell: usize, x: f64, y: f64) -> Vec<(usize, f64)> {
     let mut cell_dofs = vec![0; 6];
     space.cell_dofs(cell, &mut cell_dofs);
@@ -140,6 +144,7 @@ pub(super) fn line_response(lu: &SparseLu, n: usize, load: &[(usize, f64)], k: C
     (u, response)
 }
 
+/// Packages a field on the extended mesh, shifted back into the request's coordinates.
 pub(super) fn open_output(
     req: &Request2d,
     space: &H1Triangle,

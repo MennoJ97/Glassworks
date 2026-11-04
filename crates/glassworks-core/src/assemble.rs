@@ -3,9 +3,11 @@
 use crate::space::Space;
 use crate::{C64, ONE, ZERO};
 
+/// Matrix entries as `(row, col, value)`, in any order, with repeats to be summed.
 pub type Triplets = Vec<(usize, usize, C64)>;
 
-/// Compressed sparse row matrix.
+/// Compressed sparse row matrix: row `i`'s entries are `val[ptr[i]..ptr[i + 1]]`, in the
+/// columns `col[ptr[i]..ptr[i + 1]]`, sorted.
 pub struct Csr {
     pub n: usize,
     pub ptr: Vec<usize>,
@@ -17,6 +19,7 @@ impl Csr {
     /// Builds from unsorted triplets, summing duplicates.
     pub fn from_triplets(n: usize, triplets: Triplets) -> Self {
         // Rows are short, so dealing triplets into rows beats sorting them all at once.
+        // Count each row's entries, and add up the counts to find where each row starts.
         let mut row_start = vec![0; n + 1];
         triplets.iter().for_each(|entry| row_start[entry.0 + 1] += 1);
         for i in 0..n {
@@ -31,6 +34,7 @@ impl Csr {
         for i in 0..n {
             by_row[row_start[i]..row_start[i + 1]].sort_unstable_by_key(|entry| entry.1);
         }
+        // Repeats are now next to each other, so summing them is one pass.
         let mut matrix = Csr { n, ptr: vec![0; n + 1], col: vec![], val: vec![] };
         let mut previous = None;
         for (i, j, value) in by_row {
@@ -54,6 +58,7 @@ impl Csr {
             .flat_map(move |i| (self.ptr[i]..self.ptr[i + 1]).map(move |k| (i, self.col[k], self.val[k])))
     }
 
+    /// `y = self x`.
     pub fn mul(&self, x: &[C64], y: &mut [C64]) {
         y.fill(ZERO);
         for (i, j, value) in self.triplets() {
@@ -72,6 +77,7 @@ impl Csr {
 /// to zero. Dirichlet walls and Bloch periodicity are both just entries here.
 pub struct DofMap {
     pub map: Vec<Option<(usize, C64)>>,
+    /// The number of unknowns left to solve for: the size of every assembled matrix.
     pub n_free: usize,
 }
 
@@ -122,6 +128,8 @@ pub fn assemble_split(space: &dyn Space, dofs: &DofMap, coef: impl Fn(usize) -> 
             for j in 0..n {
                 let Some((col, col_factor)) = dofs.map[cell_dofs[j]] else { continue };
                 let local = i * n + j;
+                // A tied dof is `factor` times a free one. The test function is conjugated,
+                // so the row picks up `conj(row_factor)` and the column `col_factor`.
                 let entry = ax * stiff_x[local] + ay * stiff_y[local] + b * mass[local];
                 triplets.push((row, col, row_factor.conj() * entry * col_factor));
             }

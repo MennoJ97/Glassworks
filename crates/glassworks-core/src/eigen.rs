@@ -18,10 +18,12 @@ pub struct Mode {
     bx: Vec<C64>,
 }
 
+/// `a^H b`, conjugating the first vector.
 fn dot(a: &[C64], b: &[C64]) -> C64 {
     a.iter().zip(b).map(|(x, y)| x.conj() * y).sum()
 }
 
+/// `y += alpha x`, named after the BLAS routine.
 fn axpy(alpha: C64, x: &[C64], y: &mut [C64]) {
     y.iter_mut().zip(x).for_each(|(yi, xi)| *yi += *xi * alpha);
 }
@@ -74,10 +76,13 @@ fn tridiagonal_eigen(diag: &[f64], off: &[f64]) -> (Vec<f64>, Vec<f64>) {
     (d, vectors)
 }
 
-/// One Lanczos run, kept orthogonal to `found`. Returns the converged modes.
+/// One Lanczos run, kept orthogonal to `found`. Returns the converged modes, aiming for
+/// `want` of them. `lu` factors `A - sigma B`, and `seed` carries the random start between runs.
 fn lanczos(lu: &dyn Factors, b: &Csr, found: &[Mode], want: usize, tol: f64, seed: &mut u64) -> Vec<Mode> {
     let n = b.n;
     let max_dim = (n - found.len()).min(MAX_BASIS);
+    // `v` is the basis and `bv` is B times it. `alpha` and `beta` are the diagonal and
+    // off-diagonal of the tridiagonal matrix `T`, the operator projected onto the basis.
     let (mut v, mut bv): (Vec<Vec<C64>>, Vec<Vec<C64>>) = (vec![], vec![]);
     let (mut alpha, mut beta): (Vec<f64>, Vec<f64>) = (vec![], vec![]);
     let mut next_check = want.max(8);

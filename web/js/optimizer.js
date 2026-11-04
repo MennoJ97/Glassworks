@@ -13,6 +13,7 @@ export function randomNumbers(state) {
   };
 }
 
+// Densities near 0.5, so the first designs are grey and the optimizer picks the structure.
 export function randomStart(n, seed) {
   const random = randomNumbers(Math.imul(seed, 0x9e3779b1) >>> 0);
   return Float64Array.from({ length: n }, () => 0.5 + 0.4 * (random() - 0.5));
@@ -24,6 +25,7 @@ export const coneFilter = (n, radius) => coneFilter2d(n, 1, radius);
 
 // Over a rectangle of pixels, stored by rows.
 export function coneFilter2d(nx, ny, radius) {
+  // How many pixels away the cone's weight, `radius - distance`, can still be positive.
   const reach = Math.ceil(radius) - 1;
   const neighbours = Array.from({ length: nx * ny }, (_, i) => {
     const [cx, cy] = [i % nx, Math.floor(i / nx)];
@@ -49,6 +51,7 @@ export function coneFilter2d(nx, ny, radius) {
 
 // Pushes densities toward 0 or 1. Larger `beta` is sharper.
 export function project(x, beta) {
+  // Scales the tanh step so that 0 still maps to 0 and 1 to 1 at any `beta`.
   const half = Math.tanh(beta / 2);
   const rho = x.map((density) => (half + Math.tanh(beta * (density - 0.5))) / (2 * half));
   const slope = x.map((density) => beta / (2 * half * Math.cosh(beta * (density - 0.5)) ** 2));

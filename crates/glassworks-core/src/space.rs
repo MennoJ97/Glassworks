@@ -4,11 +4,14 @@
 use crate::mesh::Mesh;
 use crate::{C64, ZERO};
 
+/// What assembly needs from an element (chapters 3 and 9): how many unknowns ("dofs",
+/// degrees of freedom) there are, which of them each cell touches, and each cell's matrices.
 pub trait Space {
     fn n_dofs(&self) -> usize;
     fn n_cells(&self) -> usize;
     /// Number of dofs on each cell.
     fn local_size(&self) -> usize;
+    /// The global number of each of a cell's local dofs, in local order.
     fn cell_dofs(&self, cell: usize, dofs: &mut [usize]);
     /// Unit-coefficient stiffness and mass matrices of a cell, row-major. Stiffness comes
     /// in x and y parts, because an absorbing layer weights them differently.
@@ -28,6 +31,7 @@ fn gauss_legendre(n: usize) -> Vec<(f64, f64)> {
     };
     (0..n)
         .map(|i| {
+            // A starting guess close enough to the i-th root that Newton can't jump to another.
             let mut x = -(std::f64::consts::PI * (i as f64 + 0.75) / (n as f64 + 0.5)).cos();
             for _ in 0..50 {
                 let (p, slope) = legendre(x);
@@ -44,6 +48,8 @@ fn gauss_legendre(n: usize) -> Vec<(f64, f64)> {
 pub struct H1Line<'a> {
     pub mesh: &'a Mesh,
     pub order: usize,
+    /// Stiffness and mass on the reference cell `[-1, 1]`, row-major. Every real cell
+    /// is a scaled copy, so these are computed once.
     ref_stiffness: Vec<f64>,
     ref_mass: Vec<f64>,
 }
@@ -108,7 +114,8 @@ const TRIANGLE_RULE: [([f64; 3], f64); 6] = [
     ([0.091576213509771, 0.091576213509771, 0.816847572980459], 0.109951743655322),
 ];
 
-/// The six second-order basis functions, at barycentric coordinates.
+/// The six second-order basis functions, at barycentric coordinates: one per vertex, then
+/// one per edge midpoint, on edges 0-1, 1-2 and 2-0.
 fn basis_values([l0, l1, l2]: [f64; 3]) -> [f64; 6] {
     [
         l0 * (2.0 * l0 - 1.0),
@@ -137,6 +144,7 @@ fn basis_gradient([l0, l1, l2]: [f64; 3], dl: &[f64; 3]) -> [f64; 6] {
 pub struct H1Triangle<'a> {
     pub mesh: &'a Mesh,
     n_vertices: usize,
+    /// Every edge once. Edge `e`'s midpoint dof is number `n_vertices + e`.
     edges: Vec<[usize; 2]>,
     /// The edge joining each pair: `(v0, v1)`, `(v1, v2)`, `(v2, v0)`.
     cell_edges: Vec<[usize; 3]>,

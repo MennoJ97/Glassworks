@@ -153,6 +153,7 @@ impl Mesh {
         mesh
     }
 
+    /// `(x, y)` of a vertex of a 2D mesh.
     pub fn vertex(&self, v: usize) -> (f64, f64) {
         (self.coords[2 * v], self.coords[2 * v + 1])
     }
@@ -179,6 +180,7 @@ impl Mesh {
     /// they'd form slivers with the snapped nodes beside them.
     fn snap(&mut self, nx: usize, ny: usize, lx: f64, ly: f64, outlines: &[Outline]) {
         let n_vertices = self.coords.len() / 2;
+        // Only interior nodes move, so opposite outer edges stay matched.
         let free = |v: usize| {
             let (i, j) = (v % (nx + 1), v / (nx + 1));
             i != 0 && j != 0 && i != nx && j != ny

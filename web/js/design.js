@@ -6,8 +6,10 @@ import { CAVITY, cavityGeometry, cavityReferences, cavityRequest, optimizeCavity
 import { MATERIALS, scaled, toShape } from './model.js';
 import { Mma, coneFilter, coneFilter2d, project, randomStart } from './optimizer.js';
 
+// A layer design's pixel thickness, and the uniform medium on either side of it, in µm.
 const PIXEL = 0.005;
 const AMBIENT = 0.3;
+// The projection's `beta` for each stage, doubling from grey towards sharp (chapter 13).
 const SHARPNESS = [1, 2, 4, 8, 16, 32, 64, 128];
 const ITERATIONS_PER_STAGE = 40;
 // A 2D solve costs far more than a 1D one, and these converge sooner: for E_z, 25 did no better
@@ -94,6 +96,8 @@ export function bendGeometry(straight, scale, polarization, corner) {
   }, scale);
 }
 
+// One 2D driven solve of the bend, or of a `straight` guide for reference. With `rho`, the
+// request asks for the gradient with respect to each pixel's density.
 function bendRequest(state, wavelength, straight, rho, corner) {
   const scale = bendScale(state);
   const geometry = bendGeometry(straight, scale, state.polarization, corner);
@@ -139,8 +143,10 @@ function goalWavelengths(state) {
   return wavelengths;
 }
 
+// One 1D request per goal wavelength, lit from the left by a port.
 function requests(state, layers, makeAnalysis) {
   const wavelengths = goalWavelengths(state);
+  // Six second-order cells per vacuum wavelength. The solver shrinks them in denser layers.
   const max_cell = Math.min(...wavelengths) / 6;
   return wavelengths.map((wavelength) => ({
     layers,
@@ -152,6 +158,7 @@ function requests(state, layers, makeAnalysis) {
   }));
 }
 
+// The layers the solver sees: one per pixel, with a permittivity mixed by its density.
 function pixelLayers(design, rho) {
   const [low, high] = [eps(design.low), eps(design.high)];
   return [

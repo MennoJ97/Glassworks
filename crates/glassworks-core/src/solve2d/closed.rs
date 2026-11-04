@@ -13,6 +13,7 @@ use crate::{C64, ZERO};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
+/// Relative residual at which the eigensolver accepts a mode.
 const EIG_TOL: f64 = 1e-10;
 /// A band diagram reads only eigenvalues, whose error goes as the square of the residual, so
 /// this still gives `k0` to about 1e-10, far below the mesh's error.
@@ -22,6 +23,8 @@ const BAND_TOL: f64 = 1e-5;
 /// bottom. Corners tie straight to the origin, carrying both phases.
 fn constraints(req: &Request2d, space: &H1Triangle, nx: usize, ny: usize, phase: [f64; 2]) -> DofMap {
     let positions = space.dof_positions();
+    // Dofs sit on vertices and edge midpoints, so they lie on a grid twice as fine as the cells.
+    // On the outer edge, which never moves, each one's position on that grid is exact.
     let (hx, hy) = (req.width / (2 * nx) as f64, req.height / (2 * ny) as f64);
     let on_right = |p: (f64, f64)| (p.0 / hx).round() as usize == 2 * nx;
     let on_top = |p: (f64, f64)| (p.1 / hy).round() as usize == 2 * ny;
@@ -82,6 +85,8 @@ fn modes(
     eigs_factored(&SparseLu::factor(&shifted, &ordering) as &dyn Factors, &b, sigma, n, tol)
 }
 
+/// Modes of a closed cell, or a band diagram: the frequencies at Bloch wavevectors along the
+/// edge of the irreducible zone.
 pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
     let (nx, ny) = grid_size(req, req.width, req.height)?;
     let outlines: Vec<_> = req.shapes.iter().map(|s| s.outline).collect();
