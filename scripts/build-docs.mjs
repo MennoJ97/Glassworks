@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import katex from 'katex';
 import { Marked } from 'marked';
 import { definitions } from './code-index.mjs';
+import { highlight } from './highlight.mjs';
 
 // With --check, it renders everything, so a broken link or anchor still fails, but writes nothing.
 const check = process.argv.includes('--check');
@@ -38,11 +39,12 @@ const sources = [
   ...['optimizer', 'design', 'cavity-design', 'hz-design'].map((n) => `web/js/${n}.js`),
 ];
 
-const index = sources.map((path) => ({
-  path,
-  name: basename(path),
-  ...definitions(readFileSync(join(root, path), 'utf8').trimEnd(), path.endsWith('.js') ? 'js' : 'rs'),
-}));
+const index = sources.map((path) => {
+  const src = readFileSync(join(root, path), 'utf8').trimEnd();
+  const lang = path.endsWith('.js') ? 'js' : 'rs';
+  const defs = definitions(src, lang);
+  return { path, name: basename(path), ...defs, colours: highlight(src, defs.kind, lang) };
+});
 
 // The definitions called `name`, preferring the files the chapter links to. When several
 // remain, such as a method each element type has, it keeps those of a type the chapter
@@ -92,17 +94,18 @@ function resolveAnchor(spec, files, page, markdown) {
 const refAttr = (refs) => refs.map((r) => (r.whole ? r.file.name : `${r.file.name}:${r.start}-${r.end}`)).join(' ');
 const refHref = (r, prefix) => `${prefix}source/${r.file.name}.html${r.whole ? '' : `#L${r.start}`}`;
 
-// Source lines with comments and strings marked, so the panel can dim them.
+// Source lines coloured as an editor would, from highlight.mjs.
 function codeLines(file, ids) {
   return file.lines
     .map((line, n) => {
+      const colour = (i) => file.colours[file.offsets[n] + i];
       let html = '';
       for (let i = 0; i < line.length; ) {
-        const k = file.kind[file.offsets[n] + i];
+        const c = colour(i);
         let j = i + 1;
-        while (j < line.length && file.kind[file.offsets[n] + j] === k) j++;
+        while (j < line.length && colour(j) === c) j++;
         const text = escapeHtml(line.slice(i, j));
-        html += k ? `<span class="${k === 1 ? 'cm' : 'st'}">${text}</span>` : text;
+        html += c && text.trim() ? `<span class="${c}">${text}</span>` : text;
         i = j;
       }
       return `<span class="line"${ids ? ` id="L${n + 1}"` : ''}>${html || ' '}</span>`;

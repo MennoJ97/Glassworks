@@ -45,8 +45,32 @@ body.learn { --page-max: 1120px; font-size: 16px; line-height: 1.6; }
 /* The code panel beside a chapter, from learn.js. Below 1100px, or when hidden, the names
    in the text are ordinary links to the source pages. */
 .source .line:target { background: color-mix(in srgb, var(--glass) 16%, transparent); }
-.source .cm, .code-panel .cm { color: var(--muted); }
-.source .st, .code-panel .st { color: var(--series-3); }
+
+/* Code coloured as an editor would (scripts/highlight.mjs), close to VS Code's Light+ and
+   Dark+. Every colour clears 4.5:1 on the panel and on a highlighted line in its mode. */
+:root {
+  --code-kw: #0033B3; --code-ctl: #8F1F9E; --code-ty: #0D6472; --code-fn: #6E5420;
+  --code-co: #00589C; --code-nu: #08693F; --code-va: #1A2F6B; --code-st: #A3361B;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --code-kw: #569CD6; --code-ctl: #C586C0; --code-ty: #4EC9B0; --code-fn: #DCDCAA;
+    --code-co: #4FC1FF; --code-nu: #B5CEA8; --code-va: #9CDCFE; --code-st: #CE9178;
+  }
+}
+:root[data-theme="dark"] {
+  --code-kw: #569CD6; --code-ctl: #C586C0; --code-ty: #4EC9B0; --code-fn: #DCDCAA;
+  --code-co: #4FC1FF; --code-nu: #B5CEA8; --code-va: #9CDCFE; --code-st: #CE9178;
+}
+:is(.source, .code-panel) .cm { color: var(--muted); font-style: italic; }
+:is(.source, .code-panel) .st { color: var(--code-st); }
+:is(.source, .code-panel) .kw { color: var(--code-kw); }
+:is(.source, .code-panel) .ctl { color: var(--code-ctl); }
+:is(.source, .code-panel) .ty { color: var(--code-ty); }
+:is(.source, .code-panel) .fn { color: var(--code-fn); }
+:is(.source, .code-panel) .co { color: var(--code-co); }
+:is(.source, .code-panel) .nu { color: var(--code-nu); }
+:is(.source, .code-panel) .va { color: var(--code-va); }
 .learn a.code-ref { text-decoration-style: dotted; text-decoration-color: var(--glass); }
 .code-panel, .code-hint, .code-toggle { display: none; }
 
