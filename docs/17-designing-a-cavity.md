@@ -17,7 +17,7 @@ $$\delta F = 2\,\mathrm{Re}\!\left(\frac{u^T \delta A\,u}{ik}\right),$$
 <!-- code: density_gradient "With no monitor" .. "u.iter().map" -->
 
 and the gradient costs one more sum over cells. `ldos_gradient_matches_finite_differences` checks this.
-<!-- code: pixel_slopes "for c in 0..space.n_cells()" .. "imaginary[pixel] +=" -->
+<!-- code: pixel_slopes "for cell in 0..space.n_cells()" .. "imaginary[pixel] +=" -->
 
 ## The first attempts
 

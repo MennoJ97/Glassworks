@@ -15,7 +15,7 @@ Without row swaps, Gaussian elimination never creates nonzeros outside the band,
 it only combines rows that already overlap. So LU factorization on a band costs
 
 $$O(N b^2)$$
-<!-- code: BandedLu::factor "// Eliminate below the pivot" .. "*x -= *m * t" -->
+<!-- code: BandedLu::factor "// Eliminate below the pivot" .. "*entry -= *m * in_pivot_row" -->
 
 which is **linear** in $N$ ([Golub & Van Loan 2013](20-references.md#golub-van-loan-2013)). Doubling the mesh doubles the time.
 
@@ -25,12 +25,12 @@ Our matrices are often *indefinite*: $S - k_0^2 Q$ has both positive and negativ
 eigenvalues. Plain elimination can then hit a tiny or zero pivot and lose all its
 accuracy, so each step picks the largest available entry in the column and swaps it
 into place. That's **partial pivoting** ([Golub & Van Loan 2013](20-references.md#golub-van-loan-2013)).
-<!-- code: BandedLu::factor "// Partial pivoting" .. "ab.swap" -->
+<!-- code: BandedLu::factor "// Partial pivoting" .. "bands.swap" -->
 
 If every candidate is zero, the matrix is singular. In a lossless structure that
 happens exactly when $k_0$ is a resonance, where a driven field has no finite answer,
 so `BandedLu::factor` reports it as an error.
-<!-- code: BandedLu::factor "if ab[col + p] == ZERO" .. "singular matrix" -->
+<!-- code: BandedLu::factor "if bands[diagonal_at + pivot] == ZERO" .. "singular matrix" -->
 
 Swapping rows can push entries above the original band, up to $2b$: a row swapped up
 from as far as $b$ rows below reaches $b$ columns past its own diagonal. The storage in
@@ -48,7 +48,7 @@ row 1       .     (0,1)   (1,2)   (2,3)   (3,4)    upper diagonal
 row 2     (0,0)   (1,1)   (2,2)   (3,3)   (4,4)    diagonal
 row 3     (1,0)   (2,1)   (3,2)   (4,3)     .      lower diagonal, then L
 ```
-<!-- code: BandedLu::factor "let (ld, diag)" .. "ab[diag + r + c * ld - c]" -->
+<!-- code: BandedLu::factor "let (col_len, diag)" .. "bands[diag + row + col * col_len - col]" -->
 
 ## Reordering
 
@@ -72,7 +72,7 @@ neighbours end up at most 2 apart, and reversing keeps that. The test
 $P$ moves old dof `perm[k]` to position $k$. Since $A\mathbf{x} = \mathbf{b}$ is the same
 as $PAP^T(P\mathbf{x}) = P\mathbf{b}$, `solve` permutes the right-hand side on the way
 in and undoes it on the way out.
-<!-- code: BandedLu::factor "let perm = rcm(a)" .. "inv[old] = new" -->
+<!-- code: BandedLu::factor "let perm = rcm(a)" .. "new_index[old] = new" -->
 
 ## How fast is this?
 

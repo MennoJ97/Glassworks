@@ -15,38 +15,38 @@ pub struct Csr {
 
 impl Csr {
     /// Builds from unsorted triplets, summing duplicates.
-    pub fn from_triplets(n: usize, t: Triplets) -> Self {
+    pub fn from_triplets(n: usize, triplets: Triplets) -> Self {
         // Rows are short, so dealing triplets into rows beats sorting them all at once.
-        let mut start = vec![0; n + 1];
-        t.iter().for_each(|e| start[e.0 + 1] += 1);
+        let mut row_start = vec![0; n + 1];
+        triplets.iter().for_each(|entry| row_start[entry.0 + 1] += 1);
         for i in 0..n {
-            start[i + 1] += start[i];
+            row_start[i + 1] += row_start[i];
         }
-        let mut sorted = vec![(0, 0, ZERO); t.len()];
-        let mut next = start.clone();
-        for e in t {
-            sorted[next[e.0]] = e;
-            next[e.0] += 1;
+        let mut by_row = vec![(0, 0, ZERO); triplets.len()];
+        let mut next_slot = row_start.clone();
+        for entry in triplets {
+            by_row[next_slot[entry.0]] = entry;
+            next_slot[entry.0] += 1;
         }
         for i in 0..n {
-            sorted[start[i]..start[i + 1]].sort_unstable_by_key(|e| e.1);
+            by_row[row_start[i]..row_start[i + 1]].sort_unstable_by_key(|entry| entry.1);
         }
-        let mut m = Csr { n, ptr: vec![0; n + 1], col: vec![], val: vec![] };
-        let mut last = None;
-        for (i, j, v) in sorted {
-            if last == Some((i, j)) {
-                *m.val.last_mut().unwrap() += v;
+        let mut matrix = Csr { n, ptr: vec![0; n + 1], col: vec![], val: vec![] };
+        let mut previous = None;
+        for (i, j, value) in by_row {
+            if previous == Some((i, j)) {
+                *matrix.val.last_mut().unwrap() += value;
             } else {
-                m.col.push(j);
-                m.val.push(v);
-                m.ptr[i + 1] += 1;
-                last = Some((i, j));
+                matrix.col.push(j);
+                matrix.val.push(value);
+                matrix.ptr[i + 1] += 1;
+                previous = Some((i, j));
             }
         }
         for i in 0..n {
-            m.ptr[i + 1] += m.ptr[i];
+            matrix.ptr[i + 1] += matrix.ptr[i];
         }
-        m
+        matrix
     }
 
     fn triplets(&self) -> impl Iterator<Item = (usize, usize, C64)> + '_ {
@@ -56,14 +56,14 @@ impl Csr {
 
     pub fn mul(&self, x: &[C64], y: &mut [C64]) {
         y.fill(ZERO);
-        for (i, j, v) in self.triplets() {
-            y[i] += v * x[j];
+        for (i, j, value) in self.triplets() {
+            y[i] += value * x[j];
         }
     }
 
     /// `self - sigma * other`.
     pub fn sub_scaled(&self, sigma: f64, other: &Csr) -> Csr {
-        let scaled = other.triplets().map(|(i, j, v)| (i, j, v * -sigma));
+        let scaled = other.triplets().map(|(i, j, value)| (i, j, value * -sigma));
         Csr::from_triplets(self.n, self.triplets().chain(scaled).collect())
     }
 }
@@ -78,31 +78,31 @@ pub struct DofMap {
 impl DofMap {
     /// `zero` lists Dirichlet dofs; each tie `(slave, master, phase)` sets
     /// `u[slave] = phase * u[master]`, and no master may itself be a slave.
-    pub fn new(n: usize, zero: &[usize], ties: &[(usize, usize, C64)]) -> Self {
-        let mut d = DofMap { map: vec![None; n], n_free: 0 };
-        let mut fixed = vec![false; n];
-        zero.iter().chain(ties.iter().map(|t| &t.0)).for_each(|&i| fixed[i] = true);
-        for i in (0..n).filter(|&i| !fixed[i]) {
-            d.map[i] = Some((d.n_free, ONE));
-            d.n_free += 1;
+    pub fn new(n_dofs: usize, zero: &[usize], ties: &[(usize, usize, C64)]) -> Self {
+        let mut dofs = DofMap { map: vec![None; n_dofs], n_free: 0 };
+        let mut fixed = vec![false; n_dofs];
+        zero.iter().chain(ties.iter().map(|tie| &tie.0)).for_each(|&dof| fixed[dof] = true);
+        for dof in (0..n_dofs).filter(|&dof| !fixed[dof]) {
+            dofs.map[dof] = Some((dofs.n_free, ONE));
+            dofs.n_free += 1;
         }
         for &(slave, master, phase) in ties {
-            d.map[slave] = d.map[master].map(|(i, f)| (i, f * phase));
+            dofs.map[slave] = dofs.map[master].map(|(index, factor)| (index, factor * phase));
         }
-        d
+        dofs
     }
 
     /// Expands a reduced vector back onto all dofs.
     pub fn expand(&self, reduced: &[C64]) -> Vec<C64> {
-        self.map.iter().map(|m| m.map_or(ZERO, |(i, f)| reduced[i] * f)).collect()
+        self.map.iter().map(|entry| entry.map_or(ZERO, |(index, factor)| reduced[index] * factor)).collect()
     }
 }
 
 /// Assembles `sum_c (a_c S_c + b_c M_c)`, where `coef` gives `(a_c, b_c)` per
 /// cell. Almost every operator in this solver has this form.
 pub fn assemble(space: &dyn Space, dofs: &DofMap, coef: impl Fn(usize) -> (C64, C64)) -> Triplets {
-    assemble_split(space, dofs, |c| {
-        let (a, b) = coef(c);
+    assemble_split(space, dofs, |cell| {
+        let (a, b) = coef(cell);
         (a, a, b)
     })
 }
@@ -110,20 +110,22 @@ pub fn assemble(space: &dyn Space, dofs: &DofMap, coef: impl Fn(usize) -> (C64, 
 /// `assemble` with separate x and y stiffness weights: `(a_x, a_y, b)`.
 pub fn assemble_split(space: &dyn Space, dofs: &DofMap, coef: impl Fn(usize) -> (C64, C64, C64)) -> Triplets {
     let n = space.local_size();
-    let (mut sx, mut sy, mut m, mut d) = (vec![0.0; n * n], vec![0.0; n * n], vec![0.0; n * n], vec![0; n]);
-    let mut t = Vec::with_capacity(space.n_cells() * n * n);
-    for c in 0..space.n_cells() {
-        space.cell_dofs(c, &mut d);
-        space.local_matrices(c, &mut sx, &mut sy, &mut m);
-        let (ax, ay, b) = coef(c);
+    let (mut stiff_x, mut stiff_y, mut mass) = (vec![0.0; n * n], vec![0.0; n * n], vec![0.0; n * n]);
+    let mut cell_dofs = vec![0; n];
+    let mut triplets = Vec::with_capacity(space.n_cells() * n * n);
+    for cell in 0..space.n_cells() {
+        space.cell_dofs(cell, &mut cell_dofs);
+        space.local_matrices(cell, &mut stiff_x, &mut stiff_y, &mut mass);
+        let (ax, ay, b) = coef(cell);
         for i in 0..n {
-            let Some((ri, fi)) = dofs.map[d[i]] else { continue };
+            let Some((row, row_factor)) = dofs.map[cell_dofs[i]] else { continue };
             for j in 0..n {
-                let Some((rj, fj)) = dofs.map[d[j]] else { continue };
-                let k = i * n + j;
-                t.push((ri, rj, fi.conj() * (ax * sx[k] + ay * sy[k] + b * m[k]) * fj));
+                let Some((col, col_factor)) = dofs.map[cell_dofs[j]] else { continue };
+                let local = i * n + j;
+                let entry = ax * stiff_x[local] + ay * stiff_y[local] + b * mass[local];
+                triplets.push((row, col, row_factor.conj() * entry * col_factor));
             }
         }
     }
-    t
+    triplets
 }

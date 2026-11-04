@@ -19,7 +19,7 @@ $$-\big[p u' v\big]_{x=b} = -i\,p\,k_x\,u(b)\,v(b).$$
 
 The term is proportional to $u(b)$, so it adds one entry to the matrix, at the
 position of the last dof. Abbreviating $Y = p k_x$, that entry is $-iY$.
-<!-- code: driven "let last = s.space" .. "t.push" -->
+<!-- code: driven "let last = setup.space" .. "triplets.push" -->
 
 In 1D this is **exact**: the condition is perfectly reflectionless at every frequency
 and angle ([Johnson 2021](20-references.md#johnson-2021)). Higher dimensions aren't so lucky, which is why chapter 11 needs perfectly
@@ -29,7 +29,7 @@ The square root has two branches, and physics picks one. The wave must carry ene
 away or decay, so $\operatorname{Im} k_x \ge 0$. If the sideways wavevector $k_t$ is
 large enough, $k_x$ becomes purely imaginary and the wave is evanescent, which is
 total internal reflection ([Born & Wolf 1999](20-references.md#born-wolf-1999)).
-<!-- code: driven "let admittance" .. "if w.im < 0.0" -->
+<!-- code: driven "let admittance" .. "if kx.im < 0.0" -->
 
 ## The incident wave
 
@@ -55,7 +55,7 @@ $$\text{matrix: } -iY_a \text{ at the first dof}, \qquad \text{right side: } -2i
 The full system is
 
 $$\left(S + k_t^2 P - k_0^2 Q - iY_a\mathbf{e}_a\mathbf{e}_a^T - iY_b\mathbf{e}_b\mathbf{e}_b^T\right)\mathbf{u} = -2iY_a\mathbf{e}_a.$$
-<!-- code: driven "let mut t = assemble" .. "});" -->
+<!-- code: driven "let mut triplets = assemble" .. "});" -->
 
 This matrix is complex and not Hermitian, so only the general LU of chapter 5 will
 do. It's also why lossy materials work here but not in the eigensolver of chapter 6:
@@ -67,13 +67,13 @@ a complex $\varepsilon$ just makes the entries complex.
 Once we have $\mathbf{u}$, the answers read straight off the two end values:
 
 $$r = u(0) - 1, \qquad t = u(b).$$
-<!-- code: driven "let r = (u[0]" .. "let tr" -->
+<!-- code: driven "let reflected = (u[0]" .. "let transmitted" -->
 
 Power involves the wave's admittance, since a wave in glass carries more power than
 one of equal amplitude in air:
 
 $$R = |r|^2, \qquad T = |t|^2\,\frac{\operatorname{Re} Y_b}{\operatorname{Re} Y_a}, \qquad A = 1 - R - T.$$
-<!-- code: driven "let t_scale" .. "1.0 - r - tr" -->
+<!-- code: driven "let t_scale" .. "1.0 - reflected - transmitted" -->
 
 For a lossless structure, $A$ should come out as zero, which makes it a good built-in
 check. In the app it shows as 0.0%.
@@ -84,7 +84,7 @@ A wave arriving at angle $\theta$ in a medium of index $n_1$ has $k_t = k_0 n_1\
 and $k_t$ is the same in every layer. That's just **Snell's law**, arising from the
 translation symmetry along $z$ ([Born & Wolf 1999](20-references.md#born-wolf-1999)). No separate physics is needed: the solver adds
 $k_t^2 P$ and the correct $k_x$ at the ports.
-<!-- code: driven "let kt = if plane" .. "let w = (k2" -->
+<!-- code: driven "let kt = if plane_wave" .. "let kx = (k02" -->
 
 ## A current source
 
@@ -98,7 +98,7 @@ The weak form handles the delta function gracefully, since
 $\int \delta(x - x_0)\,v\,dx = v(x_0)$. So the right-hand side is just the basis
 functions evaluated at $x_0$. See `add_point_load` in
 [`solve1d.rs`](../crates/glassworks-core/src/solve1d.rs).
-<!-- code: add_point_load "let xi" .. "rhs[r] +=" -->
+<!-- code: add_point_load "let xi" .. "rhs[row] +=" -->
 
 The exact solution in free space is $u = -\tfrac12 e^{ik_0|x - x_0|}$. The minus sign
 matters: the field opposes the current at the sheet, which is exactly what lets the

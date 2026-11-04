@@ -15,7 +15,7 @@ An outgoing wave $e^{ikx}$ is an analytic function of $x$. So it can be followed
 leaves the real axis. Replace $x$ by a complex coordinate, with $dx \to s\,dx$ and
 
 $$s = 1 + \frac{i\sigma(x)}{k}.$$
-<!-- code: stretched_matrix "let kb" .. "/ kb" -->
+<!-- code: stretched_matrix "let k_background" .. "/ k_background" -->
 
 Here $k = k_0 n_b$ is the background's wavenumber, for its index $n_b$. Then $e^{ikx}$ becomes $e^{ikx}\,e^{-\int\sigma\,dx}$: the same wave, decaying exponentially. Where
 $\sigma = 0$ nothing has changed, and the solution inside the domain is still the exact solution of
@@ -31,7 +31,7 @@ $$\int p\,\frac{\partial_x u}{s_x}\,\frac{\partial_x v}{s_x}\,s_x s_y\,dA = \int
 and likewise for $y$, while the mass term only gains $s_x s_y$. So it's only a change of the weights:
 
 $$a_x = p\,\frac{s_y}{s_x}, \qquad a_y = p\,\frac{s_x}{s_y}, \qquad b = -k_0^2\,q\,s_x s_y.$$
-<!-- code: stretched_matrix "let t = assemble_split" .. "sx * sy)" -->
+<!-- code: stretched_matrix "let triplets = assemble_split" .. "sx * sy)" -->
 
 So a PML looks like a complex, anisotropic *material*
 ([Sacks et al. 1995](20-references.md#sacks-1995); [Johnson 2021](20-references.md#johnson-2021)).
@@ -71,7 +71,7 @@ A plane wave never decays, so it can't simply be a source inside the layer. It e
 total as $u = u_i + u_s$ leaves
 
 $$L\,u_s = -(L - L_b)\,u_i,$$
-<!-- code: plane_wave "region[c] != 0" .. "*v += i" -->
+<!-- code: plane_wave "region[cell] != 0" .. "*total += incident" -->
 
 where $L_b$ is the background's operator. The right side is zero everywhere except inside the shapes,
 and $u_s$ is purely outgoing, so the layer absorbs it. The **2D scattering** view does this, and
@@ -126,7 +126,7 @@ $$u_0 \approx \frac{R}{k - k_p},$$
 so $1/u_0$ is nearly a straight line in $k$, crossing zero at $k_p$. A **secant iteration** finds that zero:
 evaluate $1/u_0$ at two points, follow the straight line through them, and repeat. It takes 6 or 7 driven
 solves. The mode's sharpness and size then follow ([Joannopoulos et al. 2008](20-references.md#joannopoulos-2008)):
-<!-- code: leaky.rs "let mut prev" .. "g = response.inv()" -->
+<!-- code: leaky.rs "let mut previous" .. "reciprocal = response.inv()" -->
 
 $$Q = \frac{\mathrm{Re}\,k_p}{2\,|\mathrm{Im}\,k_p|}, \qquad
 V = \frac{\int q\,|u|^2\,dA}{\max\,q\,|u|^2}.$$

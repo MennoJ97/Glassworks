@@ -53,7 +53,7 @@ pub struct Ordering {
 fn dissect(
     ids: Vec<usize>,
     a: &Csr,
-    pos: &[(f64, f64)],
+    positions: &[(f64, f64)],
     side: &mut [u8],
     nodes: &mut Vec<(Vec<usize>, Vec<usize>)>,
 ) -> usize {
@@ -61,57 +61,61 @@ fn dissect(
         nodes.push((ids, vec![]));
         return nodes.len() - 1;
     }
-    let extent = |f: &dyn Fn(usize) -> f64| {
-        let (low, high) = ids.iter().fold((f64::MAX, f64::MIN), |b, &d| (b.0.min(f(d)), b.1.max(f(d))));
+    let extent = |coordinate: &dyn Fn(usize) -> f64| {
+        let (low, high) = ids.iter().fold((f64::MAX, f64::MIN), |(low, high), &id| {
+            (low.min(coordinate(id)), high.max(coordinate(id)))
+        });
         high - low
     };
-    let along_x = extent(&|d| pos[d].0) >= extent(&|d| pos[d].1);
-    let key = |d: usize| if along_x { pos[d].0 } else { pos[d].1 };
+    let along_x = extent(&|id| positions[id].0) >= extent(&|id| positions[id].1);
+    let key = |id: usize| if along_x { positions[id].0 } else { positions[id].1 };
     let mut left = ids;
     let mid = left.len() / 2;
     left.select_nth_unstable_by(mid, |&p, &q| key(p).total_cmp(&key(q)));
     let mut right = left.split_off(mid);
-    right.iter().for_each(|&d| side[d] = 2);
+    right.iter().for_each(|&id| side[id] = 2);
     // The separator comes from the matrix, not the grid: whatever on the left touches the
     // right, whether across the cut, over a flipped edge, or through a periodic tie.
-    let touches = |d: usize, s: &[u8], v: u8| a.col[a.ptr[d]..a.ptr[d + 1]].iter().any(|&c| s[c] == v);
-    let (mut separator, left): (Vec<_>, Vec<_>) = left.into_iter().partition(|&d| touches(d, side, 2));
-    left.iter().for_each(|&d| side[d] = 1);
+    let touches = |id: usize, sides: &[u8], which: u8| {
+        a.col[a.ptr[id]..a.ptr[id + 1]].iter().any(|&neighbour| sides[neighbour] == which)
+    };
+    let (mut separator, left): (Vec<_>, Vec<_>) = left.into_iter().partition(|&id| touches(id, side, 2));
+    left.iter().for_each(|&id| side[id] = 1);
     // Elements couple nodes two columns apart, which can make that two columns thick. A node
     // touching nothing further left can join the right, unless there's no left at all: that
     // would only rebuild the same set, and never finish.
     if !left.is_empty() {
-        separator.retain(|&d| {
-            let needed = touches(d, side, 1);
+        separator.retain(|&id| {
+            let needed = touches(id, side, 1);
             if !needed {
-                right.push(d);
+                right.push(id);
             }
             needed
         });
     }
-    left.iter().chain(&right).for_each(|&d| side[d] = 0);
+    left.iter().chain(&right).for_each(|&id| side[id] = 0);
     let children = [left, right]
         .into_iter()
-        .filter(|p| !p.is_empty())
-        .map(|p| dissect(p, a, pos, side, nodes))
+        .filter(|part| !part.is_empty())
+        .map(|part| dissect(part, a, positions, side, nodes))
         .collect();
     nodes.push((separator, children));
     nodes.len() - 1
 }
 
 impl Ordering {
-    /// `pos` gives each unknown's position. `a` must be structurally symmetric.
-    pub fn new(a: &Csr, pos: &[(f64, f64)]) -> Self {
+    /// `positions` gives each unknown's position. `a` must be structurally symmetric.
+    pub fn new(a: &Csr, positions: &[(f64, f64)]) -> Self {
         let n = a.n;
-        let mut raw = vec![];
-        dissect((0..n).collect(), a, pos, &mut vec![0; n], &mut raw);
+        let mut tree = vec![];
+        dissect((0..n).collect(), a, positions, &mut vec![0; n], &mut tree);
         // Children come before parents, so numbering in this order eliminates them first.
         let (mut new, mut owner, mut next) = (vec![0; n], vec![0; n], 0);
         let mut nodes: Vec<Node> = vec![];
-        for (i, (pivots, children)) in raw.iter().enumerate() {
+        for (i, (pivots, children)) in tree.iter().enumerate() {
             let start = next;
-            for &d in pivots {
-                new[d] = next;
+            for &old in pivots {
+                new[old] = next;
                 owner[next] = i;
                 next += 1;
             }
@@ -127,25 +131,28 @@ impl Ordering {
         let mut seen = vec![usize::MAX; n];
         for i in 0..nodes.len() {
             let end = nodes[i].end;
-            let own = raw[i].0.iter().flat_map(|&d| a.col[a.ptr[d]..a.ptr[d + 1]].iter().map(|&c| new[c]));
-            let inherited = raw[i].1.iter().flat_map(|&c| nodes[c].boundary.iter().copied());
+            let own = tree[i]
+                .0
+                .iter()
+                .flat_map(|&old| a.col[a.ptr[old]..a.ptr[old + 1]].iter().map(|&col| new[col]));
+            let inherited = tree[i].1.iter().flat_map(|&child| nodes[child].boundary.iter().copied());
             let mut boundary: Vec<usize> = own
                 .chain(inherited)
-                .filter(|&g| g >= end && std::mem::replace(&mut seen[g], i) != i)
+                .filter(|&unknown| unknown >= end && std::mem::replace(&mut seen[unknown], i) != i)
                 .collect();
             boundary.sort_unstable();
             nodes[i].boundary = boundary;
         }
         // Each entry belongs to the first front that holds both its row and its column.
-        for r in 0..n {
-            for k in a.ptr[r]..a.ptr[r + 1] {
-                let (i, j) = (new[r], new[a.col[k]]);
+        for row in 0..n {
+            for k in a.ptr[row]..a.ptr[row + 1] {
+                let (i, j) = (new[row], new[a.col[k]]);
                 let node = &mut nodes[owner[i.min(j)]];
-                let local = |g: usize| {
-                    if g < node.end {
-                        g - node.start
+                let local = |unknown: usize| {
+                    if unknown < node.end {
+                        unknown - node.start
                     } else {
-                        node.end - node.start + node.boundary.binary_search(&g).unwrap()
+                        node.end - node.start + node.boundary.binary_search(&unknown).unwrap()
                     }
                 };
                 let entry = (k as u32, local(i) as u32, local(j) as u32);
@@ -157,11 +164,11 @@ impl Ordering {
 
     /// The last ordering made if this matrix has its nonzeros, which is cheap to check, and
     /// otherwise a new one. A design's iterations and a band diagram's k-points all reuse it.
-    pub fn reused(a: &Csr, pos: impl FnOnce() -> Vec<(f64, f64)>) -> Rc<Self> {
+    pub fn reused(a: &Csr, positions: impl FnOnce() -> Vec<(f64, f64)>) -> Rc<Self> {
         LAST.with_borrow_mut(|last| match last {
             Some((ptr, col, ordering)) if *ptr == a.ptr && *col == a.col => ordering.clone(),
             _ => {
-                let ordering = Rc::new(Self::new(a, &pos()));
+                let ordering = Rc::new(Self::new(a, &positions()));
                 *last = Some((a.ptr.clone(), a.col.clone(), ordering.clone()));
                 ordering
             }
@@ -173,54 +180,57 @@ thread_local! {
     static LAST: RefCell<Option<(Vec<usize>, Vec<usize>, Rc<Ordering>)>> = const { RefCell::new(None) };
 }
 
-/// Eliminates the first `p` of a front's `m` unknowns in place, swapping rows among those `p`.
-/// `f` is column-major. Returns the swaps, and whether any pivot was weak.
-fn partial_lu(f: &mut [C64], m: usize, p: usize, scale: f64) -> (Vec<u32>, bool) {
-    let mut swaps = Vec::with_capacity(p);
+/// Eliminates the first `n_pivots` of a front's `size` unknowns in place, swapping rows among
+/// those `n_pivots`. `front` is column-major. Returns the swaps, and whether any pivot was weak.
+fn partial_lu(front: &mut [C64], size: usize, n_pivots: usize, scale: f64) -> (Vec<u32>, bool) {
+    let mut swaps = Vec::with_capacity(n_pivots);
     let mut weak = false;
-    let mut k = 0;
-    while k < p {
-        let e = (k + BLOCK).min(p);
-        for j in k..e {
-            let col = &f[j * m..(j + 1) * m];
-            let (mut r, mut best) = (j, 0.0);
-            for i in j..p {
+    let mut block_start = 0;
+    while block_start < n_pivots {
+        let block_end = (block_start + BLOCK).min(n_pivots);
+        for j in block_start..block_end {
+            let col = &front[j * size..(j + 1) * size];
+            let (mut pivot_row, mut best) = (j, 0.0);
+            for i in j..n_pivots {
                 if col[i].norm_sqr() > best {
-                    (r, best) = (i, col[i].norm_sqr());
+                    (pivot_row, best) = (i, col[i].norm_sqr());
                 }
             }
-            let below = col[p..].iter().fold(0.0f64, |b, v| b.max(v.norm_sqr()));
+            let below = col[n_pivots..].iter().fold(0.0f64, |largest, v| largest.max(v.norm_sqr()));
             weak |= best < 1e-4 * below || best < 1e-16 * scale * scale;
-            if r != j {
-                for c in 0..m {
-                    f.swap(j + c * m, r + c * m);
+            if pivot_row != j {
+                for column in 0..size {
+                    front.swap(j + column * size, pivot_row + column * size);
                 }
             }
-            swaps.push(r as u32);
+            swaps.push(pivot_row as u32);
             // Refinement corrects for this, unless the whole matrix is singular.
-            if f[j + j * m].norm() < 1e-14 * scale {
-                f[j + j * m] = C64::new(1e-14 * scale, 0.0);
+            if front[j + j * size].norm() < 1e-14 * scale {
+                front[j + j * size] = C64::new(1e-14 * scale, 0.0);
             }
-            let inv = f[j + j * m].inv();
-            f[j * m + j + 1..(j + 1) * m].iter_mut().for_each(|v| *v *= inv);
-            let (left, right) = f.split_at_mut((j + 1) * m);
-            let l = &left[j * m + j + 1..];
-            for col in right.chunks_exact_mut(m).take(e - j - 1) {
-                let u = col[j];
-                col[j + 1..].iter_mut().zip(l).for_each(|(y, x)| *y -= u * *x);
+            let inv_pivot = front[j + j * size].inv();
+            front[j * size + j + 1..(j + 1) * size].iter_mut().for_each(|entry| *entry *= inv_pivot);
+            let (left, right) = front.split_at_mut((j + 1) * size);
+            let multipliers = &left[j * size + j + 1..];
+            for col in right.chunks_exact_mut(size).take(block_end - j - 1) {
+                let in_pivot_row = col[j];
+                col[j + 1..]
+                    .iter_mut()
+                    .zip(multipliers)
+                    .for_each(|(entry, multiplier)| *entry -= in_pivot_row * *multiplier);
             }
         }
         // Update the later columns from this block, all at once to stay in cache.
-        blocked::update_after(f, m, k, e);
-        k = e;
+        blocked::update_after(front, size, block_start, block_end);
+        block_start = block_end;
     }
     (swaps, weak)
 }
 
 struct Front {
-    /// The front's first `p` columns: LU of the pivots, then `L` below them.
+    /// The front's first `n_pivots` columns: LU of the pivots, then `L` below them.
     lower: Vec<C64>,
-    /// Rows `0..p` of the later columns: `U` to the boundary.
+    /// Rows `0..n_pivots` of the later columns: `U` to the boundary.
     upper: Vec<C64>,
     swaps: Vec<u32>,
 }
@@ -238,49 +248,58 @@ impl<'a> SparseLu<'a> {
     }
 
     fn factor_as(a: &'a Csr, ordering: &'a Ordering, symmetric: bool) -> Option<Self> {
-        let scale = a.val.iter().fold(0.0f64, |m, v| m.max(v.norm_sqr())).sqrt();
-        let mut local = vec![0; a.n];
+        let scale = a.val.iter().fold(0.0f64, |largest, v| largest.max(v.norm_sqr())).sqrt();
+        // Where each unknown sits in the front being built.
+        let mut local_index = vec![0; a.n];
         // What each finished front leaves for its parent.
         let mut updates: Vec<Vec<C64>> = vec![vec![]; ordering.nodes.len()];
         let mut fronts = Vec::with_capacity(ordering.nodes.len());
         let mut weak = false;
         for (i, node) in ordering.nodes.iter().enumerate() {
-            let p = node.end - node.start;
-            let m = p + node.boundary.len();
-            let mut f = vec![ZERO; m * m];
-            for &(k, r, c) in &node.entries {
-                f[r as usize + c as usize * m] += a.val[k as usize];
+            let n_pivots = node.end - node.start;
+            let size = n_pivots + node.boundary.len();
+            let mut front = vec![ZERO; size * size];
+            for &(k, row, col) in &node.entries {
+                front[row as usize + col as usize * size] += a.val[k as usize];
             }
-            (node.start..node.end).for_each(|g| local[g] = g - node.start);
-            node.boundary.iter().enumerate().for_each(|(o, &g)| local[g] = p + o);
+            (node.start..node.end).for_each(|unknown| local_index[unknown] = unknown - node.start);
+            node.boundary
+                .iter()
+                .enumerate()
+                .for_each(|(offset, &unknown)| local_index[unknown] = n_pivots + offset);
             for &child in &node.children {
                 let update = std::mem::take(&mut updates[child]);
-                let map: Vec<usize> = ordering.nodes[child].boundary.iter().map(|&g| local[g]).collect();
-                for (c, column) in update.chunks_exact(map.len().max(1)).enumerate() {
-                    let target = map[c] * m;
+                let in_parent: Vec<usize> =
+                    ordering.nodes[child].boundary.iter().map(|&unknown| local_index[unknown]).collect();
+                for (col, column) in update.chunks_exact(in_parent.len().max(1)).enumerate() {
+                    let target = in_parent[col] * size;
                     // A symmetric update holds only its lower triangle.
-                    let from = if symmetric { c } else { 0 };
-                    column[from..].iter().zip(&map[from..]).for_each(|(v, &r)| f[target + r] += *v);
+                    let from = if symmetric { col } else { 0 };
+                    column[from..]
+                        .iter()
+                        .zip(&in_parent[from..])
+                        .for_each(|(value, &row)| front[target + row] += *value);
                 }
             }
             let (swaps, front_weak) = if symmetric {
-                (vec![], partial_ldl(&mut f, m, p, scale)?)
+                (vec![], partial_ldl(&mut front, size, n_pivots, scale)?)
             } else {
-                partial_lu(&mut f, m, p, scale)
+                partial_lu(&mut front, size, n_pivots, scale)
             };
             weak |= front_weak;
-            // After elimination, the trailing block of `f` is the Schur complement, which the
+            // After elimination, the trailing block of `front` is the Schur complement, which the
             // parent adds in.
+            let n_boundary = size - n_pivots;
             let (mut upper, mut update) =
-                (Vec::with_capacity(p * (m - p)), Vec::with_capacity((m - p) * (m - p)));
-            for column in f[p * m..].chunks_exact(m) {
-                upper.extend_from_slice(&column[..p]);
-                update.extend_from_slice(&column[p..]);
+                (Vec::with_capacity(n_pivots * n_boundary), Vec::with_capacity(n_boundary * n_boundary));
+            for column in front[n_pivots * size..].chunks_exact(size) {
+                upper.extend_from_slice(&column[..n_pivots]);
+                update.extend_from_slice(&column[n_pivots..]);
             }
             updates[i] = update;
-            f.truncate(p * m);
-            f.shrink_to_fit();
-            fronts.push(Front { lower: f, upper, swaps });
+            front.truncate(n_pivots * size);
+            front.shrink_to_fit();
+            fronts.push(Front { lower: front, upper, swaps });
         }
         Some(Self { matrix: a, ordering, fronts, weak })
     }
@@ -292,34 +311,37 @@ impl<'a> SparseLu<'a> {
             x[new] = rhs[old];
         }
         for (node, front) in nodes.iter().zip(&self.fronts) {
-            let (p, m) = (node.end - node.start, node.end - node.start + node.boundary.len());
+            let n_pivots = node.end - node.start;
+            let size = n_pivots + node.boundary.len();
             let (head, tail) = x.split_at_mut(node.end);
-            let piv = &mut head[node.start..];
-            front.swaps.iter().enumerate().for_each(|(j, &r)| piv.swap(j, r as usize));
-            for j in 0..p {
-                let (v, col) = (piv[j], &front.lower[j * m..(j + 1) * m]);
-                for i in j + 1..p {
-                    piv[i] -= v * col[i];
+            let own = &mut head[node.start..];
+            front.swaps.iter().enumerate().for_each(|(j, &row)| own.swap(j, row as usize));
+            for j in 0..n_pivots {
+                let (xj, col) = (own[j], &front.lower[j * size..(j + 1) * size]);
+                for i in j + 1..n_pivots {
+                    own[i] -= xj * col[i];
                 }
-                for (o, &g) in node.boundary.iter().enumerate() {
-                    tail[g - node.end] -= v * col[p + o];
+                for (offset, &unknown) in node.boundary.iter().enumerate() {
+                    tail[unknown - node.end] -= xj * col[n_pivots + offset];
                 }
             }
         }
         for (node, front) in nodes.iter().zip(&self.fronts).rev() {
-            let (p, m) = (node.end - node.start, node.end - node.start + node.boundary.len());
+            let n_pivots = node.end - node.start;
+            let size = n_pivots + node.boundary.len();
             let (head, tail) = x.split_at_mut(node.end);
-            let piv = &mut head[node.start..];
-            for (o, &g) in node.boundary.iter().enumerate() {
-                let (v, col) = (tail[g - node.end], &front.upper[o * p..(o + 1) * p]);
-                piv.iter_mut().zip(col).for_each(|(y, u)| *y -= v * *u);
+            let own = &mut head[node.start..];
+            for (offset, &unknown) in node.boundary.iter().enumerate() {
+                let (later, col) =
+                    (tail[unknown - node.end], &front.upper[offset * n_pivots..(offset + 1) * n_pivots]);
+                own.iter_mut().zip(col).for_each(|(xi, u)| *xi -= later * *u);
             }
-            for j in (0..p).rev() {
-                let col = &front.lower[j * m..(j + 1) * m];
-                piv[j] /= col[j];
-                let v = piv[j];
+            for j in (0..n_pivots).rev() {
+                let col = &front.lower[j * size..(j + 1) * size];
+                own[j] /= col[j];
+                let xj = own[j];
                 for i in 0..j {
-                    piv[i] -= v * col[i];
+                    own[i] -= xj * col[i];
                 }
             }
         }
@@ -339,11 +361,11 @@ impl<'a> SparseLu<'a> {
         once(self, rhs);
         if self.weak {
             for _ in 0..REFINEMENT_STEPS {
-                let mut r = vec![ZERO; rhs.len()];
-                mul(self.matrix, rhs, &mut r);
-                r.iter_mut().zip(&b).for_each(|(v, w)| *v = *w - *v);
-                once(self, &mut r);
-                rhs.iter_mut().zip(&r).for_each(|(v, d)| *v += *d);
+                let mut residual = vec![ZERO; rhs.len()];
+                mul(self.matrix, rhs, &mut residual);
+                residual.iter_mut().zip(&b).for_each(|(ri, bi)| *ri = *bi - *ri);
+                once(self, &mut residual);
+                rhs.iter_mut().zip(&residual).for_each(|(xi, correction)| *xi += *correction);
             }
         }
     }

@@ -112,11 +112,11 @@ close by luck at one mesh, as $E_z$ does at 24 × 24, but it stops improving. `M
    curves. Two triangles sharing an edge form a quadrilateral with two possible diagonals, and the
    better one is where the angles opposite the edge add up to less than 180° ([Shewchuk 1996](20-references.md#shewchuk-1996)). Repeating this removes
    slivers, and a flip that would cross an outline is refused, so every triangle stays in one material.
-<!-- code: Mesh::fitted_grid "m.snap" .. "flip_to_delaunay" -->
+<!-- code: Mesh::fitted_grid "mesh.snap" .. "flip_to_delaunay" -->
 
 A triangle's material is then read at its centroid. Over 200 random placements, the worst angle was
 22° for circles and 16° for rectangles.
-<!-- code: Mesh::fitted_grid "m.region =" .. ".collect()" -->
+<!-- code: Mesh::fitted_grid "mesh.region =" .. ".collect()" -->
 
 Nodes on the domain's outer edge never move. That's the useful property: opposite edges of the
 domain have matching nodes, which is exactly what periodic boundaries need.
@@ -139,7 +139,7 @@ on the bottom. Corners tie to the origin, carrying both phases. Because outer no
 partner exists, and `DofMap` needs nothing else: assembly already multiplies each entry by its dofs'
 phases, as chapter 4 showed. The matrix is Hermitian, so Lanczos and shift-invert from chapter 6 work
 unchanged.
-<!-- code: constraints "let key" .. "&ties)" -->
+<!-- code: constraints "let wrapped" .. "&ties)" -->
 
 A **band diagram** repeats that eigenproblem for many wavevectors. A phase of $2\pi$ changes nothing,
 so each phase $k_xL_x$, $k_yL_y$ only needs to run from $-\pi$ to $\pi$. A square cell's symmetry, such as

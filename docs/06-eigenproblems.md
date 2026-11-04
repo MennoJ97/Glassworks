@@ -42,7 +42,7 @@ Applying the operator means solving a linear system, but we only factor
 $A - \sigma B$ once and reuse the factors each iteration. Chapter 5's fast solver is
 what makes this cheap.
 <!-- code: eigs_near "sub_scaled" -->
-<!-- code: lanczos "u.copy_from_slice" .. "lu.solve" -->
+<!-- code: lanczos "next.copy_from_slice" .. "lu.solve" -->
 
 Each analysis chooses its own shift:
 - **Resonances:** a small negative $\sigma = -(\pi/L)^2$, for a structure of length
@@ -81,7 +81,7 @@ beta_j = |u|_B, then v_{j+1} = u / beta_j
 The full projection includes the two recurrence terms, $\alpha_j\mathbf{v}_j$ and
 $\beta_{j-1}\mathbf{v}_{j-1}$, so what's left is $\beta_j\mathbf{v}_{j+1}$. In the
 code, $\beta_j$ is the norm computed at the top of the next pass.
-<!-- code: lanczos "b.mul(&u, &mut bu)" .. "found.iter().for_each" -->
+<!-- code: lanczos "b.mul(&next, &mut b_next)" .. "found.iter().for_each" -->
 
 The eigenvalues of $T_m$, called *Ritz values*, are very good approximations to the outermost
 eigenvalues of $C$ after just a few steps
@@ -89,15 +89,15 @@ eigenvalues of $C$ after just a few steps
 [`eigen.rs`](../crates/glassworks-core/src/eigen.rs) finds them with the QL algorithm
 ([Bowdler et al. 1968](20-references.md#bowdler-1968)). It's the standard method, like LAPACK's
 `dsteqr`, so you can treat it as a black box.
-<!-- code: lanczos "let (theta, z)" .. "order.sort_by" -->
+<!-- code: lanczos "let (theta, tri_vectors)" .. "order.sort_by" -->
 
 Three details in the code are worth pointing out.
 
 **The inner product uses $B$.** The operator is only Hermitian in the $B$ inner
 product, $\langle \mathbf{x}, \mathbf{y}\rangle_B = \mathbf{x}^H B\,\mathbf{y}$, so the
 basis is $B$-orthonormal ([Ericsson & Ruhe 1980](20-references.md#ericsson-ruhe-1980)). That's why the code stores both `v` and `bv`.
-<!-- code: lanczos "b.mul(&u, &mut bu)" .. "let norm" -->
-<!-- code: lanczos "v.push(u.iter()" .. "bv.push" -->
+<!-- code: lanczos "b.mul(&next, &mut b_next)" .. "let norm" -->
+<!-- code: lanczos "v.push(next.iter()" .. "bv.push" -->
 
 To see why $C$ is Hermitian in this product, write it out:
 

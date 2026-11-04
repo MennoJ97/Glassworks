@@ -23,7 +23,7 @@ $r + 1$ evenly spaced nodes $\xi_0, \dots, \xi_r$, where $r$ is the polynomial o
 the polynomial that equals 1 at node $i$ and 0 at all the other nodes:
 
 $$\ell_i(\xi) = \prod_{j \ne i}\frac{\xi - \xi_j}{\xi_i - \xi_j}$$
-<!-- code: H1Line::basis "let node" .. "val[i] *=" -->
+<!-- code: H1Line::basis "let node" .. "values[i] *=" -->
 
 A global $\phi_i$ is pieced together from the $\ell$'s of the cells that share node
 $i$, so it too is 1 at node $i$ and 0 at every other node. This gives the

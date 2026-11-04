@@ -21,7 +21,7 @@ const BAND_TOL: f64 = 1e-5;
 /// Dirichlet walls, or Bloch ties from the right and top edges to the left and
 /// bottom. Corners tie straight to the origin, carrying both phases.
 fn constraints(req: &Request2d, space: &H1Triangle, nx: usize, ny: usize, phase: [f64; 2]) -> DofMap {
-    let pos = space.dof_positions();
+    let positions = space.dof_positions();
     let (hx, hy) = (req.width / (2 * nx) as f64, req.height / (2 * ny) as f64);
     let on_right = |p: (f64, f64)| (p.0 / hx).round() as usize == 2 * nx;
     let on_top = |p: (f64, f64)| (p.1 / hy).round() as usize == 2 * ny;
@@ -30,29 +30,39 @@ fn constraints(req: &Request2d, space: &H1Triangle, nx: usize, ny: usize, phase:
     if req.walls != Boundary::Periodic {
         let wall = if req.polarization == Polarization::Te { Boundary::Pec } else { Boundary::Pmc };
         let zero: Vec<usize> = if req.walls == wall {
-            (0..pos.len())
-                .filter(|&d| on_left(pos[d]) || on_right(pos[d]) || on_bottom(pos[d]) || on_top(pos[d]))
+            (0..positions.len())
+                .filter(|&dof| {
+                    on_left(positions[dof])
+                        || on_right(positions[dof])
+                        || on_bottom(positions[dof])
+                        || on_top(positions[dof])
+                })
                 .collect()
         } else {
             vec![]
         };
-        return DofMap::new(pos.len(), &zero, &[]);
+        return DofMap::new(positions.len(), &zero, &[]);
     }
-    let key =
+    // A boundary node's grid position, with the right and top edges folded onto the left and bottom.
+    let wrapped =
         |p: (f64, f64)| ((p.0 / hx).round() as usize % (2 * nx), (p.1 / hy).round() as usize % (2 * ny));
-    let masters: HashMap<_, _> = (0..pos.len())
-        .filter(|&d| !on_right(pos[d]) && !on_top(pos[d]) && (on_left(pos[d]) || on_bottom(pos[d])))
-        .map(|d| (key(pos[d]), d))
+    let masters: HashMap<_, _> = (0..positions.len())
+        .filter(|&dof| {
+            !on_right(positions[dof])
+                && !on_top(positions[dof])
+                && (on_left(positions[dof]) || on_bottom(positions[dof]))
+        })
+        .map(|dof| (wrapped(positions[dof]), dof))
         .collect();
-    let ties: Vec<_> = (0..pos.len())
-        .filter(|&d| on_right(pos[d]) || on_top(pos[d]))
-        .map(|d| {
-            let angle =
-                if on_right(pos[d]) { phase[0] } else { 0.0 } + if on_top(pos[d]) { phase[1] } else { 0.0 };
-            (d, masters[&key(pos[d])], C64::from_polar(1.0, angle))
+    let ties: Vec<_> = (0..positions.len())
+        .filter(|&dof| on_right(positions[dof]) || on_top(positions[dof]))
+        .map(|dof| {
+            let angle = if on_right(positions[dof]) { phase[0] } else { 0.0 }
+                + if on_top(positions[dof]) { phase[1] } else { 0.0 };
+            (dof, masters[&wrapped(positions[dof])], C64::from_polar(1.0, angle))
         })
         .collect();
-    DofMap::new(pos.len(), &[], &ties)
+    DofMap::new(positions.len(), &[], &ties)
 }
 
 /// The `n` values of `(k0^2, x)` nearest `sigma`, for one set of constraints.
@@ -89,12 +99,12 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
             push_mesh(&space, &mut out);
             let field = if req.polarization == Polarization::Te { "Ez" } else { "Hz" };
             for (lambda, x) in
-                modes(&space, &dofs, &coef, *n_modes, target_k0.map_or(sigma, |k| k * k), EIG_TOL)?
+                modes(&space, &dofs, &coef, *n_modes, target_k0.map_or(sigma, |k0| k0 * k0), EIG_TOL)?
             {
                 let i = out.meta.fields.len();
                 let u = normalized(dofs.expand(&x));
-                out.channels.push((format!("field{i}/{field}/re"), u.iter().map(|v| v.re).collect()));
-                out.channels.push((format!("field{i}/{field}/im"), u.iter().map(|v| v.im).collect()));
+                out.channels.push((format!("field{i}/{field}/re"), u.iter().map(|value| value.re).collect()));
+                out.channels.push((format!("field{i}/{field}/im"), u.iter().map(|value| value.im).collect()));
                 let volume = Some(mode_volume(&space, &coef, &u, |_| true));
                 out.meta.fields.push(FieldMeta {
                     components: vec![field],
@@ -126,7 +136,7 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
                 }
             }
             out.channels.push(("s".into(), path));
-            out.channels.extend(table.into_iter().enumerate().map(|(i, b)| (format!("band{i}"), b)));
+            out.channels.extend(table.into_iter().enumerate().map(|(i, band)| (format!("band{i}"), band)));
         }
     }
     Ok(out)

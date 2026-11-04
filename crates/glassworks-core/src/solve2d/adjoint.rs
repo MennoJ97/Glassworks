@@ -27,12 +27,12 @@ pub(super) fn density_gradient(
     // With no monitor, the goal is the LDOS `F = -2 Re(e_0^T u)`, for which `A^T w = -e_0`.
     // Since `A u = i k e_0`, that's `w = -u / (i k)`, with no further solve.
     let w = if req.monitors.is_empty() {
-        u.iter().map(|v| -v / (I * k)).collect()
+        u.iter().map(|value| -value / (I * k)).collect()
     } else {
         let mut w = vec![ZERO; dofs.n_free];
-        for (g, v) in dofs.map.iter().zip(bu) {
-            if let Some((r, _)) = g {
-                w[*r] += v.conj();
+        for (entry, bu_dof) in dofs.map.iter().zip(bu) {
+            if let Some((row, _)) = entry {
+                w[*row] += bu_dof.conj();
             }
         }
         lu.solve(&mut w);
@@ -53,18 +53,22 @@ pub(super) fn pixel_slopes(
     u: &[C64],
 ) -> (Vec<f64>, Vec<f64>) {
     let (mut gradient, mut imaginary) = (vec![0.0; density.rho.len()], vec![0.0; density.rho.len()]);
-    let (mut sx, mut sy, mut m, mut d) = (vec![0.0; 36], vec![0.0; 36], vec![0.0; 36], vec![0; 6]);
-    for c in 0..space.n_cells() {
-        let Some(pixel) = pixel_of(req, space.mesh, pml, c) else { continue };
-        space.cell_dofs(c, &mut d);
-        space.local_matrices(c, &mut sx, &mut sy, &mut m);
-        let quadratic = |a: &[f64]| (0..36).map(|n| w[d[n / 6]] * a[n] * u[d[n % 6]]).sum::<C64>();
+    let (mut stiff_x, mut stiff_y, mut mass) = (vec![0.0; 36], vec![0.0; 36], vec![0.0; 36]);
+    let mut cell_dofs = vec![0; 6];
+    for cell in 0..space.n_cells() {
+        let Some(pixel) = pixel_of(req, space.mesh, pml, cell) else { continue };
+        space.cell_dofs(cell, &mut cell_dofs);
+        space.local_matrices(cell, &mut stiff_x, &mut stiff_y, &mut mass);
+        // `w^T local u`, for one of the cell's 6 x 6 matrices.
+        let quadratic = |local: &[f64]| {
+            (0..36).map(|n| w[cell_dofs[n / 6]] * local[n] * u[cell_dofs[n % 6]]).sum::<C64>()
+        };
         let deps = density.eps_high - density.eps_low;
         let change = match req.polarization {
-            Polarization::Te => 2.0 * deps * k * k * quadratic(&m),
+            Polarization::Te => 2.0 * deps * k * k * quadratic(&mass),
             Polarization::Tm => {
                 let eps = density.eps_low + density.rho[pixel] * deps;
-                (quadratic(&sx) + quadratic(&sy)) * 2.0 * deps / (eps * eps)
+                (quadratic(&stiff_x) + quadratic(&stiff_y)) * 2.0 * deps / (eps * eps)
             }
         };
         gradient[pixel] += change.re;

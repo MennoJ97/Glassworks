@@ -50,7 +50,7 @@ that first appear there, and adds the block that each of its two children left b
 child's block goes to the row and column of the same unknown in the parent's front, which is called
 **extend-add**. Eliminating the separator's unknowns from its front leaves a smaller dense block, which
 it passes up to its parent.
-<!-- code: SparseLu::factor_as "for &child in &node.children" .. "f[target + r] += *v" -->
+<!-- code: SparseLu::factor_as "for &child in &node.children" .. "front[target + row] += *value" -->
 
 Take three unknowns in a row, 1 – 3 – 2, with 3 as the separator. The front of 1 holds unknowns 1 and 3:
 
@@ -86,13 +86,13 @@ A pivot can only come from a front's own unknowns, because taking one from elsew
 which fronts need what. That's a real restriction. A part of the mesh walled in by its separator is a
 small cavity, and it can happen to sit on a resonance of its own. Its front then has only poor pivots,
 even when the whole matrix is fine.
-<!-- code: partial_lu "for i in j..p" .. "weak |=" -->
+<!-- code: partial_lu "for i in j..n_pivots" .. "weak |=" -->
 
 So `sparse.rs` notes any weak pivot, and then corrects each solve with two steps of **iterative
 refinement**: compute what the answer gets wrong, solve for that, and add it ([Golub & Van Loan 2013](20-references.md#golub-van-loan-2013)). The test
 `sparse_lu_recovers_when_a_part_sits_on_its_own_resonance` builds this case on purpose. The error is
 0.008 without refinement and $10^{-12}$ with it.
-<!-- code: SparseLu::refined "if self.weak" .. "rhs.iter_mut().zip(&r)" -->
+<!-- code: SparseLu::refined "if self.weak" .. "rhs.iter_mut().zip(&residual)" -->
 
 When $A^T = A$, as it will be with chapter 11's absorbing layer, `SparseLu::factor_symmetric` factors
 $A = LDL^T$ instead, with no pivoting and about half the work. If a pivot is unusable, it falls back to

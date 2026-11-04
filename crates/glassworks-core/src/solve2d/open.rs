@@ -16,25 +16,27 @@ pub(super) fn open_mesh(req: &Request2d, pml: f64) -> Result<Mesh, String> {
     let side = side_layer(req, pml);
     let (width, height) = (req.width + 2.0 * side, req.height + 2.0 * pml);
     let (nx, ny) = grid_size(req, width, height)?;
-    let outlines: Vec<_> = req.shapes.iter().map(|s| s.outline.shifted(side, pml)).collect();
+    let outlines: Vec<_> = req.shapes.iter().map(|shape| shape.outline.shifted(side, pml)).collect();
     Ok(Mesh::fitted_grid(nx, ny, width, height, &outlines))
 }
 
 pub(super) fn open_dofs(req: &Request2d, space: &H1Triangle, pml: f64) -> DofMap {
     let (width, height) = (req.width + 2.0 * pml, req.height + 2.0 * pml);
-    let pos = space.dof_positions();
-    let edge = |p: (f64, f64)| p.0 < 1e-9 || p.1 < 1e-9 || p.0 > width - 1e-9 || p.1 > height - 1e-9;
-    let zero: Vec<usize> = (0..pos.len()).filter(|&d| edge(pos[d])).collect();
-    DofMap::new(pos.len(), &zero, &[])
+    let positions = space.dof_positions();
+    let on_outer_edge = |p: (f64, f64)| p.0 < 1e-9 || p.1 < 1e-9 || p.0 > width - 1e-9 || p.1 > height - 1e-9;
+    let zero: Vec<usize> = (0..positions.len()).filter(|&dof| on_outer_edge(positions[dof])).collect();
+    DofMap::new(positions.len(), &zero, &[])
 }
 
 /// The pixel of `req.density` holding a cell on an extended mesh, if any.
-pub(super) fn pixel_of(req: &Request2d, mesh: &Mesh, pml: f64, c: usize) -> Option<usize> {
-    let d = req.density.as_ref()?;
-    let p = mesh.centroid(c);
-    let (u, v) = ((p.0 - side_layer(req, pml) - d.x0) / d.width, (p.1 - pml - d.y0) / d.height);
-    ((0.0..1.0).contains(&u) && (0.0..1.0).contains(&v))
-        .then(|| (v * d.ny as f64) as usize * d.nx + (u * d.nx as f64) as usize)
+pub(super) fn pixel_of(req: &Request2d, mesh: &Mesh, pml: f64, cell: usize) -> Option<usize> {
+    let density = req.density.as_ref()?;
+    let (x, y) = mesh.centroid(cell);
+    // How far across the design area the cell is, from 0 to 1 in each direction.
+    let along_x = (x - side_layer(req, pml) - density.x0) / density.width;
+    let along_y = (y - pml - density.y0) / density.height;
+    ((0.0..1.0).contains(&along_x) && (0.0..1.0).contains(&along_y))
+        .then(|| (along_y * density.ny as f64) as usize * density.nx + (along_x * density.nx as f64) as usize)
 }
 
 /// `(p, q)` of a cell, where a density pixel mixes permittivities: `q = eps` for `E_z`, and
@@ -44,11 +46,11 @@ pub(super) fn cell_material(
     mesh: &Mesh,
     coef: &[(C64, C64)],
     pml: f64,
-    c: usize,
+    cell: usize,
 ) -> (C64, C64) {
-    let Some(pixel) = pixel_of(req, mesh, pml, c) else { return coef[mesh.region[c]] };
-    let d = req.density.as_ref().unwrap();
-    let eps = C64::new(d.eps_low + d.rho[pixel] * (d.eps_high - d.eps_low), 0.0);
+    let Some(pixel) = pixel_of(req, mesh, pml, cell) else { return coef[mesh.region[cell]] };
+    let density = req.density.as_ref().unwrap();
+    let eps = C64::new(density.eps_low + density.rho[pixel] * (density.eps_high - density.eps_low), 0.0);
     match req.polarization {
         Polarization::Te => (ONE, eps),
         Polarization::Tm => (eps.inv(), ONE),
@@ -83,27 +85,28 @@ pub(super) fn stretched_matrix(
     k0: C64,
     strength: C64,
 ) -> Csr {
-    let (pb, qb) = coef[0];
+    let (p_background, q_background) = coef[0];
     // The background's wavenumber, from eps mu = q / p whichever polarization this is.
-    let kb = k0 * (qb.re / pb.re).sqrt();
+    let k_background = k0 * (q_background.re / p_background.re).sqrt();
     // `sigma = sigma_max (depth / pml)^2`, so across the layer `integral(sigma) = sigma_max pml / 3`,
     // and a round trip at normal incidence keeps `exp(-2 sigma_max pml / 3) = 1e-4` of the amplitude.
     let sigma_max = -3.0 * (1e-4f64).ln() / (2.0 * pml);
-    let stretch = |d: f64, size: f64, layer: f64| {
-        let depth = (layer - d).max(d - layer - size).max(0.0) / pml;
-        C64::new(1.0, 0.0) + I * strength * (sigma_max * depth * depth) / kb
+    // `s` at one coordinate, for a domain of `size` with `layer` of PML on each side.
+    let stretch = |coord: f64, size: f64, layer: f64| {
+        let depth = (layer - coord).max(coord - layer - size).max(0.0) / pml;
+        C64::new(1.0, 0.0) + I * strength * (sigma_max * depth * depth) / k_background
     };
-    let t = assemble_split(space, dofs, |c| {
-        let (p, q) = cell_material(req, space.mesh, coef, pml, c);
-        let (x, y) = space.mesh.centroid(c);
+    let triplets = assemble_split(space, dofs, |cell| {
+        let (p, q) = cell_material(req, space.mesh, coef, pml, cell);
+        let (x, y) = space.mesh.centroid(cell);
         let (sx, sy) = (stretch(x, req.width, side_layer(req, pml)), stretch(y, req.height, pml));
         (p * sy / sx, p * sx / sy, -k0 * k0 * q * sx * sy)
     });
-    Csr::from_triplets(dofs.n_free, t)
+    Csr::from_triplets(dofs.n_free, triplets)
 }
 
 pub(super) fn locate(space: &H1Triangle, x: f64, y: f64) -> Option<usize> {
-    (0..space.n_cells()).find(|&c| space.contains(c, x, y))
+    (0..space.n_cells()).find(|&cell| space.contains(cell, x, y))
 }
 
 /// `e_0`, which reads the field at a point as `sum(e_0 u)`, and loads it there as a source.
@@ -118,18 +121,22 @@ pub(super) fn point_load(
 }
 
 pub(super) fn cell_load(space: &H1Triangle, dofs: &DofMap, cell: usize, x: f64, y: f64) -> Vec<(usize, f64)> {
-    let mut d = vec![0; 6];
-    space.cell_dofs(cell, &mut d);
-    d.iter().zip(space.basis_at(cell, x, y)).filter_map(|(&g, v)| dofs.map[g].map(|(r, _)| (r, v))).collect()
+    let mut cell_dofs = vec![0; 6];
+    space.cell_dofs(cell, &mut cell_dofs);
+    cell_dofs
+        .iter()
+        .zip(space.basis_at(cell, x, y))
+        .filter_map(|(&dof, value)| dofs.map[dof].map(|(row, _)| (row, value)))
+        .collect()
 }
 
 /// `u` for `A(k) u = i k e_0`, and `-sum(e_0 u)`. Dividing by `i k` turns this into the
 /// Green's function. So `2 Re(-u_0)` is `pi` times the LDOS per unit k, or `k / 2` in vacuum.
 pub(super) fn line_response(lu: &SparseLu, n: usize, load: &[(usize, f64)], k: C64) -> (Vec<C64>, C64) {
     let mut u = vec![ZERO; n];
-    load.iter().for_each(|&(r, v)| u[r] += I * k * v);
+    load.iter().for_each(|&(row, weight)| u[row] += I * k * weight);
     lu.solve(&mut u);
-    let response = -load.iter().map(|&(r, v)| u[r] * v).sum::<C64>();
+    let response = -load.iter().map(|&(row, weight)| u[row] * weight).sum::<C64>();
     (u, response)
 }
 
@@ -148,11 +155,12 @@ pub(super) fn open_output(
     push_mesh(space, &mut out);
     // Back to the caller's coordinates, so the layer sits outside `[0, width]`.
     for (name, layer) in [("x", side_layer(req, pml)), ("y", pml)] {
-        out.channels.iter_mut().find(|c| c.0 == name).unwrap().1.iter_mut().for_each(|v| *v -= layer);
+        let channel = out.channels.iter_mut().find(|channel| channel.0 == name).unwrap();
+        channel.1.iter_mut().for_each(|coord| *coord -= layer);
     }
     let field = if req.polarization == Polarization::Te { "Ez" } else { "Hz" };
-    out.channels.push((format!("field0/{field}/re"), u.iter().map(|v| v.re).collect()));
-    out.channels.push((format!("field0/{field}/im"), u.iter().map(|v| v.im).collect()));
+    out.channels.push((format!("field0/{field}/re"), u.iter().map(|value| value.re).collect()));
+    out.channels.push((format!("field0/{field}/im"), u.iter().map(|value| value.im).collect()));
     out.meta.fields.push(FieldMeta { components: vec![field], ..meta });
     out
 }

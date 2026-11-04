@@ -30,32 +30,33 @@ pub(super) fn solve(
         Some(angle) => dipole::load(req, &space, &dofs, &coef, pml, (x + pml, y + pml, angle), target_k0)?,
         None => point_load(&space, &dofs, x + pml, y + pml)?,
     };
-    let at = |k: C64| {
+    let solve_at = |k: C64| {
         let a = open_matrix(req, &space, &dofs, &coef, pml, k);
         let ordering = Ordering::reused(&a, || free_positions(&space, &dofs));
         line_response(&SparseLu::factor_symmetric(&a, &ordering), a.n, &load, k)
     };
-    let mut prev = C64::new(target_k0, 0.0);
-    let mut k = prev * C64::new(1.0, -2e-3);
-    let (mut g_prev, mut g) = (at(prev).1.inv(), at(k).1.inv());
+    // The secant method on `1 / response`, which is zero at the pole.
+    let mut previous = C64::new(target_k0, 0.0);
+    let mut k = previous * C64::new(1.0, -2e-3);
+    let (mut previous_reciprocal, mut reciprocal) = (solve_at(previous).1.inv(), solve_at(k).1.inv());
     for _ in 0..MAX_POLE_STEPS {
-        let next = k - g * (k - prev) / (g - g_prev);
+        let next = k - reciprocal * (k - previous) / (reciprocal - previous_reciprocal);
         if !next.is_finite() {
             break;
         }
-        (prev, g_prev) = (k, g);
+        (previous, previous_reciprocal) = (k, reciprocal);
         k = next;
-        let (u, response) = at(k);
-        g = response.inv();
-        if (k - prev).norm() <= 1e-4 * k.im.abs() {
+        let (u, response) = solve_at(k);
+        reciprocal = response.inv();
+        if (k - previous).norm() <= 1e-4 * k.im.abs() {
             // A search can wander off to a pole of the mesh, far above anything physical.
             if !(k.im < 0.0 && (k.re - target_k0).abs() < 0.25 * target_k0) {
                 break;
             }
             let u = normalized(dofs.expand(&u));
-            let inside = |c: usize| {
-                let p = mesh.centroid(c);
-                p.0 > pml && p.1 > pml && p.0 < pml + req.width && p.1 < pml + req.height
+            let inside = |cell: usize| {
+                let (x, y) = mesh.centroid(cell);
+                x > pml && y > pml && x < pml + req.width && y < pml + req.height
             };
             let meta = FieldMeta {
                 k0: k.re,

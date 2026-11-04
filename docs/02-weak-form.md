@@ -40,7 +40,7 @@ jump is zero.
 [`Mesh::layered_line`](../crates/glassworks-core/src/mesh.rs) puts a vertex on every
 interface for a different reason: a polynomial can't have a kink inside a cell, only
 at its ends.
-<!-- code: Mesh::layered_line "let n = (t / h)" .. "start += t" -->
+<!-- code: Mesh::layered_line "let n_cells" .. "start += width" -->
 
 **The boundary term appeared.** $[p u' v]_a^b$ is the only place the domain's ends
 enter the equation, and it's exactly where boundary conditions go. Chapter 4 uses
@@ -53,7 +53,7 @@ computer needs finitely many, so we choose a finite set of basis functions
 $\phi_1, \dots, \phi_N$ and write
 
 $$u(x) \approx \sum_{j=1}^N u_j \phi_j(x).$$
-<!-- code: H1Line::eval "let (mut v, mut d)" .. "v += u[" -->
+<!-- code: H1Line::eval "let (mut value, mut derivative)" .. "value += u[" -->
 
 The unknowns are now just the numbers $u_j$. For test functions, Galerkin's method
 uses the same basis, $v = \phi_i$ ([Gander & Wanner 2012](20-references.md#gander-wanner-2012)). That gives one equation per basis function:
@@ -63,7 +63,7 @@ $$\sum_j \left[\underbrace{\int p\,\phi_i'\phi_j'\,dx}_{S_{ij}} + k_t^2\underbra
 In matrix form, this is
 
 $$\left(S + k_t^2 P - k_0^2 Q\right)\mathbf{u} = \mathbf{f}.$$
-<!-- code: driven "let mut t = assemble" .. "});" -->
+<!-- code: driven "let mut triplets = assemble" .. "});" -->
 
 $S$ is called the **stiffness** matrix and $P$ and $Q$ are **mass** matrices, names
 inherited from FEM's origins in structural mechanics
@@ -78,7 +78,7 @@ alone. Since $p$ and $q$ are constant on each cell, with values $p_c$ and $q_c$,
 $S = \sum_c p_c S_c$, $P = \sum_c p_c M_c$ and $Q = \sum_c q_c M_c$.
 For example, `cavity_modes` in [`solve1d.rs`](../crates/glassworks-core/src/solve1d.rs)
 gets $S$ with $(a_c, b_c) = (p_c, 0)$ and $Q$ with $(0, q_c)$.
-<!-- code: cavity_modes "let a = s.matrix" .. "let b = s.matrix" -->
+<!-- code: cavity_modes "let a = setup.matrix" .. "let b = setup.matrix" -->
 
 ## Why Galerkin is a good choice
 

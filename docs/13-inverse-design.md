@@ -43,7 +43,7 @@ even inside the absorbing layer, so $A^T = A$, and $w$ only needs a back-substit
 [chapter 17](17-designing-a-cavity.md) shows that $w = -u/(ik)$, with no solve at all.
 For a pixel in $E_z$, $\delta A$ is just $-k_0^2\,\delta\varepsilon$ times its mass matrix, so each pixel's slope is a small
 sum over its cells. Chapter 19 does the same for $H_z$, the polarization most planar chips use. `density_gradient_matches_finite_differences` checks this.
-<!-- code: pixel_slopes "for c in 0..space.n_cells()" .. "Polarization::Te =>" -->
+<!-- code: pixel_slopes "for cell in 0..space.n_cells()" .. "Polarization::Te =>" -->
 
 ## From grey to sharp
 
@@ -54,7 +54,7 @@ loop, outside the solver. Only the physics needs to be in Rust.
 the mesh's errors. A **cone filter** replaces each density by a weighted average of its neighbours, with a weight
 falling linearly to zero at a chosen radius ([Andreassen et al. 2011](20-references.md#andreassen-2011)). That sets a smallest feature size. It's linear, so its gradient
 is its transpose: the same weights, carrying slopes the other way.
-<!-- code: coneFilter2d "const weight" .. "w / total" -->
+<!-- code: coneFilter2d "const weight" .. "weight / total" -->
 <!-- code: coneFilter2d "adjoint(g)" .. "return out" -->
 
 **Projection.** Then push the filtered densities toward 0 or 1 ([Wang et al. 2011](20-references.md#wang-2011)):

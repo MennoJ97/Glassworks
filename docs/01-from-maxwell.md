@@ -42,12 +42,12 @@ Each group needs only one unknown, because the other two components follow from 
 For TE:
 
 $$\eta_0 H_x = -\frac{k_t}{k_0\mu}E_y, \qquad \eta_0 H_z = -\frac{i}{k_0\mu}\frac{dE_y}{dx}.$$
-<!-- code: Setup::push_field "let (second, third)" .. "-I * d * scale" -->
+<!-- code: Setup::push_field "let (second, third)" .. "-I * du * scale" -->
 
 For TM:
 
 $$E_x = \frac{k_t}{k_0\varepsilon}\,\eta_0 H_y, \qquad E_z = \frac{i}{k_0\varepsilon}\frac{d(\eta_0 H_y)}{dx}.$$
-<!-- code: Setup::push_field "} else {" .. "I * d * scale" -->
+<!-- code: Setup::push_field "} else {" .. "I * du * scale" -->
 
 These are exactly the lines in `Setup::push_field` in
 [`solve1d.rs`](../crates/glassworks-core/src/solve1d.rs).

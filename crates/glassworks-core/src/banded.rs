@@ -11,22 +11,23 @@ pub fn rcm(a: &Csr) -> Vec<usize> {
     let mut starts: Vec<usize> = (0..a.n).collect();
     starts.sort_by_key(|&i| degree(i));
     let (mut perm, mut seen) = (Vec::with_capacity(a.n), vec![false; a.n]);
-    for s in starts {
-        if seen[s] {
+    for start in starts {
+        if seen[start] {
             continue;
         }
-        seen[s] = true;
+        seen[start] = true;
+        // `perm` doubles as the breadth-first queue: `head` is the next node to visit.
         let mut head = perm.len();
-        perm.push(s);
+        perm.push(start);
         while head < perm.len() {
-            let v = perm[head];
+            let node = perm[head];
             head += 1;
-            let mut next: Vec<usize> =
-                a.col[a.ptr[v]..a.ptr[v + 1]].iter().copied().filter(|&w| !seen[w]).collect();
-            next.sort_by_key(|&w| degree(w));
-            for w in next {
-                seen[w] = true;
-                perm.push(w);
+            let mut unseen: Vec<usize> =
+                a.col[a.ptr[node]..a.ptr[node + 1]].iter().copied().filter(|&next| !seen[next]).collect();
+            unseen.sort_by_key(|&next| degree(next));
+            for next in unseen {
+                seen[next] = true;
+                perm.push(next);
             }
         }
     }
@@ -43,10 +44,14 @@ pub trait Factors {
 /// column j, which leaves room for pivoting to grow the upper band from b to 2b.
 pub struct BandedLu {
     n: usize,
+    /// Bandwidth: how far from the diagonal the reordered matrix has entries.
     b: usize,
-    ld: usize,
-    ab: Vec<C64>,
-    piv: Vec<usize>,
+    /// Stored length of each column, `3b + 1`.
+    col_len: usize,
+    /// The columns of L and U, one after another.
+    bands: Vec<C64>,
+    /// Row swapped with row j when column j was eliminated.
+    pivot_row: Vec<usize>,
     perm: Vec<usize>,
 }
 
@@ -54,86 +59,90 @@ impl BandedLu {
     pub fn factor(a: &Csr) -> Result<Self, String> {
         let n = a.n;
         let perm = rcm(a);
-        let mut inv = vec![0; n];
+        let mut new_index = vec![0; n];
         for (new, &old) in perm.iter().enumerate() {
-            inv[old] = new;
+            new_index[old] = new;
         }
         let mut b = 0;
         for i in 0..n {
             for &j in &a.col[a.ptr[i]..a.ptr[i + 1]] {
-                b = b.max(inv[i].abs_diff(inv[j]));
+                b = b.max(new_index[i].abs_diff(new_index[j]));
             }
         }
-        let (ld, diag) = (3 * b + 1, 2 * b);
-        let mut ab = vec![ZERO; ld * n];
+        let (col_len, diag) = (3 * b + 1, 2 * b);
+        let mut bands = vec![ZERO; col_len * n];
         for i in 0..n {
             for k in a.ptr[i]..a.ptr[i + 1] {
-                let (r, c) = (inv[i], inv[a.col[k]]);
-                ab[diag + r + c * ld - c] = a.val[k];
+                let (row, col) = (new_index[i], new_index[a.col[k]]);
+                bands[diag + row + col * col_len - col] = a.val[k];
             }
         }
-        let mut piv = vec![0; n];
+        let mut pivot_row = vec![0; n];
         let mut last_col = 0;
         for j in 0..n {
             let below = b.min(n - 1 - j);
-            let col = j * ld + diag;
+            let diagonal_at = j * col_len + diag;
             // Partial pivoting: the matrix is indefinite, so pick the largest entry.
-            let p = (0..=below)
-                .max_by(|&x, &y| ab[col + x].norm_sqr().total_cmp(&ab[col + y].norm_sqr()))
+            let pivot = (0..=below)
+                .max_by(|&x, &y| {
+                    bands[diagonal_at + x].norm_sqr().total_cmp(&bands[diagonal_at + y].norm_sqr())
+                })
                 .unwrap();
-            if ab[col + p] == ZERO {
+            if bands[diagonal_at + pivot] == ZERO {
                 return Err(
                     "singular matrix: this frequency hits an exact resonance of a lossless structure".into(),
                 );
             }
-            piv[j] = j + p;
-            // The pivot row ends by last_col: the row swapped in from j + p reaches b
+            pivot_row[j] = j + pivot;
+            // The pivot row ends by last_col: the row swapped in from j + pivot reaches b
             // columns past its own diagonal, and earlier fill stops at the old last_col.
-            last_col = last_col.max((j + p + b).min(n - 1));
-            if p != 0 {
-                for c in j..=last_col {
-                    ab.swap(diag + j + c * ld - c, diag + j + p + c * ld - c);
+            last_col = last_col.max((j + pivot + b).min(n - 1));
+            if pivot != 0 {
+                for col in j..=last_col {
+                    bands.swap(diag + j + col * col_len - col, diag + j + pivot + col * col_len - col);
                 }
             }
             // Eliminate below the pivot, updating the columns to the right.
-            let inv_pivot = ab[col].inv();
-            let (left, right) = ab.split_at_mut((j + 1) * ld);
-            let l = &mut left[col + 1..col + 1 + below];
-            l.iter_mut().for_each(|x| *x *= inv_pivot);
-            // a[r][c] -= l[r] * a[j][c], for the rows r below j and columns c up to last_col.
-            for c in j + 1..=last_col {
-                let start = (c - j - 1) * ld + diag + j - c;
-                let t = right[start];
-                for (x, m) in right[start + 1..start + 1 + below].iter_mut().zip(l.iter()) {
-                    *x -= *m * t;
+            let inv_pivot = bands[diagonal_at].inv();
+            let (left, right) = bands.split_at_mut((j + 1) * col_len);
+            let multipliers = &mut left[diagonal_at + 1..diagonal_at + 1 + below];
+            multipliers.iter_mut().for_each(|x| *x *= inv_pivot);
+            // a[r][c] -= multipliers[r] * a[j][c], for rows r below j and columns c up to last_col.
+            for col in j + 1..=last_col {
+                let start = (col - j - 1) * col_len + diag + j - col;
+                let in_pivot_row = right[start];
+                for (entry, m) in right[start + 1..start + 1 + below].iter_mut().zip(multipliers.iter()) {
+                    *entry -= *m * in_pivot_row;
                 }
             }
         }
-        Ok(Self { n, b, ld, ab, piv, perm })
+        Ok(Self { n, b, col_len, bands, pivot_row, perm })
     }
 }
 
 impl Factors for BandedLu {
     fn solve(&self, rhs: &mut [C64]) {
-        let (n, b, ld, diag) = (self.n, self.b, self.ld, 2 * self.b);
+        let (n, b, col_len, diag) = (self.n, self.b, self.col_len, 2 * self.b);
         let mut x: Vec<C64> = self.perm.iter().map(|&old| rhs[old]).collect();
+        // Forward substitution with L, applying each row swap as factoring did.
         for j in 0..n {
-            x.swap(j, self.piv[j]);
-            let (t, below, col) = (x[j], b.min(n - 1 - j), j * ld + diag);
-            for (xi, m) in x[j + 1..j + 1 + below].iter_mut().zip(&self.ab[col + 1..]) {
-                *xi -= *m * t;
+            x.swap(j, self.pivot_row[j]);
+            let (xj, below, diagonal_at) = (x[j], b.min(n - 1 - j), j * col_len + diag);
+            for (xi, l) in x[j + 1..j + 1 + below].iter_mut().zip(&self.bands[diagonal_at + 1..]) {
+                *xi -= *l * xj;
             }
         }
+        // Back substitution with U, column by column.
         for j in (0..n).rev() {
-            let (col, above) = (j * ld + diag, j.min(diag));
-            x[j] /= self.ab[col];
-            let t = x[j];
-            for (xi, u) in x[j - above..j].iter_mut().zip(&self.ab[col - above..col]) {
-                *xi -= *u * t;
+            let (diagonal_at, above) = (j * col_len + diag, j.min(diag));
+            x[j] /= self.bands[diagonal_at];
+            let xj = x[j];
+            for (xi, u) in x[j - above..j].iter_mut().zip(&self.bands[diagonal_at - above..diagonal_at]) {
+                *xi -= *u * xj;
             }
         }
-        for (w, &old) in x.iter().zip(&self.perm) {
-            rhs[old] = *w;
+        for (value, &old) in x.iter().zip(&self.perm) {
+            rhs[old] = *value;
         }
     }
 }

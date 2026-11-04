@@ -27,21 +27,21 @@ export function coneFilter2d(nx, ny, radius) {
   const reach = Math.ceil(radius) - 1;
   const neighbours = Array.from({ length: nx * ny }, (_, i) => {
     const [cx, cy] = [i % nx, Math.floor(i / nx)];
-    const list = [];
+    const weights = [];
     for (let y = Math.max(0, cy - reach); y <= Math.min(ny - 1, cy + reach); y++) {
       for (let x = Math.max(0, cx - reach); x <= Math.min(nx - 1, cx + reach); x++) {
         const weight = radius - Math.hypot(x - cx, y - cy);
-        if (weight > 0) list.push([x + y * nx, weight]);
+        if (weight > 0) weights.push([x + y * nx, weight]);
       }
     }
-    const total = list.reduce((sum, [, w]) => sum + w, 0);
-    return list.map(([j, w]) => [j, w / total]);
+    const total = weights.reduce((sum, [, weight]) => sum + weight, 0);
+    return weights.map(([j, weight]) => [j, weight / total]);
   });
   return {
-    apply: (x) => Float64Array.from(neighbours, (list) => list.reduce((sum, [j, w]) => sum + w * x[j], 0)),
+    apply: (x) => Float64Array.from(neighbours, (weights) => weights.reduce((sum, [j, weight]) => sum + weight * x[j], 0)),
     adjoint(g) {
       const out = new Float64Array(nx * ny);
-      neighbours.forEach((list, i) => list.forEach(([j, w]) => { out[j] += w * g[i]; }));
+      neighbours.forEach((weights, i) => weights.forEach(([j, weight]) => { out[j] += weight * g[i]; }));
       return out;
     },
   };
@@ -50,8 +50,8 @@ export function coneFilter2d(nx, ny, radius) {
 // Pushes densities toward 0 or 1. Larger `beta` is sharper.
 export function project(x, beta) {
   const half = Math.tanh(beta / 2);
-  const rho = x.map((v) => (half + Math.tanh(beta * (v - 0.5))) / (2 * half));
-  const slope = x.map((v) => beta / (2 * half * Math.cosh(beta * (v - 0.5)) ** 2));
+  const rho = x.map((density) => (half + Math.tanh(beta * (density - 0.5))) / (2 * half));
+  const slope = x.map((density) => beta / (2 * half * Math.cosh(beta * (density - 0.5)) ** 2));
   return { rho, slope };
 }
 

@@ -28,15 +28,16 @@ const EIG_TOL: f64 = 1e-11;
 /// Field output cap, so huge meshes cannot flood the plot.
 const MAX_FIELD_POINTS: usize = 20_000;
 
-fn c(v: [f64; 2]) -> C64 {
-    C64::new(v[0], v[1])
+/// A complex number from the `[re, im]` pair a request carries.
+fn complex(pair: [f64; 2]) -> C64 {
+    C64::new(pair[0], pair[1])
 }
 
 /// `(p, q)` of a layer.
-fn layer_coef(pol: Polarization, l: &Layer) -> (C64, C64) {
-    match pol {
-        Polarization::Te => (c(l.mu).inv(), c(l.eps)),
-        Polarization::Tm => (c(l.eps).inv(), c(l.mu)),
+fn layer_coef(polarization: Polarization, layer: &Layer) -> (C64, C64) {
+    match polarization {
+        Polarization::Te => (complex(layer.mu).inv(), complex(layer.eps)),
+        Polarization::Tm => (complex(layer.eps).inv(), complex(layer.mu)),
     }
 }
 
@@ -70,13 +71,13 @@ impl<'a> Setup<'a> {
         layer_coef(self.req.polarization, &self.req.layers[self.space.mesh.region[cell]])
     }
 
-    /// The matrix of `a S + b M`, with `f(p, q) = (a, b)` per cell.
-    fn matrix(&self, f: impl Fn(C64, C64) -> (C64, C64)) -> Csr {
-        let t = assemble(&self.space, &self.dofs, |cell| {
+    /// The matrix of `a S + b M`, with `weights(p, q) = (a, b)` per cell.
+    fn matrix(&self, weights: impl Fn(C64, C64) -> (C64, C64)) -> Csr {
+        let triplets = assemble(&self.space, &self.dofs, |cell| {
             let (p, q) = self.coef(cell);
-            f(p, q)
+            weights(p, q)
         });
-        Csr::from_triplets(self.dofs.n_free, t)
+        Csr::from_triplets(self.dofs.n_free, triplets)
     }
 
     /// Samples the field and the components that follow from Maxwell's curl
@@ -95,34 +96,35 @@ impl<'a> Setup<'a> {
         let per_cell = (2 * self.req.mesh.order).max(2);
         let stride = (mesh.n_cells() * per_cell / MAX_FIELD_POINTS).max(1);
         let mut x = vec![];
-        let mut data = vec![vec![]; 6];
+        // Real and imaginary parts of the three components, in turn.
+        let mut samples = vec![vec![]; 6];
         let scale = if k0 > 0.0 { 1.0 / k0 } else { 0.0 };
         for cell in (0..mesh.n_cells()).step_by(stride) {
             let layer = &self.req.layers[mesh.region[cell]];
             let (x0, h) = (mesh.coords[mesh.cells[2 * cell]], self.space.cell_length(cell));
             // Each cell repeats its end points, so jumps at interfaces plot as jumps.
-            for s in 0..per_cell {
-                let xi = -1.0 + 2.0 * s as f64 / (per_cell - 1) as f64;
-                let (v, d) = self.space.eval(cell, xi, u);
+            for sample in 0..per_cell {
+                let xi = -1.0 + 2.0 * sample as f64 / (per_cell - 1) as f64;
+                let (value, du) = self.space.eval(cell, xi, u);
                 let (second, third) = if te {
                     // eta0 Hx and eta0 Hz.
-                    (-v * kt * scale / c(layer.mu), -I * d * scale / c(layer.mu))
+                    (-value * kt * scale / complex(layer.mu), -I * du * scale / complex(layer.mu))
                 } else {
                     // Ex and Ez.
-                    (v * kt * scale / c(layer.eps), I * d * scale / c(layer.eps))
+                    (value * kt * scale / complex(layer.eps), I * du * scale / complex(layer.eps))
                 };
                 x.push(x0 + h * (xi + 1.0) / 2.0);
-                for (k, w) in [v, second, third].into_iter().enumerate() {
-                    data[2 * k].push(w.re);
-                    data[2 * k + 1].push(w.im);
+                for (k, component) in [value, second, third].into_iter().enumerate() {
+                    samples[2 * k].push(component.re);
+                    samples[2 * k + 1].push(component.im);
                 }
             }
         }
         let components = if te { ["Ey", "Hx", "Hz"] } else { ["Hy", "Ex", "Ez"] };
         let i = out.meta.fields.len();
         out.channels.push((format!("field{i}/x"), x));
-        for (k, d) in data.into_iter().enumerate() {
-            out.channels.push((format!("field{i}/{}/{}", components[k / 2], ["re", "im"][k % 2]), d));
+        for (k, channel) in samples.into_iter().enumerate() {
+            out.channels.push((format!("field{i}/{}/{}", components[k / 2], ["re", "im"][k % 2]), channel));
         }
         out.meta.fields.push(FieldMeta {
             components: components.to_vec(),
@@ -136,23 +138,23 @@ impl<'a> Setup<'a> {
 
 pub fn solve(req: &Request) -> Result<Output, String> {
     validate::validate(req)?;
-    let thickness: Vec<f64> = req.layers.iter().map(|l| l.thickness).collect();
+    let thickness: Vec<f64> = req.layers.iter().map(|layer| layer.thickness).collect();
     // Scale cells by local index so each layer has the same cells per wavelength.
-    let max_cell: Vec<f64> =
-        req.layers.iter().map(|l| req.mesh.max_cell / (c(l.eps) * c(l.mu)).norm().sqrt().max(1.0)).collect();
+    let index = |layer: &Layer| (complex(layer.eps) * complex(layer.mu)).norm().sqrt().max(1.0);
+    let max_cell: Vec<f64> = req.layers.iter().map(|layer| req.mesh.max_cell / index(layer)).collect();
     let mesh = Mesh::layered_line(&thickness, &max_cell);
     let length: f64 = thickness.iter().sum();
     let bloch_phase = if let Analysis::Cavity { bloch_phase, .. } = req.analysis { bloch_phase } else { 0.0 };
-    let s = Setup::new(req, &mesh, bloch_phase);
-    let meta = Meta { length, n_dofs: s.dofs.n_free, ..Default::default() };
+    let setup = Setup::new(req, &mesh, bloch_phase);
+    let meta = Meta { length, n_dofs: setup.dofs.n_free, ..Default::default() };
     let mut out = Output { meta, channels: vec![] };
     let k0_of = |wavelength: f64| 2.0 * PI / wavelength;
     match &req.analysis {
         Analysis::Cavity { n_modes, target_k0, .. } => {
-            for (lambda, x) in cavity_modes(&s, *n_modes, *target_k0, length)? {
-                s.push_field(
+            for (lambda, x) in cavity_modes(&setup, *n_modes, *target_k0, length)? {
+                setup.push_field(
                     &mut out,
-                    &normalized(s.dofs.expand(&x)),
+                    &normalized(setup.dofs.expand(&x)),
                     lambda.max(0.0).sqrt(),
                     0.0,
                     None,
@@ -160,23 +162,25 @@ pub fn solve(req: &Request) -> Result<Output, String> {
                 );
             }
         }
-        Analysis::Bands { n_bands, n_k } => bands(&s, *n_bands, *n_k, &mut out)?,
-        Analysis::Waveguide { wavelength, n_modes } => waveguide(&s, k0_of(*wavelength), *n_modes, &mut out)?,
+        Analysis::Bands { n_bands, n_k } => bands(&setup, *n_bands, *n_k, &mut out)?,
+        Analysis::Waveguide { wavelength, n_modes } => {
+            waveguide(&setup, k0_of(*wavelength), *n_modes, &mut out)?
+        }
         Analysis::Driven { wavelength, angle_deg, source } => {
             let k0 = k0_of(*wavelength);
-            let d = driven(&s, k0, *angle_deg, *source)?;
-            s.push_field(&mut out, &d.u, k0, d.kt, None, d.power);
+            let solved = driven(&setup, k0, *angle_deg, *source)?;
+            setup.push_field(&mut out, &solved.u, k0, solved.kt, None, solved.power);
         }
         Analysis::DrivenGradient { wavelength, angle_deg } => {
             let k0 = k0_of(*wavelength);
-            let d = driven(&s, k0, *angle_deg, Source::PlaneWave)?;
-            s.push_field(&mut out, &d.u, k0, d.kt, None, d.power);
-            gradient::power_gradients(&s, k0, &d, &mut out);
+            let solved = driven(&setup, k0, *angle_deg, Source::PlaneWave)?;
+            setup.push_field(&mut out, &solved.u, k0, solved.kt, None, solved.power);
+            gradient::power_gradients(&setup, k0, &solved, &mut out);
         }
         Analysis::Sweep { wavelengths, angle_deg } => {
             let mut series = [vec![], vec![], vec![]];
-            for &w in wavelengths {
-                let power = driven(&s, k0_of(w), *angle_deg, Source::PlaneWave)?.power.unwrap();
+            for &wavelength in wavelengths {
+                let power = driven(&setup, k0_of(wavelength), *angle_deg, Source::PlaneWave)?.power.unwrap();
                 (0..3).for_each(|i| series[i].push(power[i]));
             }
             out.channels.push(("wavelength".into(), wavelengths.clone()));
@@ -190,41 +194,41 @@ pub fn solve(req: &Request) -> Result<Output, String> {
 
 /// `S u = k0^2 Q u`, with `Q` the mass matrix weighted by `q`.
 fn cavity_modes(
-    s: &Setup,
-    n: usize,
+    setup: &Setup,
+    n_modes: usize,
     target_k0: Option<f64>,
     length: f64,
 ) -> Result<Vec<(f64, Vec<C64>)>, String> {
-    let a = s.matrix(|p, _| (p, ZERO));
-    let b = s.matrix(|_, q| (ZERO, q));
+    let a = setup.matrix(|p, _| (p, ZERO));
+    let b = setup.matrix(|_, q| (ZERO, q));
     // A zero shift would make S singular whenever a static mode exists, as in a TM
     // cavity with PEC walls. A negative shift keeps S - sigma Q positive definite,
     // and the lowest modes are still the ones closest to it.
-    let sigma = target_k0.map_or(-(PI / length).powi(2), |k| k * k);
-    eigs_near(&a, &b, sigma, n, EIG_TOL)
+    let sigma = target_k0.map_or(-(PI / length).powi(2), |k0| k0 * k0);
+    eigs_near(&a, &b, sigma, n_modes, EIG_TOL)
 }
 
-fn bands(s: &Setup, n_bands: usize, n_k: usize, out: &mut Output) -> Result<(), String> {
+fn bands(setup: &Setup, n_bands: usize, n_k: usize, out: &mut Output) -> Result<(), String> {
     let length = out.meta.length;
     let ks: Vec<f64> = (0..n_k).map(|i| PI / length * i as f64 / (n_k - 1) as f64).collect();
     let mut table = vec![vec![]; n_bands];
     for &k in &ks {
-        let s = Setup::new(s.req, s.space.mesh, k * length);
-        for (band, (lambda, _)) in table.iter_mut().zip(cavity_modes(&s, n_bands, None, length)?) {
+        let at_k = Setup::new(setup.req, setup.space.mesh, k * length);
+        for (band, (lambda, _)) in table.iter_mut().zip(cavity_modes(&at_k, n_bands, None, length)?) {
             band.push(lambda.max(0.0).sqrt());
         }
     }
     out.channels.push(("k".into(), ks));
-    out.channels.extend(table.into_iter().enumerate().map(|(i, b)| (format!("band{i}"), b)));
+    out.channels.extend(table.into_iter().enumerate().map(|(i, band)| (format!("band{i}"), band)));
     Ok(())
 }
 
 /// `(k0^2 Q - S) u = beta^2 P u`, with `P` the mass matrix weighted by `p`.
-fn waveguide(s: &Setup, k0: f64, n_modes: usize, out: &mut Output) -> Result<(), String> {
+fn waveguide(setup: &Setup, k0: f64, n_modes: usize, out: &mut Output) -> Result<(), String> {
     let k02 = C64::new(k0 * k0, 0.0);
-    let a = s.matrix(|p, q| (-p, k02 * q));
-    let b = s.matrix(|p, _| (ZERO, p));
-    let n2: Vec<f64> = s.req.layers.iter().map(|l| l.eps[0] * l.mu[0]).collect();
+    let a = setup.matrix(|p, q| (-p, k02 * q));
+    let b = setup.matrix(|p, _| (ZERO, p));
+    let n2: Vec<f64> = setup.req.layers.iter().map(|layer| layer.eps[0] * layer.mu[0]).collect();
     let n2_max = n2.iter().copied().fold(0.0, f64::max);
     let n2_clad = n2[0].max(n2[n2.len() - 1]);
     // Highest effective index first. Modes at or below the cladding index are box
@@ -232,7 +236,7 @@ fn waveguide(s: &Setup, k0: f64, n_modes: usize, out: &mut Output) -> Result<(),
     for (lambda, x) in eigs_near(&a, &b, k0 * k0 * n2_max * 1.001, n_modes, EIG_TOL)?.into_iter().rev() {
         if lambda > k0 * k0 * n2_clad {
             let beta = lambda.sqrt();
-            s.push_field(out, &normalized(s.dofs.expand(&x)), k0, beta, Some(beta / k0), None);
+            setup.push_field(out, &normalized(setup.dofs.expand(&x)), k0, beta, Some(beta / k0), None);
         }
     }
     Ok(())
@@ -248,60 +252,61 @@ struct Driven {
     t_scale: f64,
 }
 
-fn driven(s: &Setup, k0: f64, angle_deg: f64, source: Source) -> Result<Driven, String> {
-    let req = s.req;
-    let n2 = |l: &Layer| c(l.eps) * c(l.mu);
-    let plane = matches!(source, Source::PlaneWave);
+fn driven(setup: &Setup, k0: f64, angle_deg: f64, source: Source) -> Result<Driven, String> {
+    let req = setup.req;
+    let n2 = |layer: &Layer| complex(layer.eps) * complex(layer.mu);
+    let plane_wave = matches!(source, Source::PlaneWave);
     let (first, last_layer) = (&req.layers[0], &req.layers[req.layers.len() - 1]);
-    let kt = if plane { k0 * n2(first).sqrt().re * angle_deg.to_radians().sin() } else { 0.0 };
-    let (k2, kt2) = (C64::new(k0 * k0, 0.0), C64::new(kt * kt, 0.0));
-    let mut t = assemble(&s.space, &s.dofs, |cell| {
-        let (p, q) = s.coef(cell);
-        (p, kt2 * p - k2 * q)
+    let kt = if plane_wave { k0 * n2(first).sqrt().re * angle_deg.to_radians().sin() } else { 0.0 };
+    let (k02, kt2) = (C64::new(k0 * k0, 0.0), C64::new(kt * kt, 0.0));
+    let mut triplets = assemble(&setup.space, &setup.dofs, |cell| {
+        let (p, q) = setup.coef(cell);
+        (p, kt2 * p - k02 * q)
     });
     // `p kx` at an end, with `kx` on the outgoing or decaying branch. An open end
     // has `u' = i kx u`, which turns the weak form's boundary term into this entry.
-    let admittance = |l: &Layer| {
-        let w = (k2 * n2(l) - kt2).sqrt();
-        layer_coef(req.polarization, l).0 * if w.im < 0.0 || (w.im == 0.0 && w.re < 0.0) { -w } else { w }
+    let admittance = |layer: &Layer| {
+        let kx = (k02 * n2(layer) - kt2).sqrt();
+        let outgoing = if kx.im < 0.0 || (kx.im == 0.0 && kx.re < 0.0) { -kx } else { kx };
+        layer_coef(req.polarization, layer).0 * outgoing
     };
-    let last = s.space.n_dofs() - 1;
+    let last = setup.space.n_dofs() - 1;
     let (y_left, y_right) = (admittance(first), admittance(last_layer));
     for (is_open, dof, y) in [(req.left.is_open(), 0, y_left), (req.right.is_open(), last, y_right)] {
         if is_open {
-            let (d, _) = s.dofs.map[dof].unwrap();
-            t.push((d, d, -I * y));
+            let (row, _) = setup.dofs.map[dof].unwrap();
+            triplets.push((row, row, -I * y));
         }
     }
-    let mut rhs = vec![ZERO; s.dofs.n_free];
+    let mut rhs = vec![ZERO; setup.dofs.n_free];
     match source {
-        Source::PlaneWave => rhs[s.dofs.map[0].unwrap().0] = -I * y_left * 2.0,
-        Source::Line { x } => add_point_load(s, x, I * k0, &mut rhs)?,
+        Source::PlaneWave => rhs[setup.dofs.map[0].unwrap().0] = -I * y_left * 2.0,
+        Source::Line { x } => add_point_load(setup, x, I * k0, &mut rhs)?,
     }
-    let lu = BandedLu::factor(&Csr::from_triplets(s.dofs.n_free, t))?;
+    let lu = BandedLu::factor(&Csr::from_triplets(setup.dofs.n_free, triplets))?;
     lu.solve(&mut rhs);
-    let u = s.dofs.expand(&rhs);
+    let u = setup.dofs.expand(&rhs);
     let t_scale = if req.right.is_open() { y_right.re / y_left.re } else { 0.0 };
-    let power = plane.then(|| {
-        let r = (u[0] - ONE).norm_sqr();
-        let tr = u[last].norm_sqr() * t_scale;
-        [r, tr, 1.0 - r - tr]
+    let power = plane_wave.then(|| {
+        let reflected = (u[0] - ONE).norm_sqr();
+        let transmitted = u[last].norm_sqr() * t_scale;
+        [reflected, transmitted, 1.0 - reflected - transmitted]
     });
     Ok(Driven { u, kt, power, lu, t_scale })
 }
 
 /// Adds `amp * v(x)` to the right-hand side: the weak form of a current sheet.
-fn add_point_load(s: &Setup, x: f64, amp: C64, rhs: &mut [C64]) -> Result<(), String> {
-    let mesh = s.space.mesh;
+fn add_point_load(setup: &Setup, x: f64, amp: C64, rhs: &mut [C64]) -> Result<(), String> {
+    let mesh = setup.space.mesh;
     let cell = (0..mesh.n_cells())
-        .find(|&c| mesh.coords[mesh.cells[2 * c]] <= x && x <= mesh.coords[mesh.cells[2 * c + 1]])
+        .find(|&cell| mesh.coords[mesh.cells[2 * cell]] <= x && x <= mesh.coords[mesh.cells[2 * cell + 1]])
         .ok_or("the source lies outside the structure")?;
-    let xi = 2.0 * (x - mesh.coords[mesh.cells[2 * cell]]) / s.space.cell_length(cell) - 1.0;
-    let mut dofs = vec![0; s.space.local_size()];
-    s.space.cell_dofs(cell, &mut dofs);
-    for (&g, v) in dofs.iter().zip(s.space.basis(xi).0) {
-        if let Some((r, f)) = s.dofs.map[g] {
-            rhs[r] += f.conj() * amp * v;
+    let xi = 2.0 * (x - mesh.coords[mesh.cells[2 * cell]]) / setup.space.cell_length(cell) - 1.0;
+    let mut cell_dofs = vec![0; setup.space.local_size()];
+    setup.space.cell_dofs(cell, &mut cell_dofs);
+    for (&dof, value) in cell_dofs.iter().zip(setup.space.basis(xi).0) {
+        if let Some((row, factor)) = setup.dofs.map[dof] {
+            rhs[row] += factor.conj() * amp * value;
         }
     }
     Ok(())

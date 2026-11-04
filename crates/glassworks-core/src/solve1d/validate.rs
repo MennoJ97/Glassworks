@@ -1,6 +1,6 @@
 //! Checks a 1D request before any work starts, so that errors say what to change.
 
-use super::c;
+use super::complex;
 use crate::problem::{Analysis, Boundary, Layer, Request, Source};
 
 /// Refuses meshes that would exhaust a browser tab's memory.
@@ -8,7 +8,7 @@ const MAX_DOFS: f64 = 2.0e6;
 
 pub(super) fn validate(req: &Request) -> Result<(), String> {
     let err = |m: &str| Err(m.to_string());
-    let index = |l: &Layer| (c(l.eps) * c(l.mu)).norm().sqrt().max(1.0);
+    let index = |layer: &Layer| (complex(layer.eps) * complex(layer.mu)).norm().sqrt().max(1.0);
     if req.layers.is_empty() || req.layers.iter().any(|l| !(l.thickness > 0.0)) {
         return err("every layer needs a positive thickness");
     }

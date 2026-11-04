@@ -15,7 +15,7 @@ for each cell c:
     for each pair of local dofs (i, j):
         A[dof(i), dof(j)] += a_c * S_c[i, j] + b_c * M_c[i, j]
 ```
-<!-- code: assemble_split "for c in 0..space.n_cells()" .. "t.push" -->
+<!-- code: assemble_split "for cell in 0..space.n_cells()" .. "triplets.push" -->
 
 Where two cells share a dof, their contributions add. You could see this in the
 worked example in chapter 3, where the middle node received $1/h$ from each side.
@@ -35,7 +35,7 @@ adds the duplicates together. That produces
 array, and a pointer to where each row starts ([Davis 2006](20-references.md#davis-2006)). Multiplying by a vector then takes
 one pass through the nonzeros, as in `Csr::mul`.
 <!-- code: Csr -->
-<!-- code: Csr::from_triplets "for (i, j, v) in sorted" .. "last = Some" -->
+<!-- code: Csr::from_triplets "for (i, j, value) in by_row" .. "previous = Some" -->
 
 Take chapter 3's two cells of order 1, but with natural ends, so all 3 dofs stay. The
 two cells give 8 triplets, two of them at (1, 1), and merging leaves 7 entries. For
@@ -84,7 +84,7 @@ $$u_\text{global} = \text{factor} \times u_\text{reduced}$$
 <!-- code: DofMap::expand "self.map.iter()" -->
 
 A Dirichlet wall sets a dof to `None`. That's the whole mechanism.
-<!-- code: DofMap::new "let mut fixed" .. "d.n_free += 1" -->
+<!-- code: DofMap::new "let mut fixed" .. "dofs.n_free += 1" -->
 
 **Periodic (Bloch) boundaries** use the same map. In a periodic structure of period
 $L$, Bloch's theorem says the field at the end equals the field at the start times a
@@ -99,7 +99,7 @@ $\int u\,\overline{v}\,dx$, so we test with $\overline\psi$. That puts $\overlin
 on the row side. During assembly, each cell $c$ adds
 
 $$A_{r_ir_j} \mathrel{+}= \overline{f_i}\,\left(a_c S_c + b_c M_c\right)_{ij}\,f_j,$$
-<!-- code: assemble_split "let Some((ri, fi))" .. "t.push" -->
+<!-- code: assemble_split "let Some((row, row_factor))" .. "triplets.push" -->
 
 where $i$ and $j$ are the cell's local dofs, $r_i$ is the reduced index of $i$, and
 $f_i$ its factor. Testing with $\overline\psi$ also cancels the boundary terms at the
@@ -113,7 +113,7 @@ Take order 1 and three cells of length $h$, with dofs 0 to 3 and $u_3 = e^{i\the
 where $\theta = kL$. The third cell's entries for dof 3 land in row and column 0, so
 
 $$S = \frac{1}{h}\begin{pmatrix}2 & -1 & -e^{-i\theta}\\-1 & 2 & -1\\-e^{i\theta} & -1 & 2\end{pmatrix}.$$
-<!-- code: DofMap::new "for &(slave, master, phase)" .. "d.map[slave]" -->
+<!-- code: DofMap::new "for &(slave, master, phase)" .. "dofs.map[slave]" -->
 
 The two corners are conjugates, so $S$ is Hermitian. Entry $(0, 0)$ still sums to
 $2/h$, because the third cell adds $\overline{e^{i\theta}}\,e^{i\theta}/h = 1/h$. But

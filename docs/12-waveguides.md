@@ -12,7 +12,7 @@ chapter 7's 1D solver already finds its modes, and `port_mode` in
 Modes are orthogonal with weight $p$, so a sheet of $p\,\phi(y)$ excites only the mode $\phi$, with
 
 $$u = -\frac{k_0}{2\beta}\,\phi(y)\,e^{i\beta|x - x_0|},$$
-<!-- code: port "for pair in profile.windows" .. "rhs[r] += I * k" -->
+<!-- code: port "for pair in profile.windows" .. "rhs[row] += I * k" -->
 
 going both ways. This is chapter 7's current sheet again, with a mode in place of the plane wave. The half
 going backwards leaves through the absorbing layer. On an exact slab mode, the field is within 1.2% and the
@@ -27,13 +27,13 @@ the same job, since nothing else exists in the gap for it to excite.
 A **monitor** integrates the Poynting flux across a line:
 
 $$P = \frac{1}{2k_0}\int p\,\mathrm{Im}\!\left(u^*\frac{\partial u}{\partial n}\right)ds.$$
-<!-- code: monitor_power "let (val, (gx, gy))" .. "total += weight" -->
+<!-- code: monitor_power "let (values, (d_dx, d_dy))" .. "total += weight" -->
 
 There's a trap here. A second-order element's derivative is least accurate at the edge of a cell, which is
 exactly where a line along the grid sits: this read 2% high on a slab. Power is conserved across a thin strip,
 so the monitor averages over two cells instead. Around a line source, the power crossing a closed loop then
 matches $F/4$, with the LDOS $F$ from chapter 11, within 0.3%. `power_around_a_line_source_matches_its_ldos` checks this.
-<!-- code: monitor_power "for i in 0..steps" .. "offset * cell * ny + pml" -->
+<!-- code: monitor_power "for i in 0..steps" .. "offset * cell_size * normal_y + pml" -->
 
 ### Example: a sharp bend
 
