@@ -92,7 +92,20 @@ function resolveAnchor(spec, files, page, markdown) {
 }
 
 const refAttr = (refs) => refs.map((r) => (r.whole ? r.file.name : `${r.file.name}:${r.start}-${r.end}`)).join(' ');
-const refHref = (r, prefix) => `${prefix}source/${r.file.name}.html${r.whole ? '' : `#L${r.start}`}`;
+const refHref = (r, prefix) => `${prefix}source/${r.file.name}.html${r.whole ? '' : r.start === r.end ? `#L${r.start}` : `#L${r.start}-${r.end}`}`;
+
+// A link to a range of lines, #L12-30, lights all of them and scrolls to the first.
+const LIGHT_LINES = `<script>
+const lightLines = () => {
+  for (const line of document.querySelectorAll('.line.hl')) line.classList.remove('hl');
+  const range = /^#L(\\d+)-(\\d+)$/.exec(location.hash);
+  if (!range) return;
+  for (let n = +range[1]; n <= +range[2]; n++) document.getElementById(\`L\${n}\`)?.classList.add('hl');
+  document.getElementById(\`L\${range[1]}\`)?.scrollIntoView();
+};
+addEventListener('hashchange', lightLines);
+lightLines();
+</script>`;
 
 // Source lines coloured as an editor would, from highlight.mjs.
 function codeLines(file, ids) {
@@ -283,6 +296,7 @@ function layout({ title, body, current, prefix = '', panel = '', license = TEXT_
         ${links}
       </ul>
     </details>
+    <script>if (matchMedia('(max-width: 860px)').matches) document.currentScript.previousElementSibling.open = false;</script>
   </nav>
   <main>
 ${body}
@@ -333,7 +347,7 @@ for (const file of ['README.md', ...chapters.map((c) => c.file)]) {
 }
 
 for (const file of index) {
-  const body = `<article class="source"><h1>${file.name}</h1><p>Solver source code, referenced by the tutorial.</p><pre><code>${codeLines(file, true)}</code></pre></article>`;
+  const body = `<article class="source"><h1>${file.name}</h1><p>Solver source code, referenced by the tutorial.</p><pre><code>${codeLines(file, true)}</code></pre>${LIGHT_LINES}</article>`;
   write(join('source', `${file.name}.html`), layout({ title: file.name, body, prefix: '../', license: CODE_LICENSE }));
 }
 

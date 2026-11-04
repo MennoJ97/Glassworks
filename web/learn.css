@@ -31,20 +31,25 @@ body.learn { --page-max: 1120px; font-size: 16px; line-height: 1.6; }
 .display-math { overflow-x: auto; overflow-y: hidden; margin: 0 0 16px; padding: 4px 0; }
 
 .source { max-width: none !important; }
-.source pre { counter-reset: line; }
+.source pre { counter-reset: line; --gutter: 3.2em; }
 .source .line { display: block; white-space: pre; counter-increment: line; }
-.source .line::before { content: counter(line); display: inline-block; width: 3.2em; margin-right: 1em; text-align: right; color: var(--muted); user-select: none; }
+.source .line::before { content: counter(line); display: inline-block; width: var(--gutter); margin-right: 1em; text-align: right; color: var(--muted); user-select: none; }
 
 @media (max-width: 860px) {
   .learn-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .chapters { position: static; }
   .learn article h1 { font-size: 28px; }
+  /* Source lines wrap as they do in the code panel, rather than hiding off to the side. */
+  .source pre { --gutter: 2.6em; padding-left: 0; }
+  .source pre code { font-size: 12.5px; }
+  .source .line { white-space: pre-wrap; overflow-wrap: anywhere; padding-left: calc(var(--gutter) + 1em); text-indent: calc(-1em - var(--gutter)); }
+  .source .line::before { text-indent: 0; }
 }
 .chapters .part { color: var(--muted); font-size: 0.85em; font-weight: 600; margin-top: 12px; list-style: none; }
 
 /* The code panel beside a chapter, from learn.js. Below 1100px, or when hidden, the names
    in the text are ordinary links to the source pages. */
-.source .line:target { background: color-mix(in srgb, var(--glass) 16%, transparent); }
+.source .line:is(:target, .hl) { background: color-mix(in srgb, var(--glass) 16%, transparent); }
 
 /* Code coloured as an editor would (scripts/highlight.mjs), close to VS Code's Light+ and
    Dark+. Every colour clears 4.5:1 on the panel and on a highlighted line in its mode. */
@@ -62,17 +67,36 @@ body.learn { --page-max: 1120px; font-size: 16px; line-height: 1.6; }
   --code-kw: #569CD6; --code-ctl: #C586C0; --code-ty: #4EC9B0; --code-fn: #DCDCAA;
   --code-co: #4FC1FF; --code-nu: #B5CEA8; --code-va: #9CDCFE; --code-st: #CE9178;
 }
-:is(.source, .code-panel) .cm { color: var(--muted); font-style: italic; }
-:is(.source, .code-panel) .st { color: var(--code-st); }
-:is(.source, .code-panel) .kw { color: var(--code-kw); }
-:is(.source, .code-panel) .ctl { color: var(--code-ctl); }
-:is(.source, .code-panel) .ty { color: var(--code-ty); }
-:is(.source, .code-panel) .fn { color: var(--code-fn); }
-:is(.source, .code-panel) .co { color: var(--code-co); }
-:is(.source, .code-panel) .nu { color: var(--code-nu); }
-:is(.source, .code-panel) .va { color: var(--code-va); }
+:is(.source, .code-panel, .code-snippet) .cm { color: var(--muted); font-style: italic; }
+:is(.source, .code-panel, .code-snippet) .st { color: var(--code-st); }
+:is(.source, .code-panel, .code-snippet) .kw { color: var(--code-kw); }
+:is(.source, .code-panel, .code-snippet) .ctl { color: var(--code-ctl); }
+:is(.source, .code-panel, .code-snippet) .ty { color: var(--code-ty); }
+:is(.source, .code-panel, .code-snippet) .fn { color: var(--code-fn); }
+:is(.source, .code-panel, .code-snippet) .co { color: var(--code-co); }
+:is(.source, .code-panel, .code-snippet) .nu { color: var(--code-nu); }
+:is(.source, .code-panel, .code-snippet) .va { color: var(--code-va); }
 .learn a.code-ref { text-decoration-style: dotted; text-decoration-color: var(--glass); }
-.code-panel, .code-hint, .code-toggle { display: none; }
+.code-panel, .code-hint, .code-toggle, .code-peek, .code-snippet { display: none; }
+
+/* Narrower than that, a passage's code opens under it, from learn.js. */
+@media (max-width: 1099px) {
+  .code-peek {
+    display: flex; align-items: center; gap: 6px; margin: -8px 0 14px; padding: 4px 0; min-height: 0;
+    border: 0; background: none; color: var(--muted); font-size: 14px;
+  }
+  .code-peek::before { content: "▸"; color: var(--glass); }
+  .code-peek[aria-expanded=true]::before { content: "▾"; }
+  .code-peek:hover { background: none; color: var(--ink); }
+  .code-snippet { display: block; --gutter: 2.6em; margin: -6px 0 18px; border: 1px solid var(--rule); border-radius: 2px; background: var(--bg); }
+  li > .code-snippet { margin: 6px 0 10px; }
+  .code-snippet-head { display: flex; justify-content: space-between; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--rule); background: var(--panel); font-size: 13px; color: var(--muted); }
+  .code-snippet-head a { color: var(--muted); }
+  .learn .code-snippet pre { margin: 0; padding: 8px 0; border: 0; border-radius: 0; background: none; max-height: 70vh; overflow: auto; }
+  .code-snippet pre code { font-size: 12.5px; }
+  .learn .code-snippet .line::before { content: attr(data-n); }
+  .code-snippet .gap { color: var(--muted); }
+}
 
 @media (min-width: 1100px) {
   html:not(.code-off) body.learn.with-code { --page-max: 1760px; }
@@ -105,9 +129,9 @@ body.learn { --page-max: 1120px; font-size: 16px; line-height: 1.6; }
 .code-tabs button[aria-selected=true] { background: var(--bg); color: var(--ink); font-weight: 700; }
 .code-full { white-space: nowrap; color: var(--muted) !important; }
 .code-body { position: relative; flex: 1; overflow: auto; background: var(--bg); }
-.code-panel pre { margin: 0; padding: 10px 0; border: 0; border-radius: 0; background: none; overflow: visible; counter-reset: line; }
+.code-panel pre { margin: 0; padding: 10px 0; border: 0; border-radius: 0; background: none; overflow: visible; counter-reset: line; --gutter: 3.2em; }
 .code-panel pre code { font-size: 12.5px; }
 /* Long lines wrap under themselves, past the line number, so nothing hides off to the side. */
-.code-panel .line { display: block; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 12px 0 4.2em; text-indent: -4.2em; counter-increment: line; }
-.code-panel .line::before { content: counter(line); display: inline-block; width: 3.2em; margin-right: 1em; text-indent: 0; text-align: right; color: var(--muted); user-select: none; }
+:is(.code-panel, .code-snippet) .line { display: block; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 12px 0 calc(var(--gutter) + 1em); text-indent: calc(-1em - var(--gutter)); counter-increment: line; }
+:is(.code-panel, .code-snippet) .line::before { content: counter(line); display: inline-block; width: var(--gutter); margin-right: 1em; text-indent: 0; text-align: right; color: var(--muted); user-select: none; }
 .code-panel .line.hl { background: color-mix(in srgb, var(--glass) 16%, transparent); box-shadow: inset 3px 0 0 var(--glass); }
