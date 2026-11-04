@@ -15,52 +15,66 @@ impl<'a> SparseLu<'a> {
 
 /// As `partial_lu`, for a complex symmetric front, updating only its lower triangle and leaving
 /// `U = D L^T` for the solves. Returns whether any pivot was weak, or `None` if one is unusable.
-pub(super) fn partial_ldl(f: &mut [C64], m: usize, p: usize, scale: f64) -> Option<bool> {
+pub(super) fn partial_ldl(front: &mut [C64], size: usize, n_pivots: usize, scale: f64) -> Option<bool> {
     let mut weak = false;
-    let mut k = 0;
-    while k < p {
-        let e = (k + BLOCK).min(p);
-        for j in k..e {
-            let d = f[j + j * m];
-            let below = f[j * m + j + 1..(j + 1) * m].iter().fold(0.0f64, |b, v| b.max(v.norm_sqr()));
-            if d.norm_sqr() < 1e-16 * below || d.norm_sqr() < 1e-28 * scale * scale {
+    let mut block_start = 0;
+    while block_start < n_pivots {
+        let block_end = (block_start + BLOCK).min(n_pivots);
+        for j in block_start..block_end {
+            // Without row swaps, the pivot is whatever sits on the diagonal.
+            let pivot = front[j + j * size];
+            let below = front[j * size + j + 1..(j + 1) * size]
+                .iter()
+                .fold(0.0f64, |largest, entry| largest.max(entry.norm_sqr()));
+            // A pivot far smaller than the column below it, or than the matrix, gives factors
+            // too inaccurate for refinement to repair: `factor_symmetric` falls back to `factor`.
+            if pivot.norm_sqr() < 1e-16 * below || pivot.norm_sqr() < 1e-28 * scale * scale {
                 return None;
             }
-            weak |= d.norm_sqr() < 1e-4 * below || d.norm_sqr() < 1e-16 * scale * scale;
-            let inv = d.inv();
-            f[j * m + j + 1..(j + 1) * m].iter_mut().for_each(|v| *v *= inv);
-            let (left, right) = f.split_at_mut((j + 1) * m);
-            for (c, col) in (j + 1..e).zip(right.chunks_exact_mut(m)) {
-                let u = d * left[j * m + c];
-                col[c..].iter_mut().zip(&left[j * m + c..]).for_each(|(y, x)| *y -= u * *x);
+            weak |= pivot.norm_sqr() < 1e-4 * below || pivot.norm_sqr() < 1e-16 * scale * scale;
+            let inv_pivot = pivot.inv();
+            front[j * size + j + 1..(j + 1) * size].iter_mut().for_each(|entry| *entry *= inv_pivot);
+            let (left, right) = front.split_at_mut((j + 1) * size);
+            // By symmetry, `U[j][column] = D[j] L[column][j]`, so U needn't be stored while factoring.
+            for (column, col) in (j + 1..block_end).zip(right.chunks_exact_mut(size)) {
+                let in_pivot_row = pivot * left[j * size + column];
+                col[column..]
+                    .iter_mut()
+                    .zip(&left[j * size + column..])
+                    .for_each(|(entry, multiplier)| *entry -= in_pivot_row * *multiplier);
             }
         }
-        // Update the later columns from this block.
-        let (left, right) = f.split_at_mut(e * m);
-        for (c, col) in (e..m).zip(right.chunks_exact_mut(m)) {
-            let mut q = k;
-            while q < e {
-                let take = (e - q).min(4);
-                let at = |o: usize| {
-                    let from = if o < take { q + o } else { q };
-                    &left[from * m + c..(from + 1) * m]
+        // Update the later columns from this block, on and below the diagonal only.
+        let (left, right) = front.split_at_mut(block_end * size);
+        for (column, col) in (block_end..size).zip(right.chunks_exact_mut(size)) {
+            let mut q = block_start;
+            while q < block_end {
+                let take = (block_end - q).min(4);
+                let multipliers = |lane: usize| {
+                    let from = if lane < take { q + lane } else { q };
+                    &left[from * size + column..(from + 1) * size]
                 };
-                let coef = |o: usize| {
-                    if o < take {
-                        left[(q + o) * m + q + o] * left[(q + o) * m + c]
+                let in_pivot_row = |lane: usize| {
+                    if lane < take {
+                        left[(q + lane) * size + q + lane] * left[(q + lane) * size + column]
                     } else {
                         ZERO
                     }
                 };
-                subtract(&mut col[c..], [at(0), at(1), at(2), at(3)], [coef(0), coef(1), coef(2), coef(3)]);
+                subtract(
+                    &mut col[column..],
+                    [multipliers(0), multipliers(1), multipliers(2), multipliers(3)],
+                    [in_pivot_row(0), in_pivot_row(1), in_pivot_row(2), in_pivot_row(3)],
+                );
                 q += take;
             }
         }
-        k = e;
+        block_start = block_end;
     }
-    for c in 1..m {
-        for i in 0..c.min(p) {
-            f[i + c * m] = f[i + i * m] * f[c + i * m];
+    // Fill in `U = D L^T` above the diagonal, where the solves shared with `factor` read it.
+    for column in 1..size {
+        for i in 0..column.min(n_pivots) {
+            front[i + column * size] = front[i + i * size] * front[column + i * size];
         }
     }
     Some(weak)

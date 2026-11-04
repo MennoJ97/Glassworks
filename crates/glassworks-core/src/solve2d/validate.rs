@@ -3,15 +3,16 @@
 use super::{side_layer, steps_in};
 use crate::problem::{Analysis2d, Boundary, Polarization, Request2d, Source2d};
 
+/// The first problem with a request, as the message the app shows, or `Ok` if there's none.
 pub(super) fn validate(req: &Request2d) -> Result<(), String> {
     if !(req.width > 0.0 && req.height > 0.0 && req.cell > 0.0) {
         return Err("the domain and its cell size must be positive".into());
     }
-    let positive = |m: crate::problem::Material| m.eps > 0.0 && m.mu > 0.0;
-    if !positive(req.background) || !req.shapes.iter().all(|s| positive(s.material)) {
+    let positive = |material: crate::problem::Material| material.eps > 0.0 && material.mu > 0.0;
+    if !positive(req.background) || !req.shapes.iter().all(|shape| positive(shape.material)) {
         return Err("eigenmode analyses support lossless materials with positive eps and mu".into());
     }
-    if let Some(d) = &req.density {
+    if let Some(density) = &req.density {
         let plane_wave =
             matches!(req.analysis, Analysis2d::Driven { source: Source2d::PlaneWave { .. }, .. });
         let line = matches!(
@@ -25,19 +26,28 @@ pub(super) fn validate(req: &Request2d) -> Result<(), String> {
         {
             return Err("a density map needs a driven solve from a line source, dipole or port, with a monitor for a port, or a grating with a goal".into());
         }
-        if d.rho.len() != d.nx * d.ny
-            || !(d.width > 0.0 && d.height > 0.0 && d.eps_low > 0.0 && d.eps_high > 0.0)
+        if density.rho.len() != density.nx * density.ny
+            || !(density.width > 0.0
+                && density.height > 0.0
+                && density.eps_low > 0.0
+                && density.eps_high > 0.0)
         {
             return Err("the density map's size or materials are invalid".into());
         }
         // A monitor reads `p` by shape, which isn't `H_z`'s `p` inside the pixels.
-        let inside =
-            |x: f64, y: f64| (d.x0..=d.x0 + d.width).contains(&x) && (d.y0..=d.y0 + d.height).contains(&y);
+        let inside = |x: f64, y: f64| {
+            (density.x0..=density.x0 + density.width).contains(&x)
+                && (density.y0..=density.y0 + density.height).contains(&y)
+        };
         if req.polarization == Polarization::Tm
-            && req.monitors.iter().any(|m| inside(m.x0, m.y0) || inside(m.x1, m.y1))
+            && req
+                .monitors
+                .iter()
+                .any(|monitor| inside(monitor.x0, monitor.y0) || inside(monitor.x1, monitor.y1))
         {
             return Err("an H_z monitor must stay outside a density map".into());
         }
+        // Pixels are `density`'s own grid, and the mesh is the request's: their edges must agree.
         // A pixel edge through a cell would make its material depend on where the cell's centre
         // falls, which an optimizer can exploit, and which no drawn structure would reproduce.
         let (Analysis2d::Driven { pml, .. } | Analysis2d::Grating { pml, .. }) = req.analysis else {
@@ -48,13 +58,16 @@ pub(super) fn validate(req: &Request2d) -> Result<(), String> {
             (req.width + 2.0 * side) / steps_in(req.width + 2.0 * side, req.cell) as f64,
             (req.height + 2.0 * pml) / steps_in(req.height + 2.0 * pml, req.cell) as f64,
         );
-        let on_grid = |at: f64, h: f64| (at / h - (at / h).round()).abs() < 1e-6;
-        let aligned = (0..=d.nx).all(|i| on_grid(side + d.x0 + i as f64 * d.width / d.nx as f64, hx))
-            && (0..=d.ny).all(|j| on_grid(pml + d.y0 + j as f64 * d.height / d.ny as f64, hy));
+        let on_grid = |coord: f64, h: f64| (coord / h - (coord / h).round()).abs() < 1e-6;
+        let aligned = (0..=density.nx)
+            .all(|i| on_grid(side + density.x0 + i as f64 * density.width / density.nx as f64, hx))
+            && (0..=density.ny)
+                .all(|j| on_grid(pml + density.y0 + j as f64 * density.height / density.ny as f64, hy));
         if !aligned {
             return Err("the density map's pixels must line up with the mesh: choose a cell that divides each pixel exactly".into());
         }
     }
+    // A grating reads its orders on lines between the source and the absorbing layers (chapter 15).
     if let Analysis2d::Grating { wavelength, angle_deg, pml, source_y, reflect_y, transmit_y, .. } =
         req.analysis
     {
@@ -106,7 +119,7 @@ pub(super) fn validate(req: &Request2d) -> Result<(), String> {
             }
             // The incident wave is defined in the background, so scatterers can't reach the absorber.
             Source2d::PlaneWave { .. }
-                if !req.shapes.iter().all(|s| s.outline.inside(req.width, req.height)) =>
+                if !req.shapes.iter().all(|shape| shape.outline.inside(req.width, req.height)) =>
             {
                 return Err("shapes must stay inside the domain for a plane wave".into());
             }

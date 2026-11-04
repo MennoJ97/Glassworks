@@ -23,32 +23,40 @@ impl SparseLu<'_> {
         for (old, &new) in self.ordering.new.iter().enumerate() {
             x[new] = rhs[old];
         }
+        // Forward through the fronts with `U^T`, which is lower triangular.
         for (node, front) in nodes.iter().zip(&self.fronts) {
-            let (p, m) = (node.end - node.start, node.end - node.start + node.boundary.len());
+            let n_pivots = node.end - node.start;
+            let size = n_pivots + node.boundary.len();
             let (head, tail) = x.split_at_mut(node.end);
-            let piv = &mut head[node.start..];
-            for j in 0..p {
-                let col = &front.lower[j * m..(j + 1) * m];
-                let above: C64 = (0..j).map(|i| piv[i] * col[i]).sum();
-                piv[j] = (piv[j] - above) / col[j];
+            let own = &mut head[node.start..];
+            for j in 0..n_pivots {
+                let col = &front.lower[j * size..(j + 1) * size];
+                let above: C64 = (0..j).map(|i| own[i] * col[i]).sum();
+                own[j] = (own[j] - above) / col[j];
             }
-            for (o, &g) in node.boundary.iter().enumerate() {
-                let col = &front.upper[o * p..(o + 1) * p];
-                tail[g - node.end] -= piv.iter().zip(col).map(|(y, u)| y * u).sum::<C64>();
+            for (offset, &unknown) in node.boundary.iter().enumerate() {
+                let col = &front.upper[offset * n_pivots..(offset + 1) * n_pivots];
+                tail[unknown - node.end] -= own.iter().zip(col).map(|(xi, u)| xi * u).sum::<C64>();
             }
         }
+        // Back through them with `L^T`, then undo each front's row swaps, last swap first.
         for (node, front) in nodes.iter().zip(&self.fronts).rev() {
-            let (p, m) = (node.end - node.start, node.end - node.start + node.boundary.len());
+            let n_pivots = node.end - node.start;
+            let size = n_pivots + node.boundary.len();
             let (head, tail) = x.split_at_mut(node.end);
-            let piv = &mut head[node.start..];
-            for j in (0..p).rev() {
-                let col = &front.lower[j * m..(j + 1) * m];
-                let below: C64 = (j + 1..p).map(|i| piv[i] * col[i]).sum();
-                let beyond: C64 =
-                    node.boundary.iter().enumerate().map(|(o, &g)| tail[g - node.end] * col[p + o]).sum();
-                piv[j] -= below + beyond;
+            let own = &mut head[node.start..];
+            for j in (0..n_pivots).rev() {
+                let col = &front.lower[j * size..(j + 1) * size];
+                let below: C64 = (j + 1..n_pivots).map(|i| own[i] * col[i]).sum();
+                let beyond: C64 = node
+                    .boundary
+                    .iter()
+                    .enumerate()
+                    .map(|(offset, &unknown)| tail[unknown - node.end] * col[n_pivots + offset])
+                    .sum();
+                own[j] -= below + beyond;
             }
-            front.swaps.iter().enumerate().rev().for_each(|(j, &r)| piv.swap(j, r as usize));
+            front.swaps.iter().enumerate().rev().for_each(|(j, &row)| own.swap(j, row as usize));
         }
         for (old, &new) in self.ordering.new.iter().enumerate() {
             rhs[old] = x[new];

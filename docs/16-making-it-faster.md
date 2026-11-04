@@ -23,7 +23,7 @@ vectorizes this loop. The code is in [`sparse/blocked.rs`](../crates/glassworks-
 ## When the matrix is symmetric
 
 An absorbing layer's operator is complex symmetric, $A^T = A$, so half of every update to a front repeats the other half. Factoring it as $A = L D L^T$ updates only the lower triangle, which took 54 ms down to 30 ms on a cavity-sized matrix, and a whole cavity design from 16 s to 11 s on the page.
-<!-- code: partial_ldl "let inv = d.inv()" .. "*y -= u" -->
+<!-- code: partial_ldl "let inv_pivot = pivot.inv()" .. "*entry -= in_pivot_row" -->
 
 The price is pivoting. Swapping rows alone would break the symmetry, so these factors don't pivot at all, and weak pivots become about three times as common. Solves are then refined against the matrix, as for pivoting inside fronts. Over 8,612 solves scanned through resonances, the worst residual was $1.1 \times 10^{-11}$, against $6.4 \times 10^{-12}$ with pivoting. If a pivot is too small to trust, the whole matrix is factored the pivoted way instead.
 <!-- code: partial_ldl "let below" .. "weak |=" -->

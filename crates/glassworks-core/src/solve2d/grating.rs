@@ -14,7 +14,8 @@ use crate::{C64, I, ZERO};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
-/// A linear reading of the field, as coefficients on dofs.
+/// A linear reading of the field, as `(dof, coefficient)` pairs on all dofs: `read` sums
+/// `coefficient * u[dof]`.
 type Reading = Vec<(usize, C64)>;
 
 /// Lines per reflection reading, spread between `reflect_y` and the sheet.
@@ -28,32 +29,40 @@ const MAX_STRENGTH: f64 = 10.0;
 fn bloch_dofs(req: &Request2d, space: &H1Triangle, pml: f64, phase: f64) -> Result<DofMap, String> {
     let (width, height) = (req.width, req.height + 2.0 * pml);
     let (_, ny) = grid_size(req, width, height)?;
-    let pos = space.dof_positions();
-    let row = |y: f64| (y / (height / (2 * ny) as f64)).round() as usize;
-    let at = |v: f64, end: f64| (v - end).abs() < 1e-9 * width;
-    let wall = |p: (f64, f64)| row(p.1) == 0 || row(p.1) == 2 * ny;
-    let zero: Vec<usize> = (0..pos.len()).filter(|&d| wall(pos[d])).collect();
-    let left: HashMap<_, _> =
-        (0..pos.len()).filter(|&d| at(pos[d].0, 0.0) && !wall(pos[d])).map(|d| (row(pos[d].1), d)).collect();
-    let tie = C64::from_polar(1.0, phase);
-    let ties: Vec<_> = (0..pos.len())
-        .filter(|&d| at(pos[d].0, width) && !wall(pos[d]))
-        .map(|d| (d, left[&row(pos[d].1)], tie))
+    let positions = space.dof_positions();
+    // A dof's row on the grid of dofs, twice as fine as the cells, which pairs left with right.
+    let grid_row = |y: f64| (y / (height / (2 * ny) as f64)).round() as usize;
+    let is_at = |coord: f64, end: f64| (coord - end).abs() < 1e-9 * width;
+    let on_wall = |p: (f64, f64)| grid_row(p.1) == 0 || grid_row(p.1) == 2 * ny;
+    let zero: Vec<usize> = (0..positions.len()).filter(|&dof| on_wall(positions[dof])).collect();
+    let left: HashMap<_, _> = (0..positions.len())
+        .filter(|&dof| is_at(positions[dof].0, 0.0) && !on_wall(positions[dof]))
+        .map(|dof| (grid_row(positions[dof].1), dof))
         .collect();
-    Ok(DofMap::new(pos.len(), &zero, &ties))
+    // `u(width, y) = e^{i phase} u(0, y)`: one period further along, the Bloch wave's phase.
+    let phase_factor = C64::from_polar(1.0, phase);
+    let ties: Vec<_> = (0..positions.len())
+        .filter(|&dof| is_at(positions[dof].0, width) && !on_wall(positions[dof]))
+        .map(|dof| (dof, left[&grid_row(positions[dof].1)], phase_factor))
+        .collect();
+    Ok(DofMap::new(positions.len(), &zero, &ties))
 }
 
 /// Points evenly along a line across the period at height `y` on the mesh: each one's `x`,
 /// its cell, and the basis there.
 fn line_points(req: &Request2d, space: &H1Triangle, y: f64) -> Result<Vec<(f64, usize, [f64; 6])>, String> {
-    let near: Vec<usize> =
-        (0..space.n_cells()).filter(|&c| (space.mesh.centroid(c).1 - y).abs() < 4.0 * req.cell).collect();
+    let near: Vec<usize> = (0..space.n_cells())
+        .filter(|&cell| (space.mesh.centroid(cell).1 - y).abs() < 4.0 * req.cell)
+        .collect();
     let steps = steps_in(req.width, req.cell / 4.0);
     (0..steps)
         .map(|i| {
             let x = (i as f64 + 0.5) * req.width / steps as f64;
-            let c = *near.iter().find(|&&c| space.contains(c, x, y)).ok_or("a line lies outside the mesh")?;
-            Ok((x, c, space.basis_at(c, x, y)))
+            let cell = *near
+                .iter()
+                .find(|&&cell| space.contains(cell, x, y))
+                .ok_or("a line lies outside the mesh")?;
+            Ok((x, cell, space.basis_at(cell, x, y)))
         })
         .collect()
 }
@@ -65,7 +74,7 @@ fn line_material(
     points: &[(f64, usize, [f64; 6])],
 ) -> Result<(f64, f64), String> {
     let region = space.mesh.region[points[0].1];
-    if points.iter().any(|p| space.mesh.region[p.1] != region) {
+    if points.iter().any(|point| space.mesh.region[point.1] != region) {
         return Err("a grating's reflect and transmit lines must lie in uniform material".into());
     }
     Ok((coef[region].0.re, coef[region].1.re))
@@ -73,16 +82,16 @@ fn line_material(
 
 /// Adds `weight` times the mean over a line of `u exp(-i kx x)`, which picks out one order.
 fn add_order(space: &H1Triangle, points: &[(f64, usize, [f64; 6])], kx: f64, weight: C64, out: &mut Reading) {
-    let mut d = vec![0; 6];
-    for (x, c, basis) in points {
-        space.cell_dofs(*c, &mut d);
-        let at = C64::from_polar(1.0, -kx * x) * weight / points.len() as f64;
-        d.iter().zip(basis).for_each(|(&g, &v)| out.push((g, at * v)));
+    let mut cell_dofs = vec![0; 6];
+    for (x, cell, basis) in points {
+        space.cell_dofs(*cell, &mut cell_dofs);
+        let factor = C64::from_polar(1.0, -kx * x) * weight / points.len() as f64;
+        cell_dofs.iter().zip(basis).for_each(|(&dof, &value)| out.push((dof, factor * value)));
     }
 }
 
 fn read(reading: &Reading, u: &[C64]) -> C64 {
-    reading.iter().map(|&(g, c)| c * u[g]).sum()
+    reading.iter().map(|&(dof, coefficient)| coefficient * u[dof]).sum()
 }
 
 /// Readings of one order's upward and downward amplitudes, from lines spaced `gap` apart.
@@ -96,16 +105,20 @@ fn split_order(
 ) -> (Reading, Reading) {
     let n = lines.len() as f64;
     let wave = |j: usize, sign: f64| C64::from_polar(1.0, sign * ky * gap * j as f64);
-    let s: C64 = (0..lines.len()).map(|j| wave(j, -2.0)).sum();
-    let det = n * n - s.norm_sqr();
+    // The 2 x 2 normal equations have `n` on the diagonal and `cross` off it, so their
+    // inverse is written out, and each line's reading gets its own weight.
+    let cross: C64 = (0..lines.len()).map(|j| wave(j, -2.0)).sum();
+    let det = n * n - cross.norm_sqr();
     let (mut up, mut down) = (vec![], vec![]);
     for (j, points) in lines.iter().enumerate() {
-        add_order(space, points, kx, (wave(j, -1.0) * n - s * wave(j, 1.0)) / det, &mut up);
-        add_order(space, points, kx, (wave(j, 1.0) * n - s.conj() * wave(j, -1.0)) / det, &mut down);
+        add_order(space, points, kx, (wave(j, -1.0) * n - cross * wave(j, 1.0)) / det, &mut up);
+        add_order(space, points, kx, (wave(j, 1.0) * n - cross.conj() * wave(j, -1.0)) / det, &mut down);
     }
     (up, down)
 }
 
+/// The share of the incident power in each reflected and transmitted order (chapter 15). With
+/// a density and a goal order, also the slope of that order's share for each pixel.
 pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
     let Analysis2d::Grating { wavelength, angle_deg, pml, source_y, reflect_y, transmit_y, goal } =
         req.analysis
@@ -167,12 +180,12 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
     let lu = SparseLu::factor(&a, &ordering);
     // The sheet, with the wave's own phase along x.
     let mut u = vec![ZERO; dofs.n_free];
-    let mut d = vec![0; 6];
-    for (x, c, basis) in line_points(req, &space, source_y + pml)? {
-        space.cell_dofs(c, &mut d);
-        for (&g, &v) in d.iter().zip(&basis) {
-            if let Some((r, f)) = dofs.map[g] {
-                u[r] += f.conj() * I * k0 * v * C64::from_polar(1.0, kx * x);
+    let mut cell_dofs = vec![0; 6];
+    for (x, cell, basis) in line_points(req, &space, source_y + pml)? {
+        space.cell_dofs(cell, &mut cell_dofs);
+        for (&dof, &value) in cell_dofs.iter().zip(&basis) {
+            if let Some((row, factor)) = dofs.map[dof] {
+                u[row] += factor.conj() * I * k0 * value * C64::from_polar(1.0, kx * x);
             }
         }
     }
@@ -186,10 +199,11 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
     for (transmitted, name, material) in [(false, "reflected", above), (true, "transmitted", under)] {
         let (mut labels, mut shares) = (vec![], vec![]);
         for (m, km, ky) in orders(wavenumber(material)) {
+            // Below the grating only downward waves remain, so one line reads an order.
             let reading = if transmitted {
-                let mut r = vec![];
-                add_order(&space, &below, km, C64::new(1.0, 0.0), &mut r);
-                r
+                let mut reading = vec![];
+                add_order(&space, &below, km, C64::new(1.0, 0.0), &mut reading);
+                reading
             } else {
                 split_order(&space, &lines, km, ky, gap).0
             };
@@ -197,7 +211,7 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
             let share = ratio * read(&reading, &u).norm_sqr();
             labels.push(m as f64);
             shares.push(share);
-            if goal.is_some_and(|g| g.transmitted == transmitted && g.order == m) {
+            if goal.is_some_and(|wanted| wanted.transmitted == transmitted && wanted.order == m) {
                 goal_reading = Some((reading, ratio));
             }
         }
@@ -206,16 +220,16 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
     }
     let mut out = open_output(req, &space, &dofs, pml, &u, FieldMeta { k0, ..Default::default() });
     out.channels.extend(channels);
-    if let (Some(density), Some(g)) = (&req.density, goal) {
-        let (reading, ratio) = goal_reading.ok_or(format!("order {} carries no power here", g.order))?;
+    if let (Some(density), Some(wanted)) = (&req.density, goal) {
+        let (reading, ratio) = goal_reading.ok_or(format!("order {} carries no power here", wanted.order))?;
         // With `s = r |a|^2 / |i|^2`, `ds = 2 Re(g^T du)`, and `A^T w = g` gives `ds = -2 Re(w^T dA u)`.
         // The incident amplitude `i` is in `g` because the mesh's own version of it moves slightly.
         let value = read(&reading, &u);
         let mut w = vec![ZERO; dofs.n_free];
         let mut load = |terms: &Reading, scale: C64| {
-            for &(g, c) in terms {
-                if let Some((r, f)) = dofs.map[g] {
-                    w[r] += f * c * scale;
+            for &(dof, coefficient) in terms {
+                if let Some((row, factor)) = dofs.map[dof] {
+                    w[row] += factor * coefficient * scale;
                 }
             }
         };
@@ -224,7 +238,8 @@ pub(super) fn solve(req: &Request2d) -> Result<Output, String> {
         load(&incident, -amplitude.conj() * ratio * value.norm_sqr() / norm);
         lu.solve_transposed(&mut w);
         // Back onto all dofs: the ties enter `dA` through `Z^H`, so `w` picks up conjugated phases.
-        let full: Vec<C64> = dofs.map.iter().map(|m| m.map_or(ZERO, |(r, f)| w[r] * f.conj())).collect();
+        let full: Vec<C64> =
+            dofs.map.iter().map(|entry| entry.map_or(ZERO, |(row, factor)| w[row] * factor.conj())).collect();
         let (gradient, _) = pixel_slopes(req, density, &space, pml, C64::new(k0, 0.0), &full, &u);
         out.channels.push(("gradient".into(), gradient));
     }

@@ -17,30 +17,37 @@ fn points(
     (x, y, angle_deg): (f64, f64, f64),
     k0: f64,
 ) -> Result<[(f64, f64, usize, f64); 2], String> {
+    // Half a cell is the spacing of mid-edge nodes on the grid.
     let step = req.cell / 2.0;
-    let (ny, nx) = angle_deg.to_radians().sin_cos();
+    // The dipole points along `d = (cos, sin)`, and its two points sit along `n = (-sin, cos)`.
+    let (sin, cos) = angle_deg.to_radians().sin_cos();
     let weight = 2f64.sqrt() / k0 / (2.0 * step);
     let point = |sign: f64| {
-        let (px, py) = (x - sign * step * ny, y + sign * step * nx);
-        locate(space, px, py).map(|c| (px, py, c, sign * weight)).ok_or("the source lies outside the mesh")
+        let (px, py) = (x - sign * step * sin, y + sign * step * cos);
+        locate(space, px, py)
+            .map(|cell| (px, py, cell, sign * weight))
+            .ok_or("the source lies outside the mesh")
     };
     Ok([point(1.0)?, point(-1.0)?])
 }
 
-/// The dipole as `e_0`, with `p` read at each of its points. `at` is on the mesh.
+/// The dipole as `e_0`, with `p` read at each of its points. `placed` is `(x, y, angle)` on
+/// the extended mesh.
 pub(super) fn load(
     req: &Request2d,
     space: &H1Triangle,
     dofs: &DofMap,
     coef: &[(C64, C64)],
     pml: f64,
-    at: (f64, f64, f64),
+    placed: (f64, f64, f64),
     k0: f64,
 ) -> Result<Vec<(usize, f64)>, String> {
     let mut load = vec![];
-    for (px, py, c, weight) in points(req, space, at, k0)? {
-        let p = cell_material(req, space.mesh, coef, pml, c).0.re;
-        load.extend(cell_load(space, dofs, c, px, py).into_iter().map(|(r, v)| (r, v * p * weight)));
+    for (px, py, cell, weight) in points(req, space, placed, k0)? {
+        let p = cell_material(req, space.mesh, coef, pml, cell).0.re;
+        load.extend(
+            cell_load(space, dofs, cell, px, py).into_iter().map(|(row, value)| (row, value * p * weight)),
+        );
     }
     Ok(load)
 }
@@ -54,17 +61,18 @@ pub(super) fn add_source_slope(
     density: &Density,
     space: &H1Triangle,
     pml: f64,
-    at: (f64, f64, f64),
+    placed: (f64, f64, f64),
     k0: f64,
     u: &[C64],
     gradient: &mut [f64],
     imaginary: &mut [f64],
 ) -> Result<(), String> {
-    let mut d = vec![0; 6];
-    for (px, py, c, weight) in points(req, space, at, k0)? {
-        let Some(pixel) = pixel_of(req, space.mesh, pml, c) else { continue };
-        space.cell_dofs(c, &mut d);
-        let value: C64 = d.iter().zip(space.basis_at(c, px, py)).map(|(&g, v)| u[g] * v).sum();
+    let mut cell_dofs = vec![0; 6];
+    for (px, py, cell, weight) in points(req, space, placed, k0)? {
+        let Some(pixel) = pixel_of(req, space.mesh, pml, cell) else { continue };
+        space.cell_dofs(cell, &mut cell_dofs);
+        let value: C64 =
+            cell_dofs.iter().zip(space.basis_at(cell, px, py)).map(|(&dof, basis)| u[dof] * basis).sum();
         let deps = density.eps_high - density.eps_low;
         let eps = density.eps_low + density.rho[pixel] * deps;
         let change = value * 4.0 * weight * deps / (eps * eps);
