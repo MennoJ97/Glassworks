@@ -1,13 +1,12 @@
 # 2D solver plan
 
-The agreed plan for adding 2D. Pick up at the first milestone that isn't marked done,
-and update this file as things land. Delete it, with `plans/probe-2d/` and `plans/probe-sparse/`, once the last
-milestone is finished and the tutorial covers what's here.
+The plan for adding 2D, kept now as the record of what was measured.
 
-**Status (2026-11-01):** milestones 1 to 5 are built, apart from one optional item. Cavities,
-band diagrams, open scattering, leaky modes, waveguide bends and inverse design run on the page,
-tested against exact and independent results. **What's left is a proper 2D tutorial chapter,
-and optionally optimizing the cavity.** The solver numbers below come from the throwaway probe in
+**Status (2026-11-05): finished.** Milestones 1 to 6 are built, and the cavity is optimized in both
+polarizations. Chapters 9 to 19 of the tutorial teach what's here. Nothing below is planned: "After
+milestone 6, not yet ordered" lists ideas, and recommends not starting vector fields. The file stays,
+with the probes, because the tutorial's numbers and several "don't build it" verdicts are recorded only
+here. Check it before re-measuring something. The solver numbers below come from the throwaway probe in
 [`probe-2d/`](probe-2d/).
 
 ## Decisions
