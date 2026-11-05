@@ -38,6 +38,8 @@ It has the same eigenvectors, but eigenvalues close to $\sigma$ now have the *la
 $|\theta|$. The modes you want have become the easiest to find
 ([Ericsson & Ruhe 1980](20-references.md#ericsson-ruhe-1980)).
 
+![Two number lines: eigenvalues lambda with the shift sigma, and their images theta](figures/shift-invert.svg "The lowest eigenvalues of a unit cavity, $\lambda = (m\pi)^2$, and what shift and invert makes of them with $\sigma = 130$. $\lambda_4$ is the nearest to $\sigma$, so its $\theta$ is by far the largest, and it's the one the iteration finds first.")
+
 Applying the operator means solving a linear system, but we only factor
 $A - \sigma B$ once and reuse the factors each iteration. Chapter 5's fast solver is
 what makes this cheap.

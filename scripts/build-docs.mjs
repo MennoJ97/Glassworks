@@ -219,6 +219,15 @@ function renderer(page, files, used, markdown) {
         use(ref);
         return `<a class="code-ref" href="${refHref(ref, '')}" data-code="${refAttr([ref])}"><code>${escapeHtml(text)}</code></a>`;
       },
+      // A paragraph that is only a figure, ![description](figures/name.svg "caption"), puts the
+      // drawing in the page itself, so it takes the reader's light or dark colours.
+      paragraph({ tokens }) {
+        const image = tokens.length === 1 && tokens[0].type === 'image' && tokens[0];
+        if (!image || !image.href.startsWith('figures/')) return false;
+        const svg = readFileSync(join(docs, image.href), 'utf8').trim().replace('<svg ', `<svg role="img" aria-label="${escapeHtml(image.text)}" `);
+        const caption = image.title ? `<figcaption>${marked.parseInline(image.title)}</figcaption>` : '';
+        return `<figure class="figure"><div class="figure-art">${svg}</div>${caption}</figure>\n`;
+      },
       // Wide tables scroll on their own, rather than widening the whole page.
       table(token) {
         return `<div class="table-scroll">${tableHtml(this, token)}</div>\n`;
@@ -257,7 +266,7 @@ const MARK = '<svg class="mark" aria-hidden="true" focusable="false" viewBox="0 
 // The button that opens the chapter list over the page.
 const MENU = '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 
-function layout({ title, body, current, prefix = '', panel = '', license = TEXT_LICENSE }) {
+function layout({ title, body, current, prefix = '', panel = '', pager = '', license = TEXT_LICENSE }) {
   const links = chapters
     .map((c) => `${c.file.startsWith(FIRST_OPTIONAL) ? '<li class="part">Going further</li>\n        ' : ''}<li><a href="${prefix}${c.href}"${c.href === current ? ' aria-current="page"' : ''}>${escapeHtml(c.title)}</a></li>`)
     .join('\n      ');
@@ -272,7 +281,7 @@ function layout({ title, body, current, prefix = '', panel = '', license = TEXT_
 <link rel="stylesheet" href="${prefix}../learn.css">${
     panel
       ? `
-<script>try { if (localStorage.getItem('code-panel') === 'off') document.documentElement.classList.add('code-off'); } catch {}</script>
+<script>try { const c = document.documentElement.classList; if (localStorage.getItem('code-panel') === 'off') c.add('code-off'); if (localStorage.getItem('code-known')) c.add('code-known'); } catch {}</script>
 <script type="module" src="${prefix}../learn.js"></script>`
       : ''
   }
@@ -300,7 +309,7 @@ function layout({ title, body, current, prefix = '', panel = '', license = TEXT_
     <script>{ const nav = document.currentScript.parentElement; nav.addEventListener('toggle', (e) => e.newState === 'open' && nav.querySelector('[aria-current=page]')?.scrollIntoView({ block: 'center' })); }</script>
   </nav>
   <main>
-${body}
+${body}${pager}
     <footer class="learn-footer">${license}</footer>
   </main>${panel ? `\n  ${panel}` : ''}
 </div>
@@ -336,15 +345,31 @@ function chapter(file, markdown) {
   return { html, used };
 }
 
+// The pages in reading order, for the links at the foot of each one.
+const order = [{ href: 'index.html', title: 'Start here' }, ...chapters];
+function pager(href) {
+  const at = order.findIndex((c) => c.href === href);
+  const link = (c, rel, label) => c ? `<a href="${c.href}" rel="${rel}"><span>${label}</span>${escapeHtml(c.title)}</a>` : '<span></span>';
+  return `\n    <nav class="pager" aria-label="Previous and next chapter">${link(order[at - 1], 'prev', 'Previous')}${link(order[at + 1], 'next', 'Next')}</nav>`;
+}
+
+// The index's chapter lists become a contents: a number, the title, and its gloss under it.
+const contents = (html) =>
+  html
+    .replace(/<ol( start="\d+")?>\n(?=<li><a href="\d\d-)/g, '<ol class="contents"$1>\n')
+    .replace(/<li><a href="((\d\d)-[^"]+\.html)">([\s\S]*?)<\/a>: ([\s\S]*?)<\/li>/g, (_, href, n, title, gloss) => `<li><span class="n" aria-hidden="true">${+n}</span><a href="${href}">${title}</a><span>${gloss}</span></li>`);
+
 for (const file of ['README.md', ...chapters.map((c) => c.file)]) {
   const markdown = readFileSync(join(docs, file), 'utf8');
   const href = file === 'README.md' ? 'index.html' : file.replace(/\.md$/, '.html');
   const title = /^# (.+)$/m.exec(markdown)[1];
-  const { html, used } = chapter(file, markdown);
+  let { html, used } = chapter(file, markdown);
   const panel = file === 'README.md' || !used.length ? '' : codePanel(used);
   const hint = panel ? '<p class="code-hint">This chapter\'s code is beside the text. Point at a name in <code>code</code> type, or a passage marked in the margin, to see the lines that do it.</p>\n' : '';
+  // The closing "Next: ..." line is for GitHub; here the links at the foot do its job.
+  html = file === 'README.md' ? contents(html) : html.replace(/<p>Next: [\s\S]*?<\/p>\n?$/, '');
   const body = `<article>${html.replace(/<\/h1>\n/, (h) => h + hint)}</article>`;
-  write(href, layout({ title, body, current: href, panel }));
+  write(href, layout({ title, body, current: href, panel, pager: pager(href) }));
 }
 
 for (const file of index) {

@@ -68,6 +68,8 @@ folds flat, with both sides of the ring numbered alternately, giving a bandwidth
 neighbours end up at most 2 apart, and reversing keeps that. The test
 `rcm_folds_a_ring_to_a_narrow_band` confirms this.
 
+![A ring of 12 nodes and its matrix, numbered along the line and then by reverse Cuthill-McKee](figures/ring-ordering.svg "A periodic line of 12 cells, its last node tied to its first, and its matrix, from the solver. Numbered along the line, the tie puts entries in the far corners, in red. `rcm` numbers the two sides of the ring alternately, so every entry lands within 2 of the diagonal.")
+
 `BandedLu::factor` then factors the renumbered matrix $PAP^T$, where the permutation
 $P$ moves old dof `perm[k]` to position $k$. Since $A\mathbf{x} = \mathbf{b}$ is the same
 as $PAP^T(P\mathbf{x}) = P\mathbf{b}$, `solve` permutes the right-hand side on the way

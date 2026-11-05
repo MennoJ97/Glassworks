@@ -114,6 +114,8 @@ grid and moves the grid nodes near an outline onto it. It takes three steps:
    slivers, and a flip that would cross an outline is refused, so every triangle stays in one material.
 <!-- code: Mesh::fitted_grid "mesh.snap" .. "flip_to_delaunay" -->
 
+![A circle meshed two ways: a staircase grid, and a grid fitted to the circle](figures/fitted-mesh.svg "A rod on a 16 × 16 grid, meshed by `Mesh::fitted_grid`. The staircase gives each triangle the material at its centre, so its outline is jagged against the true circle, dashed. Fitting moves nodes onto the circle, so triangle edges follow it.")
+
 A triangle's material is then read at its centroid. Over 200 random placements, the worst angle was
 22° for circles and 16° for rectangles.
 <!-- code: Mesh::fitted_grid "mesh.region =" .. ".collect()" -->

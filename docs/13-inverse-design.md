@@ -67,6 +67,8 @@ the problem nearly impossible, since every pixel's slope would be zero or huge, 
 structure sharpens gradually. The slope of $\hat\rho$ joins the chain rule.
 <!-- code: optimize "for (const beta of SHARPNESS)" .. "x = mma.step" -->
 
+![Five squares of pixels going from grey to black and white](figures/design-sharpening.svg "The density of the bend below, at the end of four of its stages and after the final projection, from the same code run outside the browser. Grey pixels mix the two materials. As $\beta$ grows, each is pushed to one or the other.")
+
 The optimizer's own variables $x$ are the densities before filtering, so $\tilde\rho = Wx$, where $W$ holds the filter's
 weights. A goal $J$ then has the slope
 

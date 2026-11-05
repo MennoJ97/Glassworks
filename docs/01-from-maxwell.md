@@ -103,4 +103,6 @@ fields are continuous across an interface that carries no current sheet. So $u'$
 $u''$ certainly isn't. That's a real problem for any method that needs second
 derivatives, and it's the reason for the next chapter.
 
+![Graph of u and E_z along a line through air, a glass slab and air again](figures/interface-kink.svg "A TM plane wave crossing a glass slab with ε = 4, from the solver. Where $p = 1/\varepsilon$ jumps, $u = \eta_0 H_y$ has a corner (circled). $E_z$, which is $p u'$ up to a constant factor, is continuous across it.")
+
 Next: [the weak form](02-weak-form.md).

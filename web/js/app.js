@@ -172,7 +172,16 @@ function renderLayers() {
       const m = MATERIALS.find((m) => m.name === select.value);
       Object.assign(l, m ?? { name: 'Custom' });
     }));
-    const custom = (key) => (v) => { l[key] = v; l.name = 'Custom'; select.value = 'Custom'; changed(); };
+    // The row's edge is tinted like its layer in the field plot, so the stacked rows read as
+    // the structure's cross-section. tint() matches drawLayers in plot.js.
+    const edge = document.createElement('td');
+    edge.className = 'edge';
+    const tint = () => {
+      edge.style.setProperty('--tint', `${Math.min(55, 30 * Math.max(0, l.n - 1) / 1.2)}%`);
+      edge.classList.toggle('lossy', l.k > 0);
+    };
+    tint();
+    const custom = (key) => (v) => { l[key] = v; l.name = 'Custom'; select.value = 'Custom'; tint(); changed(); };
 
     const cells = [
       select,
@@ -194,6 +203,7 @@ function renderLayers() {
         if (state.layers.length > 1) state.layers.splice(i, 1);
       })),
     );
+    row.append(edge);
     for (const c of [...cells, actions]) {
       const td = document.createElement('td');
       td.append(c);

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="fig" viewBox="0 0 640 184" width="640" height="184">
+<style>
+.fig text { font: 13px var(--font, "Helvetica Neue", Helvetica, Arial, sans-serif); fill: var(--muted, #666663); }
+.fig .title { fill: var(--ink, #111111); font-weight: 700; }
+.fig .ink-text { fill: var(--ink, #111111); }
+.fig .math { font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", serif; font-style: italic; font-size: 15px; fill: var(--ink, #111111); }
+.fig .upright { font-style: normal; }
+.fig .halo { paint-order: stroke; stroke: var(--bg, #F5F5F3); stroke-width: 5px; stroke-linejoin: round; }
+.fig .s-bg { stroke: var(--bg, #F5F5F3); fill: none; }
+.fig .f-bg { fill: var(--bg, #F5F5F3); }
+.fig .s-ink { stroke: var(--ink, #111111); fill: none; }
+.fig .f-ink { fill: var(--ink, #111111); }
+.fig .s-muted { stroke: var(--muted, #666663); fill: none; }
+.fig .f-muted { fill: var(--muted, #666663); }
+.fig .s-rule { stroke: var(--rule, #D6D6D2); fill: none; }
+.fig .f-rule { fill: var(--rule, #D6D6D2); }
+.fig .s-grid { stroke: var(--grid, #E2E2DE); fill: none; }
+.fig .f-grid { fill: var(--grid, #E2E2DE); }
+.fig .s-glass { stroke: var(--glass, #0F6E78); fill: none; }
+.fig .f-glass { fill: var(--glass, #0F6E78); }
+.fig .s-red { stroke: var(--series-1, #b5173f); fill: none; }
+.fig .f-red { fill: var(--series-1, #b5173f); }
+.fig .s-blue { stroke: var(--series-2, #2458d3); fill: none; }
+.fig .f-blue { fill: var(--series-2, #2458d3); }
+.fig .s-amber { stroke: var(--series-3, #9a6a00); fill: none; }
+.fig .f-amber { fill: var(--series-3, #9a6a00); }
+</style>
+<rect width="640" height="184" class="f-bg"/>
+<line x1="60" y1="56" x2="600" y2="56" class="s-ink"/><line x1="60" y1="150" x2="600" y2="150" class="s-ink"/><line x1="60" y1="56" x2="60" y2="60" class="s-ink"/><line x1="195" y1="56" x2="195" y2="60" class="s-ink"/><line x1="330" y1="56" x2="330" y2="60" class="s-ink"/><line x1="465" y1="56" x2="465" y2="60" class="s-ink"/><line x1="600" y1="56" x2="600" y2="60" class="s-ink"/><line x1="137.14" y1="150" x2="137.14" y2="154" class="s-ink"/><line x1="291.43" y1="150" x2="291.43" y2="154" class="s-ink"/><line x1="445.71" y1="150" x2="445.71" y2="154" class="s-ink"/><line x1="600" y1="150" x2="600" y2="154" class="s-ink"/><text x="46" y="61" class="math" text-anchor="end">λ</text><text x="46" y="155" class="math" text-anchor="end">θ</text><line x1="235.5" y1="34" x2="235.5" y2="56" class="s-ink" stroke-dasharray="3 3"/><text x="235.5" y="28" class="math" text-anchor="middle">σ</text><line x1="73.32" y1="56" x2="227.21" y2="150" class="s-muted" stroke-opacity="0.5"/><circle cx="73.32" cy="56" r="4.5" class="f-muted"/><circle cx="227.21" cy="150" r="4.5" class="f-muted"/><text x="73.32" y="46" class="math" text-anchor="middle" font-size="13">λ<tspan font-size="10" dy="3" class="upright">1</tspan></text><line x1="113.3" y1="56" x2="206.21" y2="150" class="s-muted" stroke-opacity="0.5"/><circle cx="113.3" cy="56" r="4.5" class="f-muted"/><circle cx="206.21" cy="150" r="4.5" class="f-muted"/><text x="113.3" y="46" class="math" text-anchor="middle" font-size="13">λ<tspan font-size="10" dy="3" class="upright">2</tspan></text><line x1="179.92" y1="56" x2="104.07" y2="150" class="s-muted" stroke-opacity="0.5"/><circle cx="179.92" cy="56" r="4.5" class="f-muted"/><circle cx="104.07" cy="150" r="4.5" class="f-muted"/><text x="179.92" y="46" class="math" text-anchor="middle" font-size="13">λ<tspan font-size="10" dy="3" class="upright">3</tspan></text><line x1="273.18" y1="56" x2="567.79" y2="150" class="s-glass" stroke-width="2"/><circle cx="273.18" cy="56" r="4.5" class="f-glass"/><circle cx="567.79" cy="150" r="4.5" class="f-glass"/><text x="273.18" y="46" class="math" text-anchor="middle" font-size="13">λ<tspan font-size="10" dy="3" class="upright">4</tspan></text><line x1="393.1" y1="56" x2="357.51" y2="150" class="s-muted" stroke-opacity="0.5"/><circle cx="393.1" cy="56" r="4.5" class="f-muted"/><circle cx="357.51" cy="150" r="4.5" class="f-muted"/><text x="393.1" y="46" class="math" text-anchor="middle" font-size="13">λ<tspan font-size="10" dy="3" class="upright">5</tspan></text><line x1="539.66" y1="56" x2="325.67" y2="150" class="s-muted" stroke-opacity="0.5"/><circle cx="539.66" cy="56" r="4.5" class="f-muted"/><circle cx="325.67" cy="150" r="4.5" class="f-muted"/><text x="539.66" y="46" class="math" text-anchor="middle" font-size="13">λ<tspan font-size="10" dy="3" class="upright">6</tspan></text><text x="60" y="74" class="halo" text-anchor="middle">0</text><text x="195" y="74" class="halo" text-anchor="middle">100</text><text x="330" y="74" class="halo" text-anchor="middle">200</text><text x="465" y="74" class="halo" text-anchor="middle">300</text><text x="600" y="74" class="halo" text-anchor="middle">400</text><text x="137.14" y="168" class="halo" text-anchor="middle">−0.02</text><text x="291.43" y="168" class="halo" text-anchor="middle">0</text><text x="445.71" y="168" class="halo" text-anchor="middle">0.02</text><text x="600" y="168" class="halo" text-anchor="middle">0.04</text>
+</svg>

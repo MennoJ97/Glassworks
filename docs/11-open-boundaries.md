@@ -24,6 +24,8 @@ ordinary absorbing material could manage. Dividing by $k$ makes the decay rate t
 in a background without dispersion ([Johnson 2021](20-references.md#johnson-2021)).
 A wall at the far side of the layer reflects what's left, which has been reduced by the round trip.
 
+![A map of a wave spreading from a point and fading at the edges, and a cut through it](figures/absorbing-layer.svg "A line source in empty space, from the solver: $E_z$ at one instant, red and blue for opposite signs. The waves leave the domain, dashed, and die out in the layer without reflecting, so the walls behind it see almost nothing.")
+
 To get the equations, each derivative along $x$ becomes $\frac{1}{s_x}\partial_x$, and the area
 element becomes $s_x s_y\,dA$. In the weak form's $x$ term, that's
 

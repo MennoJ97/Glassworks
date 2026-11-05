@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="fig" viewBox="0 0 640 302" width="640" height="302">
+<style>
+.fig text { font: 13px var(--font, "Helvetica Neue", Helvetica, Arial, sans-serif); fill: var(--muted, #666663); }
+.fig .title { fill: var(--ink, #111111); font-weight: 700; }
+.fig .ink-text { fill: var(--ink, #111111); }
+.fig .math { font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", serif; font-style: italic; font-size: 15px; fill: var(--ink, #111111); }
+.fig .upright { font-style: normal; }
+.fig .halo { paint-order: stroke; stroke: var(--bg, #F5F5F3); stroke-width: 5px; stroke-linejoin: round; }
+.fig .s-bg { stroke: var(--bg, #F5F5F3); fill: none; }
+.fig .f-bg { fill: var(--bg, #F5F5F3); }
+.fig .s-ink { stroke: var(--ink, #111111); fill: none; }
+.fig .f-ink { fill: var(--ink, #111111); }
+.fig .s-muted { stroke: var(--muted, #666663); fill: none; }
+.fig .f-muted { fill: var(--muted, #666663); }
+.fig .s-rule { stroke: var(--rule, #D6D6D2); fill: none; }
+.fig .f-rule { fill: var(--rule, #D6D6D2); }
+.fig .s-grid { stroke: var(--grid, #E2E2DE); fill: none; }
+.fig .f-grid { fill: var(--grid, #E2E2DE); }
+.fig .s-glass { stroke: var(--glass, #0F6E78); fill: none; }
+.fig .f-glass { fill: var(--glass, #0F6E78); }
+.fig .s-red { stroke: var(--series-1, #b5173f); fill: none; }
+.fig .f-red { fill: var(--series-1, #b5173f); }
+.fig .s-blue { stroke: var(--series-2, #2458d3); fill: none; }
+.fig .f-blue { fill: var(--series-2, #2458d3); }
+.fig .s-amber { stroke: var(--series-3, #9a6a00); fill: none; }
+.fig .f-amber { fill: var(--series-3, #9a6a00); }
+</style>
+<rect width="640" height="302" class="f-bg"/>
+<rect x="70" y="214.38" width="450" height="41.63" class="f-grid"/><text x="512" y="246" text-anchor="end">round-off</text><line x1="70" y1="47.88" x2="520" y2="47.88" class="s-grid"/><text x="62" y="51.88" text-anchor="end">10<tspan font-size="9" dy="-6">0</tspan></text><line x1="70" y1="103.38" x2="520" y2="103.38" class="s-grid"/><text x="62" y="107.38" text-anchor="end">10<tspan font-size="9" dy="-6">−4</tspan></text><line x1="70" y1="158.88" x2="520" y2="158.88" class="s-grid"/><text x="62" y="162.88" text-anchor="end">10<tspan font-size="9" dy="-6">−8</tspan></text><line x1="70" y1="214.38" x2="520" y2="214.38" class="s-grid"/><text x="62" y="218.38" text-anchor="end">10<tspan font-size="9" dy="-6">−12</tspan></text><line x1="70" y1="256" x2="70" y2="260" class="s-rule"/><text x="70" y="274" text-anchor="middle">2</text><line x1="182.5" y1="256" x2="182.5" y2="260" class="s-rule"/><text x="182.5" y="274" text-anchor="middle">4</text><line x1="295" y1="256" x2="295" y2="260" class="s-rule"/><text x="295" y="274" text-anchor="middle">8</text><line x1="407.5" y1="256" x2="407.5" y2="260" class="s-rule"/><text x="407.5" y="274" text-anchor="middle">16</text><line x1="520" y1="256" x2="520" y2="260" class="s-rule"/><text x="520" y="274" text-anchor="middle">32</text><line x1="70" y1="256" x2="520" y2="256" class="s-rule"/><line x1="70" y1="34" x2="70" y2="256" class="s-rule"/><text x="520" y="292" text-anchor="end">Cells</text><text x="70" y="20">Error in the lowest eigenvalue</text><polyline points="70,43.32 182.5,51.85 295,60.29 407.5,68.66 520,77.02" class="s-glass" stroke-width="2" stroke-opacity="0.35"/><circle cx="70" cy="43.32" r="3.2" class="f-glass" fill-opacity="0.35"/><circle cx="182.5" cy="51.85" r="3.2" class="f-glass" fill-opacity="0.35"/><circle cx="295" cy="60.29" r="3.2" class="f-glass" fill-opacity="0.35"/><circle cx="407.5" cy="68.66" r="3.2" class="f-glass" fill-opacity="0.35"/><circle cx="520" cy="77.02" r="3.2" class="f-glass" fill-opacity="0.35"/><text x="188.5" y="43.85" class="ink-text halo">order 1</text><polyline points="70,63.54 182.5,79.74 295,96.3 407.5,112.97 520,129.67" class="s-glass" stroke-width="2" stroke-opacity="0.51"/><circle cx="70" cy="63.54" r="3.2" class="f-glass" fill-opacity="0.51"/><circle cx="182.5" cy="79.74" r="3.2" class="f-glass" fill-opacity="0.51"/><circle cx="295" cy="96.3" r="3.2" class="f-glass" fill-opacity="0.51"/><circle cx="407.5" cy="112.97" r="3.2" class="f-glass" fill-opacity="0.51"/><circle cx="520" cy="129.67" r="3.2" class="f-glass" fill-opacity="0.51"/><text x="188.5" y="71.74" class="ink-text halo">order 2</text><polyline points="70,87.7 182.5,112.37 295,137.33 407.5,162.37 520,187.42" class="s-glass" stroke-width="2" stroke-opacity="0.68"/><circle cx="70" cy="87.7" r="3.2" class="f-glass" fill-opacity="0.68"/><circle cx="182.5" cy="112.37" r="3.2" class="f-glass" fill-opacity="0.68"/><circle cx="295" cy="137.33" r="3.2" class="f-glass" fill-opacity="0.68"/><circle cx="407.5" cy="162.37" r="3.2" class="f-glass" fill-opacity="0.68"/><circle cx="520" cy="187.42" r="3.2" class="f-glass" fill-opacity="0.68"/><text x="188.5" y="104.37" class="ink-text halo">order 3</text><polyline points="70,115.45 182.5,148.57 295,181.89 407.5,213.43 520,201.04" class="s-glass" stroke-width="2" stroke-opacity="0.84"/><circle cx="70" cy="115.45" r="3.2" class="f-glass" fill-opacity="0.84"/><circle cx="182.5" cy="148.57" r="3.2" class="f-glass" fill-opacity="0.84"/><circle cx="295" cy="181.89" r="3.2" class="f-glass" fill-opacity="0.84"/><circle cx="407.5" cy="213.43" r="3.2" class="f-glass" fill-opacity="0.84"/><circle cx="520" cy="201.04" r="3.2" class="f-glass" fill-opacity="0.84"/><text x="188.5" y="140.57" class="ink-text halo">order 4</text><polyline points="70,145.98 182.5,187.49 295,213.29 407.5,216.84 520,194.36" class="s-glass" stroke-width="2" stroke-opacity="1"/><circle cx="70" cy="145.98" r="3.2" class="f-glass" fill-opacity="1"/><circle cx="182.5" cy="187.49" r="3.2" class="f-glass" fill-opacity="1"/><circle cx="295" cy="213.29" r="3.2" class="f-glass" fill-opacity="1"/><circle cx="407.5" cy="216.84" r="3.2" class="f-glass" fill-opacity="1"/><circle cx="520" cy="194.36" r="3.2" class="f-glass" fill-opacity="1"/><text x="188.5" y="179.49" class="ink-text halo">order 5</text>
+</svg>

@@ -74,19 +74,19 @@ a:hover { text-decoration-color: var(--accent); }
 .masthead { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; padding: 34px 0 24px; }
 .masthead p { margin: 10px 0 0; max-width: 62ch; color: var(--muted); font-size: 17px; line-height: 1.5; }
 
-.problems {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-bottom: 18px;
-  background: var(--rule); border: 1px solid var(--rule);
-}
+.problems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 32px; margin: 0 0 22px; }
+/* Each problem sits under a hairline; the chosen one's thickens, like the pointer on a
+   selector switch. Padding gives back what the border takes, so nothing moves. */
 .problems [role=tab] {
   appearance: none; display: grid; gap: 4px; align-content: start; text-align: left;
-  background: var(--surface); border: 0; border-radius: 0; min-height: 0;
-  color: var(--muted); font: 14px/1.4 var(--sans); padding: 14px 18px 15px; cursor: pointer;
+  padding: 14px 0 4px; border: 0; border-top: 1px solid var(--rule); border-radius: 0; min-height: 0;
+  background: none; color: var(--muted); font: 14px/1.4 var(--sans); cursor: pointer;
 }
-.problems strong { color: var(--ink); font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
-.problems [role=tab]:hover { background: var(--surface); color: var(--ink); }
-.problems [role=tab]:hover strong { text-decoration: underline 2px var(--accent); text-underline-offset: .2em; }
-.problems [role=tab][aria-selected=true] { box-shadow: inset 0 -3px 0 var(--accent); color: var(--ink); }
+.problems strong { color: var(--muted); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.problems [role=tab]:is(:hover, [aria-selected=true]) { padding-top: 11px; border-top-width: 4px; background: none; }
+.problems [role=tab]:hover { border-top-color: var(--line); }
+.problems [role=tab][aria-selected=true] { border-top-color: var(--accent); color: var(--ink); }
+.problems [role=tab]:is(:hover, [aria-selected=true]) strong { color: var(--ink); }
 
 .views { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
 .views[hidden] { display: none; }
@@ -152,6 +152,27 @@ tr.pickable { cursor: pointer; }
 tr.pickable:hover { background: var(--panel); }
 tr.selected { background: var(--panel); box-shadow: inset 3px 0 0 var(--glass); }
 .table-scroll { overflow-x: auto; position: relative; }
+/* The structure tables read as a sheet: fields show their box only on hover and focus, and
+   numbers line up on the right under their headings. */
+.builder td { padding: 0 4px 0 0; border-bottom: 1px solid var(--grid); }
+.builder th { padding: 0 12px 6px 8px; }
+.builder td :is(input, select) { width: 100%; border-color: transparent; background: none; border-radius: 0; min-height: 34px; }
+.builder td input[type=number] { width: 100%; text-align: right; }
+.builder td :is(input, select):hover { border-color: var(--line); }
+.builder td :is(input, select):focus { border-color: var(--line); background: var(--surface); }
+.builder input:disabled { color: var(--muted); }
+#layer-builder th:nth-child(n+3):nth-child(-n+5), #plane-builder th:nth-child(n+2):nth-child(-n+6) { width: 1%; white-space: nowrap; text-align: right; }
+#layer-builder th:nth-child(2) { width: 12rem; }
+#plane-builder th:first-child { width: 8rem; }
+.builder tbody button { border: 0; background: none; color: var(--muted); padding: 4px 7px; min-height: 30px; }
+.builder tbody button:hover { color: var(--ink); background: var(--panel); }
+/* A layer's edge is tinted as in the field plot, deeper for a higher index and hatched when it
+   absorbs; the edges stack into the cross-section. app.js sets --tint. */
+.builder .edge { width: 14px; padding: 0; border-bottom: 0; }
+#layers td.edge { --edge: color-mix(in srgb, var(--glass) var(--tint, 0%), var(--bg)); background-color: var(--edge); border-bottom: 1px solid var(--edge); }
+#layers td.edge.lossy { background-image: repeating-linear-gradient(-45deg, var(--muted) 0 1px, transparent 1px 5px); }
+#layers tr.selected { box-shadow: none; }
+#layers tr.selected td.edge { box-shadow: inset 0 0 0 1.5px var(--ink); }
 .table-scroll table { min-width: 620px; }
 
 input, select, button {
@@ -168,8 +189,8 @@ button:hover, .file-button:hover { background: var(--panel); }
 details { font-size: 14px; }
 details .pair { margin-top: 10px; }
 summary { cursor: pointer; }
-.row-actions { display: flex; gap: 4px; }
-.row-actions button { padding: 3px 7px; font-size: 13px; }
+.row-actions { display: flex; justify-content: end; }
+.row-actions button { font-size: 13.5px; }
 .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 12px; }
 .repeat { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); }
 .repeat input { width: 58px; color: var(--ink); }

@@ -52,6 +52,14 @@ function show(el) {
   body.scrollTo({ top: Math.max(0, target), behavior: still.matches ? 'auto' : 'smooth' });
 }
 
+// Once the reader has pointed at something and seen its code, later chapters skip the
+// line at the top that explains how.
+const remember = () => {
+  try {
+    localStorage.setItem('code-known', '1');
+  } catch {}
+};
+
 // A name shows its code at once. A passage waits a moment, so a pointer crossing the
 // text on its way to the panel doesn't drag the code along with it.
 let pending = 0;
@@ -59,7 +67,7 @@ for (const el of article.querySelectorAll('[data-code]')) {
   const inline = el.matches('.code-ref');
   el.addEventListener('mouseenter', () => {
     clearTimeout(pending);
-    if (showing()) pending = setTimeout(() => show(el), inline ? 0 : 150);
+    if (showing()) pending = setTimeout(() => (show(el), remember()), inline ? 0 : 150);
   });
   el.addEventListener('mouseleave', () => clearTimeout(pending));
   if (inline) {

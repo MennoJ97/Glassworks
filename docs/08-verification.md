@@ -53,6 +53,8 @@ $10^{-12}$. Past that point, a finer mesh can't help, because the limit is now
 floating-point arithmetic rather than the discretization.
 <!-- code: eigenvalue_error_converges_at_rate_2p "Coarse enough" .. "let (e1, e2)" -->
 
+![Log-log plot of eigenvalue error against number of cells for orders 1 to 5](figures/convergence.svg "The table's errors, and 32 cells too. On these axes an error proportional to $h^{2r}$ is a straight line, steeper for each order. Orders 4 and 5 stop at round-off, near $10^{-12}$.")
+
 ## Reading a failing test
 
 A failing test doesn't say why it failed. The verification literature tells the causes

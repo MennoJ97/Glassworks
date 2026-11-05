@@ -28,6 +28,8 @@ Now the expensive part is only the separators, and most of them are small. For a
 factorization costs about $N^{3/2}$ operations rather than $N^2$, and storage about $N\log N$. No
 ordering of such a mesh can do better than $N^{3/2}$ ([Hoffman et al. 1973](20-references.md#hoffman-1973)).
 
+![A mesh coloured by elimination order, and the nonzeros of two LU factors](figures/nested-dissection.svg "Second-order triangles on a 12 × 12 grid, 625 unknowns. Left, the order `Ordering` eliminates them in: the separators, darkest, go last. Right, where the factor $L$ has nonzeros. Banded LU after RCM fills its whole band, while nested dissection needs 40% fewer entries.")
+
 [`sparse.rs`](../crates/glassworks-core/src/sparse.rs) does this with a few decisions that keep it short:
 
 1. **Split by position, along the longer side.** Whatever on the left touches the right becomes the

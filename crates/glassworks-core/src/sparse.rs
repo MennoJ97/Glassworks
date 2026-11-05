@@ -165,6 +165,11 @@ impl Ordering {
         Self { new, nodes }
     }
 
+    /// Where each unknown is eliminated, `new[old]`. The tutorial's figures draw it.
+    pub fn new_index(&self) -> &[usize] {
+        &self.new
+    }
+
     /// The last ordering made if this matrix has its nonzeros, which is cheap to check, and
     /// otherwise a new one. A design's iterations and a band diagram's k-points all reuse it.
     pub fn reused(a: &Csr, positions: impl FnOnce() -> Vec<(f64, f64)>) -> Rc<Self> {

@@ -32,6 +32,8 @@ coefficients a physical meaning: $u_i$ is just the value of the field at node $i
 Neighbouring cells share their end node, and that one shared unknown is what makes
 the field continuous across the boundary. Continuity is built into the basis.
 
+![The basis functions of four first-order cells and of two second-order cells, with one function highlighted in each](figures/basis-functions.svg "Each basis function is 1 at its own node, 0 at every other node, and zero outside the cells touching its node. So the highlighted $\phi_2$ overlaps only its neighbours. Filled dots are cell ends, and open dots are the midpoints second-order cells add.")
+
 In [`space.rs`](../crates/glassworks-core/src/space.rs), the numbering is simply
 `cell * order + i`. Shared end nodes get the same number automatically, and the
 matrix ends up banded, with neighbours close together.

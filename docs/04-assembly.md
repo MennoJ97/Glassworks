@@ -20,6 +20,8 @@ for each cell c:
 Where two cells share a dof, their contributions add. You could see this in the
 worked example in chapter 3, where the middle node received $1/h$ from each side.
 
+![Two 2 by 2 cell matrices adding into a 3 by 3 matrix, overlapping in the middle entry](figures/assembly.svg "Each cell's stiffness matrix, in units of $1/h$, lands on the rows and columns of its own nodes. Node 1 belongs to both cells, so its diagonal entry gets 1 from each. The blank entries are zero, because nodes 0 and 2 share no cell.")
+
 This loop is the function `assemble` in
 [`assemble.rs`](../crates/glassworks-core/src/assemble.rs), and it doesn't know about
 1D. It only sees the `Space` trait, which supplies dof numbers and local matrices.
