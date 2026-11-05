@@ -15,8 +15,6 @@ passage or equation marked in the margin, and the code shows the lines that do i
 scroll, the code follows the passage you're reading. If you're reading the Markdown files
 instead, on GitHub for example, follow the links to the source files.
 
-This teaches the method, and it doesn't design devices. Its 2D results use bulk-like indices rather than a real chip's effective index, and they can't see light leaking out of the plane.
-
 ## The essentials, in reading order
 
 These build on each other, and together they take you from Maxwell's equations to a solver that designs its own structures.

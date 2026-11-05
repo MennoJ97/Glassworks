@@ -55,6 +55,8 @@ $$g \;\to\; g - \frac{g\cdot c}{c\cdot c}\,c.$$
 A step along that direction can't remove an error the frequency already has, and MMA's bounds bend the step away from it anyway. So a second, **range-space** step moves along $c$ itself, to remove a set fraction of the remaining error. Here that fraction is half. [Feppon et al. 2020](20-references.md#feppon-2020) combine the same two parts, a projected step and a correction along the constraint's gradient that shrinks the violation geometrically.
 <!-- code: optimizeCavity "const moved" .. "x = next.map" -->
 
+Using that pair to hold a resonance on target, with the pole's slope from two solves, is this project's own choice. We haven't seen it done that way, and chapter 19 replaces it with something more reliable.
+
 Following Shaker et al., each step also reads the LDOS at the mode's current wavelength rather than at the target. A Lorentzian shows why this matters. With detuning $D$, bandwidth $\Gamma$ and the mode's own decay rate $\gamma$,
 
 $$F \propto \frac{\Gamma + \gamma}{D^2 + (\Gamma + \gamma)^2},$$

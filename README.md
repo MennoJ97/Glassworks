@@ -20,8 +20,6 @@ It handles 1D layered structures, and 2D eigenmodes, scattering, leaky cavities 
   either polarization, using adjoint gradients of reflection, transmission and absorption, of
   power through a line, or of the local density of states
 
-**This teaches the method, and it doesn't design devices.** The 2D designs use bulk-like indices (3.5, or a permittivity of 12) rather than a real chip's effective index, and a 2D model can't see light leaking out of the plane. So they aren't silicon-on-insulator designs, whichever polarization they're in.
-
 Visitors build their own structure on the page: drag boundaries and shapes, split layers, pick
 materials, repeat blocks, and share the result as a link.
 

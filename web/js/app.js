@@ -26,11 +26,6 @@ const VIEW_HELP = {
   cavityDesign: 'Find the pattern of material around an emitter that holds light for longest in the smallest space, in a square as big as 7 x 7 rods of the crystal it\'s compared with. It measures the local density of states over a bandwidth that narrows as the pixels sharpen. A cavity raises it roughly in proportion to Q / V, while the mode is broader than that bandwidth and the emitter sits at the field\'s peak. The structure and its mesh scale with the wavelength.',
   bend2d: 'Find the pattern of material that carries light around a tight corner in a slab waveguide, within a square three quarters of a wavelength wide that reaches past the corner. A smooth curve that turns this tightly loses about 7%. Light stays in the slab instead of radiating away at the corner. The structure and its mesh scale with the middle of the band.',
 };
-// What a 2D design isn't, whichever polarization it's in.
-const DESIGN_CAVEAT = {
-  bend2d: 'This is a 2D model with a bulk-like index of 3.5, not a real chip\'s effective index, and it can\'t see light leaking out of the plane. Treat these results as showing the method, not as device designs.',
-  cavityDesign: 'This is a 2D model with a bulk-like permittivity of 12, not a real chip\'s effective index, and it can\'t see light leaking out of the plane, which could cap Q far below these values. Treat these results as showing the method, not as device designs.',
-};
 const PROBLEM_TEXT = {
   driven: {
     settings: 'Light source',
@@ -242,8 +237,6 @@ function renderSettings() {
     t.setAttribute('aria-selected', t.dataset.analysis === a);
   });
   $('view-text').textContent = VIEW_HELP[a];
-  $('design-caveat').hidden = !DESIGN_CAVEAT[a];
-  $('design-caveat-text').textContent = DESIGN_CAVEAT[a] ?? '';
   $('view-learn').hidden = !text.learn;
   if (text.learn) [$('view-learn').href, $('view-learn').textContent] = text.learn;
   $('settings-title').textContent = text.settings;

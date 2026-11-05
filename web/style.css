@@ -213,5 +213,3 @@ summary { cursor: pointer; }
   main, main.design { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "readout" "builder" "settings"; grid-template-rows: none; }
   .problems { grid-template-columns: minmax(0, 1fr); }
 }
-#design-caveat { border-left: 3px solid var(--rule); padding-left: 12px; }
-#design-caveat a { color: inherit; }
