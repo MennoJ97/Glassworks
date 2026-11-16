@@ -6,3 +6,4 @@ node_modules/
 .DS_Store
 .publish-target
 .publish-family
+.publish-head
