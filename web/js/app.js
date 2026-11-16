@@ -1,6 +1,6 @@
 // Connects the controls, the solver and the plots.
 
-import { GUIDES, MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeState, defaultState, dragShape, encodeState, gratingLines, guideCell, guideGeometry, guideResolved, guideScale, layer, problemOf, totalLength } from './model.js';
+import { GUIDES, MATERIALS, PRESETS, PROBLEMS, TELECOM, blochAt, buildRequests, decodeState, defaultState, dragShape, encodeState, gratingLines, guideCell, guideGeometry, guideResolved, guideScale, guideSetup, layer, problemOf, totalLength } from './model.js';
 import { EvolutionMap, FieldMap, FieldPlot, LineChart, drawDensity, seriesColors } from './plot.js';
 import { Solver } from './solver.js';
 import { CAVITY_Q } from './cavity-design.js';
@@ -371,8 +371,8 @@ function renderPlane() {
 const planeSettings = () => state.plane[state.analysis];
 $('plane-bend').addEventListener('change', () => {
   const bend = $('plane-bend').value;
-  Object.assign(planeSettings(), { bend, scale: 1, cell: GUIDES[bend].cell });
-  state.wavelength = GUIDES[bend].wavelength;
+  Object.assign(planeSettings(), guideSetup(bend));
+  state.wavelength = TELECOM;
   renderSettings();
   changed();
 });

@@ -15,16 +15,24 @@ export const MATERIALS = [
 
 export const layer = (name, thickness) => ({ ...MATERIALS.find((m) => m.name === name), thickness });
 
-const H = () => layer('Titanium dioxide', 0.104);
-const L = () => layer('Silica glass', 0.172);
+// The wavelength the examples are set for, in µm: the telecom band. Each was drawn for 1 µm
+// and is scaled up to it, which leaves how it behaves unchanged (chapter 12). Examples that
+// take no wavelength, such as a band diagram, keep their size.
+export const TELECOM = 1.55;
+const atTelecom = (setup) => JSON.parse(JSON.stringify(scaled(setup, TELECOM)), (key, v) => (typeof v === 'number' ? +v.toPrecision(6) : v));
+
+// Quarter-wave layers at 1.55 µm.
+const H = () => layer('Titanium dioxide', 0.161);
+const L = () => layer('Silica glass', 0.267);
 const air = (t = 0.5) => layer('Air', t);
 
-// A square lattice of rods with the middle one missing, in open space. Periodic walls
-// turn the same shapes into a supercell. The target sits inside the lattice's band gap.
-function defectCavity(n) {
-  const rods = Array.from({ length: n * n }, (_, i) => ({ type: 'circle', x: i % n + 0.5, y: Math.floor(i / n) + 0.5, w: 0.4, h: 0.4, n: 3.4641 }));
+// A square lattice of rods, `a` apart, with the middle one missing, in open space. Periodic
+// walls turn the same shapes into a supercell. The target, 2.65 a, sits inside the band gap.
+function defectCavity(n, a) {
+  const rods = Array.from({ length: n * n }, (_, i) => ({ type: 'circle', x: (i % n + 0.5) * a, y: (Math.floor(i / n) + 0.5) * a, w: 0.4 * a, h: 0.4 * a, n: 3.4641 }));
   rods.splice((n * n - 1) / 2, 1);
-  return { width: n, height: n, cell: 0.1, background: 1, walls: 'absorbing', target: 2.65, sourceX: n / 2, sourceY: n / 2, shapes: rods };
+  const setup = { width: n * a, height: n * a, cell: 0.1 * a, target: 2.65 * a, sourceX: (n * a) / 2, sourceY: (n * a) / 2, shapes: rods };
+  return { ...JSON.parse(JSON.stringify(setup), (key, v) => (typeof v === 'number' ? +v.toPrecision(6) : v)), background: 1, walls: 'absorbing' };
 }
 
 // The waveguide bends a view can show, with what each needs. Bends in rods are from Mekis et
@@ -35,7 +43,11 @@ export const GUIDES = {
   stepped: { name: 'Stepped bend in a photonic crystal', wavelength: 2.833, cell: 0.16667, n: 3.4, band: [2.4, 3.1] },
   slab: { name: 'Sharp bend in an ordinary waveguide', wavelength: 1, cell: 0.05, n: 3.5, band: [1, 1.5] },
 };
-const guideSetup = (bend) => ({ bend, scale: 1, cell: GUIDES[bend].cell, background: 1, walls: 'absorbing', shapes: [] });
+// A guide sized so that the wavelength it was drawn for becomes 1.55 µm.
+export const guideSetup = (bend) => {
+  const scale = TELECOM / GUIDES[bend].wavelength;
+  return { bend, scale, cell: GUIDES[bend].cell * scale, background: 1, walls: 'absorbing', shapes: [] };
+};
 const LATTICE = { arm: 5, clad: 3, pml: 5 };
 const SLAB = { size: 4, x: 2.5, y: 1.5, width: 0.143, n: 3.5, pml: 1 };
 
@@ -111,20 +123,20 @@ function unitGuide(bend, straight) {
 // Each preset starts on the view that shows it best. A `planeSetup` replaces that view's domain.
 export const PRESETS = {
   'Mirror with a resonant gap': {
-    analysis: 'spectrum', wavelength: 1,
-    layers: [air(), H(), L(), H(), L(), H(), layer('Silica glass', 0.345), H(), L(), H(), L(), H(), air()],
+    analysis: 'spectrum', wavelength: TELECOM,
+    layers: [air(0.75), H(), L(), H(), L(), H(), layer('Silica glass', 0.535), H(), L(), H(), L(), H(), air(0.75)],
   },
   'Quarter-wave mirror': {
-    analysis: 'spectrum', wavelength: 1,
-    layers: [air(), H(), L(), H(), L(), H(), L(), H(), L(), H(), layer('Silica glass', 0.5)],
+    analysis: 'spectrum', wavelength: TELECOM,
+    layers: [air(0.75), H(), L(), H(), L(), H(), L(), H(), L(), H(), layer('Silica glass', 0.75)],
   },
   'Anti-reflection coating': {
-    analysis: 'spectrum', wavelength: 0.55,
-    layers: [air(), layer('Magnesium fluoride', 0.1), layer('Silica glass', 0.6)],
+    analysis: 'spectrum', wavelength: TELECOM,
+    layers: [air(0.75), layer('Magnesium fluoride', 0.281), layer('Silica glass', 1.7)],
   },
   'Metal film': {
-    analysis: 'field', wavelength: 1,
-    layers: [air(), layer('Gold-like metal', 0.04), air()],
+    analysis: 'field', wavelength: TELECOM,
+    layers: [air(0.75), layer('Gold-like metal', 0.062), air(0.75)],
   },
   'Layered resonator': {
     analysis: 'cavity',
@@ -135,20 +147,20 @@ export const PRESETS = {
     layers: [air(0.5), layer('Silicon', 0.25)],
   },
   'Slab waveguide': {
-    analysis: 'waveguide', wavelength: 1,
-    layers: [layer('Silica glass', 3), layer('Silicon nitride', 0.8), layer('Silica glass', 3)],
+    analysis: 'waveguide', wavelength: TELECOM,
+    layers: [layer('Silica glass', 4.65), layer('Silicon nitride', 1.24), layer('Silica glass', 4.65)],
   },
-  'Scattering by a rod': { analysis: 'scatter2d', source: 'plane_wave', wavelength: 1, angle: 0 },
-  'Diffraction grating': { analysis: 'grating2d', wavelength: 1, angle: 20 },
-  'Sharp bend in a photonic crystal': { analysis: 'guide2d', wavelength: GUIDES.sharp.wavelength, planeSetup: guideSetup('sharp') },
-  'Bend in an ordinary waveguide': { analysis: 'guide2d', wavelength: GUIDES.slab.wavelength, planeSetup: guideSetup('slab') },
+  'Scattering by a rod': { analysis: 'scatter2d', source: 'plane_wave', wavelength: TELECOM, angle: 0 },
+  'Diffraction grating': { analysis: 'grating2d', wavelength: TELECOM, angle: 20 },
+  'Sharp bend in a photonic crystal': { analysis: 'guide2d', wavelength: TELECOM, planeSetup: guideSetup('sharp') },
+  'Bend in an ordinary waveguide': { analysis: 'guide2d', wavelength: TELECOM, planeSetup: guideSetup('slab') },
   'Empty square cavity': { analysis: 'cavity2d', planeSetup: { width: 1, height: 1, cell: 0.04, background: 1, walls: 'pec', target: null, sourceX: 0.5, sourceY: 0.5, shapes: [] } },
-  'Point-defect cavity': { analysis: 'cavity2d', planeSetup: defectCavity(5) },
+  'Point-defect cavity': { analysis: 'cavity2d', planeSetup: defectCavity(5, 0.585) },
   'Lattice of rods': { analysis: 'bands2d' },
-  'Design a mirror': { analysis: 'mirror', wavelength: 1 },
+  'Design a mirror': { analysis: 'mirror', wavelength: TELECOM },
   'Design a broadband coating': { analysis: 'antireflection' },
   'Design a waveguide bend': { analysis: 'bend2d' },
-  'Design a cavity': { analysis: 'cavityDesign', wavelength: 1 },
+  'Design a cavity': { analysis: 'cavityDesign', wavelength: TELECOM },
 };
 
 // The kinds of problem. Driven views solve one linear system for a source the visitor
@@ -166,12 +178,12 @@ export function defaultState() {
     layers: [],
     analysis: 'spectrum',
     polarization: 'te',
-    wavelength: 1,
+    wavelength: TELECOM,
     angle: 0,
     nModes: 6,
     order: 4,
     cellsPerWavelength: 6,
-    spectrum: { from: 0.5, to: 1.8 },
+    spectrum: { from: 0.775, to: 2.79 },
     bc: {
       cavity: { left: 'pec', right: 'pec' },
       waveguide: { left: 'pec', right: 'pec' },
@@ -183,14 +195,17 @@ export function defaultState() {
     bandPick: { k: 0.5, band: 0 },
     plane: {
       scatter2d: {
-        width: 3, height: 3, cell: 0.06, background: 1, walls: 'absorbing', sourceX: 0.75, sourceY: 1.5, averageQ: null,
-        shapes: [{ type: 'circle', x: 1.5, y: 1.5, w: 1, h: 1, n: 2 }],
+        ...atTelecom({ width: 3, height: 3, cell: 0.06, sourceX: 0.75, sourceY: 1.5, shapes: [{ type: 'circle', x: 1.5, y: 1.5, w: 1, h: 1, n: 2 }] }),
+        background: 1, walls: 'absorbing', averageQ: null,
       },
       guide2d: guideSetup('sharp'),
       // The substrate runs out through the layer below, as anything reaching it must.
       grating2d: {
-        width: 1.5, height: 2, cell: 0.025, background: 1, walls: 'periodic',
-        shapes: [{ type: 'rect', x: 0.75, y: -1.25, w: 3.5, h: 3.5, n: 1.5 }, { type: 'rect', x: 0.75, y: 0.75, w: 0.75, h: 0.5, n: 1.5 }],
+        ...atTelecom({
+          width: 1.5, height: 2, cell: 0.025,
+          shapes: [{ type: 'rect', x: 0.75, y: -1.25, w: 3.5, h: 3.5, n: 1.5 }, { type: 'rect', x: 0.75, y: 0.75, w: 0.75, h: 0.5, n: 1.5 }],
+        }),
+        background: 1, walls: 'periodic',
       },
       bend2d: { background: 1, walls: 'absorbing', shapes: [] },
       cavityDesign: { background: 1, walls: 'absorbing', shapes: [] },
@@ -201,9 +216,10 @@ export function defaultState() {
       },
     },
     design: {
-      mirror: { thickness: 2, low: 'Silica glass', high: 'Titanium dioxide', left: 'Air', right: 'Air', radius: 20, seed: 1 },
-      antireflection: { thickness: 0.6, low: 'Magnesium fluoride', high: 'Titanium dioxide', left: 'Air', right: 'Silica glass', radius: 15, seed: 1, from: 0.4, to: 0.8 },
-      bend2d: { radius: 3, seed: 1, from: 0.95, to: 1.05, size: 0.75, turn: 0.25 },
+      // A coating's band spans an octave, centred on 1.55 µm. A bend's spans 10% of it.
+      mirror: { thickness: 3.1, low: 'Silica glass', high: 'Titanium dioxide', left: 'Air', right: 'Air', radius: 30, seed: 1 },
+      antireflection: { thickness: 1.65, low: 'Magnesium fluoride', high: 'Titanium dioxide', left: 'Air', right: 'Silica glass', radius: 40, seed: 1, from: 1.1, to: 2.2 },
+      bend2d: { radius: 3, seed: 1, from: 1.4725, to: 1.6275, size: 0.75, turn: 0.25 },
       cavityDesign: { cavity: true, seed: 1 },
     },
     ...structuredClone(PRESETS['Mirror with a resonant gap']),
