@@ -113,7 +113,7 @@ A design with fine lines is also harder to make. Removing the parts thinner than
 | Below 83 nm | 943 | 22,000 |
 | Below 125 nm | 16 | 136 |
 
-The crystal's rods are 151 nm across. Chapter 13's bend is far more forgiving. With every pixel edge moved at random, three starts keep 97.8% to 98.3% at a spread of 1 nm and 94.7% to 98.7% at 5 nm. Removing what's thinner than 83 nm keeps 95% to 98%, while removing what's thinner than 125 nm leaves 5% to 87%. A shift that moves a resonance 0.1% wide off its target barely matters to a bend that serves a band of 10%.
+The crystal's rods are 151 nm across. Chapter 13's bend, serving 0.95 to 1.05 µm, is far more forgiving. With every pixel edge moved at random, three starts keep 97.8% to 98.3% at a spread of 1 nm and 94.7% to 98.7% at 5 nm. Removing what's thinner than 83 nm keeps 95% to 98%, while removing what's thinner than 125 nm leaves 5% to 87%. A shift that moves a resonance 0.1% wide off its target barely matters to a bend that serves a band of 10%.
 
 ## What this leaves out
 

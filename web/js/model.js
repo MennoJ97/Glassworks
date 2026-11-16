@@ -216,10 +216,10 @@ export function defaultState() {
       },
     },
     design: {
-      // A coating's band spans an octave, centred on 1.55 µm. A bend's spans 10% of it.
+      // A coating's band spans an octave, centred on 1.55 µm.
       mirror: { thickness: 3.1, low: 'Silica glass', high: 'Titanium dioxide', left: 'Air', right: 'Air', radius: 30, seed: 1 },
       antireflection: { thickness: 1.65, low: 'Magnesium fluoride', high: 'Titanium dioxide', left: 'Air', right: 'Silica glass', radius: 40, seed: 1, from: 1.1, to: 2.2 },
-      bend2d: { radius: 3, seed: 1, from: 1.4725, to: 1.6275, size: 0.75, turn: 0.25 },
+      bend2d: { radius: 3, seed: 1, from: 1.5, to: 1.6, size: 0.75, turn: 0.25 },
       cavityDesign: { cavity: true, seed: 1 },
     },
     ...structuredClone(PRESETS['Mirror with a resonant gap']),

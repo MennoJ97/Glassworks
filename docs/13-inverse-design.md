@@ -123,12 +123,13 @@ pattern from a longer run gives:
 
 A sharp corner is an easy target, though. The fair comparison is what a designer would draw in that square, a curved bend.
 A quarter circle of radius $0.5\lambda$ passes 95.8%, which leaves the optimizer little to gain. So the page sets a tighter
-turn. Its guides meet the square a quarter wavelength from its inner corner, where a curved bend has a radius of $0.25\lambda$
-and passes 93.2%. Its monitor is also closer to the corner, where it still catches some light radiated from the gap, so its
-empty region reads 11.1% and its sharp corner 29.7%. The page runs 10 iterations for each of 8 sharpness stages, and three
-random starts reach a mean of 98.3% to 99.2%. The page lets you change the square's side and that distance, in eighths of a
-wavelength. A wider turn gets a longer guide on each side, because a curve of radius $0.75\lambda$ throws light far enough
-along the output that a monitor at the usual distance catches it and reads 102.7%.
+turn. Its guides meet the square a quarter wavelength from its inner corner, where a curved bend has a radius of $0.25\lambda$.
+It also serves a narrower band, 1.5 to 1.6 µm, where that curve passes 93.3%. Its monitor is closer to the corner, where it
+still catches some light radiated from the gap, so its empty region reads 11.1% and its sharp corner 29.7%. The page runs 10
+iterations for each of 8 sharpness stages, and three random starts reach a mean of 98.0% to 99.3%. The page lets you change the
+square's side and that distance, in eighths of a wavelength. A wider turn gets a longer guide on each side, because a curve of
+radius $0.75\lambda$ throws light far enough along the output that a monitor at the usual distance catches it and reads more
+than 100%.
 <!-- code: curvedBend -->
 <!-- code: design.js "const SHARPNESS" .. "const bendIterations" -->
 
@@ -142,7 +143,7 @@ do for a broadband lens, because a design optimized for one can do much worse aw
 A real structure's edges also come out slightly wrong. [Chapter 17](17-designing-a-cavity.md#fabrication) shows how to test
 that, and how much it matters for a bend and for a cavity.
 
-The structure and its mesh scale with the middle of the band, so 1.9 to 2.1 µm gets the same design as 0.95 to 1.05 µm, at twice the
+The structure and its mesh scale with the middle of the band, so 3 to 3.2 µm gets the same design as 1.5 to 1.6 µm, at twice the
 size. Chapter 12 explains why that's exact.
 
 That completes the essentials: a field, a mesh, a solver, open boundaries, and a design. The next chapters go further, and each stands on its own: [start with whichever interests you](README.md#going-further).

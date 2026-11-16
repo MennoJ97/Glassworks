@@ -13,8 +13,8 @@ const AMBIENT = 0.3;
 const SHARPNESS = [1, 2, 4, 8, 16, 32, 64, 128];
 const ITERATIONS_PER_STAGE = 40;
 // A 2D solve costs far more than a 1D one, and these converge sooner: for E_z, 25 did no better
-// over three starts, while 5 sometimes fell short. H_z converges more slowly: its mean over
-// three starts rose from 97.2% at 10 to 98.0% at 20 and 98.4% at 40.
+// over three starts, while 5 sometimes fell short. H_z converges more slowly: on a band of 0.95
+// to 1.05, its mean over three starts rose from 97.2% at 10 to 98.0% at 20 and 98.4% at 40.
 const bendIterations = (state) => (state.polarization === 'tm' ? 40 : 10);
 export const stageLength = (state) => (state.analysis === 'cavityDesign' ? CAVITY.iterations : state.analysis === 'bend2d' ? bendIterations(state) : ITERATIONS_PER_STAGE);
 const sharpnessOf = (state) => (state.analysis === 'cavityDesign' ? CAVITY.stages.map(([, beta]) => beta) : SHARPNESS);
@@ -39,7 +39,8 @@ const rectangle = (x0, y0, x1, y1) => ({ type: 'rect', x: (x0 + x1) / 2, y: (y0 
 // The square's side and the guides' distance from its inner corner are settings, in steps of
 // an eighth of a wavelength. The guide runs `x0` before the square and as far after it, which
 // is longer for a wider turn: a curve of radius 0.75 throws light far enough along the output
-// that a monitor at the usual distance read 102.7%, where one further on reads 95.9%.
+// that, on a band of 0.95 to 1.05, a monitor at the usual distance read 102.7%, and one
+// further on 95.9%.
 export const BEND_STEP = 0.125;
 export const BEND_SIZES = [0.5, 1.5];
 const snap = (value, low, high) => Math.min(high, Math.max(low, Math.round(value / BEND_STEP) * BEND_STEP));

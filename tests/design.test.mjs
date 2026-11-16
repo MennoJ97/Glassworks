@@ -174,7 +174,7 @@ test('a bend ends sharp, and beats an empty region, a sharp corner and a curved 
   const [empty, corner, curved] = await referenceValues(s);
   assert.ok(empty < 0.15, `empty ${empty}`);
   assert.ok(corner > 0.2 && corner < 0.5, `corner ${corner}`);
-  // Chapter 13 gives 93.2% for the curved bend, and 98.3 to 99.2% over three starts.
+  // Chapter 13 gives 93.3% for the curved bend, and 98.0 to 99.3% over three starts.
   assert.ok(curved > 0.92 && curved < 0.945, `curved ${curved}`);
   assert.ok(seen.at(-1) > curved + 0.03, `${seen.at(-1)} against ${curved}`);
 });
@@ -251,7 +251,7 @@ test('in H_z, a bend beats a sharp corner and a curved bend, staying in one wide
   const { seen, grey } = await run(s);
   assert.ok(grey < 0.05, `grey ${grey}`);
   const [, corner, curved] = await referenceValues(s);
-  // Chapter 19 gives 93.2% for the curved bend, and 98.3 to 98.5% over three starts.
+  // Chapter 19 gives 93.2% for the curved bend, and 97.1 to 98.2% over three starts.
   assert.ok(corner < 0.5, `corner ${corner}`);
   assert.ok(curved > 0.92 && curved < 0.945, `curved ${curved}`);
   assert.ok(seen.at(-1) > curved + 0.03, `${seen.at(-1)} against ${curved}`);
