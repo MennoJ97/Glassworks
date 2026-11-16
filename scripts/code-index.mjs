@@ -60,8 +60,9 @@ function itemEnd(src, kind, from) {
   return src.length - 1;
 }
 
-// Items as { names, start, end } with 1-based inclusive lines. A method is named both
-// `method` and `Type::method`. The span starts at the comments and attributes above it.
+// Items as { names, start, line, end } with 1-based inclusive lines, `line` being the one
+// that names it. A method is named both `method` and `Type::method`. The span starts at
+// the comments and attributes above it.
 export function definitions(src, lang) {
   const kind = classify(src, lang);
   const lines = src.split('\n');
@@ -103,7 +104,7 @@ export function definitions(src, lang) {
     const parent = owners.findLast((o) => o.start < n && o.end >= end);
     const names = owner && lang === 'rs' && RUST_IMPL.test(line) ? [] : [name];
     if (parent && names.length) names.push(`${parent.name}::${name}`);
-    items.push({ names, start: start + 1, end: end + 1 });
+    items.push({ names, start: start + 1, line: n + 1, end: end + 1 });
     if (owner) owners.push({ name, start: n, end });
   });
   return { items, kind, lines, offsets };

@@ -54,7 +54,7 @@ loop, outside the solver. Only the physics needs to be in Rust.
 checkerboards, and its designs would change with the mesh ([Bendsøe & Sigmund 2003](20-references.md#bendsoe-sigmund-2003)). A **cone filter** replaces each density by a weighted average of its neighbours, with a weight
 falling linearly to zero at a chosen radius ([Andreassen et al. 2011](20-references.md#andreassen-2011)). That sets a smallest feature size. It's linear, so its gradient
 is its transpose: the same weights, carrying slopes the other way.
-<!-- code: coneFilter2d "const weight" .. "weight / total" -->
+<!-- code: coneFilter2d "const weight =" .. "weight / total" -->
 <!-- code: coneFilter2d "adjoint(g)" .. "return out" -->
 
 **Projection.** Then push the filtered densities toward 0 or 1 ([Wang et al. 2011](20-references.md#wang-2011)):
@@ -126,7 +126,9 @@ A quarter circle of radius $0.5\lambda$ passes 95.8%, which leaves the optimizer
 turn. Its guides meet the square a quarter wavelength from its inner corner, where a curved bend has a radius of $0.25\lambda$
 and passes 93.2%. Its monitor is also closer to the corner, where it still catches some light radiated from the gap, so its
 empty region reads 11.1% and its sharp corner 29.7%. The page runs 10 iterations for each of 8 sharpness stages, and three
-random starts reach a mean of 98.3% to 99.2%.
+random starts reach a mean of 98.3% to 99.2%. The page lets you change the square's side and that distance, in eighths of a
+wavelength. A wider turn gets a longer guide on each side, because a curve of radius $0.75\lambda$ throws light far enough
+along the output that a monitor at the usual distance catches it and reads 102.7%.
 <!-- code: curvedBend -->
 <!-- code: design.js "const SHARPNESS" .. "const bendIterations" -->
 

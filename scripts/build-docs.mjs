@@ -14,6 +14,7 @@ import { basename, dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import katex from 'katex';
 import { Marked } from 'marked';
+import { linkDefinitions } from './code-links.mjs';
 import { definitions } from './code-index.mjs';
 import { highlight } from './highlight.mjs';
 
@@ -43,8 +44,9 @@ const index = sources.map((path) => {
   const src = readFileSync(join(root, path), 'utf8').trimEnd();
   const lang = path.endsWith('.js') ? 'js' : 'rs';
   const defs = definitions(src, lang);
-  return { path, name: basename(path), ...defs, colours: highlight(src, defs.kind, lang) };
+  return { path, name: basename(path), lang, ...defs, colours: highlight(src, defs.kind, lang) };
 });
+linkDefinitions(index);
 
 // The definitions called `name`, preferring the files the chapter links to. When several
 // remain, such as a method each element type has, it keeps those of a type the chapter
@@ -107,16 +109,25 @@ addEventListener('hashchange', lightLines);
 lightLines();
 </script>`;
 
-// Source lines coloured as an editor would, from highlight.mjs.
-function codeLines(file, ids) {
+// Source lines coloured as an editor would, from highlight.mjs, with each name that
+// code-links.mjs resolves linking to its definition. `prefix` leads to the source pages.
+function codeLines(file, ids, prefix) {
   return file.lines
     .map((line, n) => {
       const colour = (i) => file.colours[file.offsets[n] + i];
+      const linkAt = (i) => file.links.get(file.offsets[n] + i);
       let html = '';
       for (let i = 0; i < line.length; ) {
+        const link = linkAt(i);
+        if (link) {
+          const page = link.file === file && ids ? '' : `${prefix}${link.file.name}.html`;
+          html += `<a class="def" href="${page}#L${link.start}-${link.end}"><span class="${colour(i)}">${escapeHtml(line.slice(i, i + link.length))}</span></a>`;
+          i += link.length;
+          continue;
+        }
         const c = colour(i);
         let j = i + 1;
-        while (j < line.length && colour(j) === c) j++;
+        while (j < line.length && colour(j) === c && !linkAt(j)) j++;
         const text = escapeHtml(line.slice(i, j));
         html += c && text.trim() ? `<span class="${c}">${text}</span>` : text;
         i = j;
@@ -128,7 +139,7 @@ function codeLines(file, ids) {
 
 function codePanel(files) {
   const tabs = files.map((f, i) => `<button type="button" role="tab" data-file="${f.name}" aria-selected="${i === 0}">${f.name}</button>`).join('');
-  const code = files.map((f, i) => `<pre data-file="${f.name}"${i ? ' hidden' : ''}><code>${codeLines(f, false)}</code></pre>`).join('\n');
+  const code = files.map((f, i) => `<pre data-file="${f.name}"${i ? ' hidden' : ''}><code>${codeLines(f, false, 'source/')}</code></pre>`).join('\n');
   return `<aside class="code-panel" aria-label="Source code for this chapter">
     <div class="code-head"><div class="code-tabs" role="tablist">${tabs}</div><a class="code-full" href="source/${files[0].name}.html">Full page</a></div>
     <div class="code-body">${code}</div>
@@ -373,7 +384,7 @@ for (const file of ['README.md', ...chapters.map((c) => c.file)]) {
 }
 
 for (const file of index) {
-  const body = `<article class="source"><h1>${file.name}</h1><p>Solver source code, referenced by the tutorial.</p><pre><code>${codeLines(file, true)}</code></pre>${LIGHT_LINES}</article>`;
+  const body = `<article class="source"><h1>${file.name}</h1><p>Solver source code, referenced by the tutorial.</p><pre><code>${codeLines(file, true, '')}</code></pre>${LIGHT_LINES}</article>`;
   write(join('source', `${file.name}.html`), layout({ title: file.name, body, prefix: '../', license: CODE_LICENSE }));
 }
 

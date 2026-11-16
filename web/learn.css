@@ -137,6 +137,10 @@ body.learn:has(.source) { --page-max: 1120px; }
 :is(.source, .code-panel, .code-snippet) .nu { color: var(--code-nu); }
 :is(.source, .code-panel, .code-snippet) .va { color: var(--code-va); }
 .learn a.code-ref { text-decoration-style: dotted; text-decoration-color: var(--glass); }
+/* A name in the code that goes to its definition (scripts/code-links.mjs) keeps its colour,
+   and shows it's a link when pointed at. */
+:is(.source, .code-panel, .code-snippet) a.def { color: inherit; text-decoration: none; }
+:is(.source, .code-panel, .code-snippet) a.def:is(:hover, :focus-visible) > span { text-decoration: underline; text-underline-offset: 2px; }
 .code-panel, .code-hint, .code-toggle, .code-peek, .code-snippet { display: none; }
 
 /* Narrower than that, a passage's code opens under it, from learn.js. */
