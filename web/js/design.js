@@ -26,26 +26,39 @@ const material = (name) => MATERIALS.find((option) => option.name === name);
 const eps = (name) => material(name).n ** 2;
 const solverLayer = (thickness, permittivity) => ({ thickness, eps: [permittivity, 0], mu: [1, 0] });
 
-export const pixelCount = (design) => (design.cavity ? CAVITY.pixels ** 2 : design.thickness === undefined ? BEND.pixels ** 2 : Math.max(1, Math.round(design.thickness / PIXEL)));
+export const pixelCount = (design) => (design.cavity ? CAVITY.pixels ** 2 : design.thickness === undefined ? bendLayout(design).pixels ** 2 : Math.max(1, Math.round(design.thickness / PIXEL)));
 
 // A slab of index 3.5 turning a corner through a square of pixels, in units of the band's
 // centre wavelength, so a band anywhere gets the same design at its own size. The guides meet
-// the square `turn` from its inner corner, which keeps a smooth bend tight, and the rest of the
-// square reaches past the corner for the design to use.
-// Everything lies on a grid of 1/24, so each pixel is a whole number of pairs of triangles.
-const BEND = { pixels: 18, x0: 1, y0: 0.75, size: 0.75, turn: 0.25, domain: 2.5, n: 3.5, pml: 0.5, span: 0.35 };
-const bendCentre = { x: BEND.x0 + BEND.turn, y: BEND.y0 + BEND.size - BEND.turn };
+// the square `turn` from its inner corner, and the rest of the square reaches past the corner
+// for the design to use. The domain leaves `margin` beyond the square's two far sides.
+// Every pixel is 1/24 of a wavelength, so each one is a whole number of pairs of triangles.
+const BEND = { pixel: 1 / 24, run: 0.75, margin: 0.75, n: 3.5, pml: 0.5, span: 0.35 };
 const rectangle = (x0, y0, x1, y1) => ({ type: 'rect', x: (x0 + x1) / 2, y: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, n: BEND.n });
+
+// The square's side and the guides' distance from its inner corner are settings, in steps of
+// an eighth of a wavelength. The guide runs `x0` before the square and as far after it, which
+// is longer for a wider turn: a curve of radius 0.75 throws light far enough along the output
+// that a monitor at the usual distance read 102.7%, where one further on reads 95.9%.
+export const BEND_STEP = 0.125;
+export const BEND_SIZES = [0.5, 1.5];
+const snap = (value, low, high) => Math.min(high, Math.max(low, Math.round(value / BEND_STEP) * BEND_STEP));
+export function bendLayout(design) {
+  const size = snap(design.size ?? 0.75, ...BEND_SIZES);
+  const turn = snap(design.turn ?? 0.25, BEND_STEP, size - BEND_STEP);
+  const [x0, y0] = [BEND.run + turn, BEND.margin];
+  return { size, turn, x0, y0, pixels: Math.round(size / BEND.pixel), domain: x0 + size + y0 };
+}
 
 export const bendScale = (state) => (state.design.bend2d.from + state.design.bend2d.to) / 2;
 
-// Cells per pixel side, and cells per wavelength in the slab at the band's short end. Three
-// per pixel is as many as the solver's limit on unknowns allows.
+// Cells per pixel side, and cells per wavelength in the slab at the band's short end. The
+// solver's limit on unknowns allows about 315 cells across, absorbing layers included.
 function bendRefinement(state) {
   const shortest = state.design.bend2d.from / bendScale(state);
-  const pixel = BEND.size / BEND.pixels;
-  const refine = Math.min(3, Math.ceil((4.5 * BEND.n * pixel) / shortest));
-  return { refine, cellsPerWavelength: (shortest * refine) / (BEND.n * pixel) };
+  const across = (bendLayout(state.design.bend2d).domain + 2 * BEND.pml) / BEND.pixel;
+  const refine = Math.min(Math.floor(315 / across), Math.ceil((4.5 * BEND.n * BEND.pixel) / shortest));
+  return { refine, cellsPerWavelength: (shortest * refine) / (BEND.n * BEND.pixel) };
 }
 
 // A thin slab barely holds H_z, whose electric field crosses its walls: at 0.125 its effective
@@ -63,8 +76,8 @@ export function bendWarning(state) {
 
 // A quarter circle joining the guides through the square, as wide as fits: a ring about the
 // square's inner corner, with air laid over the three quarters not wanted, under the straight guides.
-function curvedBend(width) {
-  const [cx, cy, bendRadius] = [BEND.x0, BEND.y0 + BEND.size, BEND.turn];
+function curvedBend(width, { size, turn, x0, y0 }) {
+  const [cx, cy, bendRadius] = [x0, y0 + size, turn];
   const [outer, inner] = [bendRadius + width / 2, bendRadius - width / 2];
   const disc = (radius, n) => ({ type: 'circle', x: cx, y: cy, w: 2 * radius, h: 2 * radius, n });
   const air = (x0, y0, x1, y1) => ({ ...rectangle(x0, y0, x1, y1), n: 1 });
@@ -73,17 +86,18 @@ function curvedBend(width) {
 
 // What the plot needs, and each solve shares. `corner`, if given, fills the square with a
 // 'sharp' corner or a 'curved' bend for comparison.
-export function bendGeometry(straight, scale, polarization, corner) {
-  const { x0, y0, size, domain, span } = BEND;
+export function bendGeometry(straight, scale, polarization, layout, corner) {
+  const { size, turn, x0, y0, pixels, domain } = layout;
+  const { span } = BEND;
   const width = bendWidth(polarization);
-  const { x, y } = bendCentre;
+  const [x, y] = [x0 + turn, y0 + size - turn];
   const far = domain + 3;
   const shapes = straight
     ? [rectangle(-3, y - width / 2, far, y + width / 2)]
     : corner === 'sharp'
     ? [rectangle(-3, y - width / 2, x + width / 2, y + width / 2), rectangle(x - width / 2, y - width / 2, x + width / 2, far)]
     : [
-      ...(corner === 'curved' ? curvedBend(width) : []),
+      ...(corner === 'curved' ? curvedBend(width, layout) : []),
       rectangle(-3, y - width / 2, x0, y + width / 2), rectangle(x - width / 2, y0 + size, x + width / 2, far),
     ];
   const end = domain - 0.4;
@@ -92,7 +106,7 @@ export function bendGeometry(straight, scale, polarization, corner) {
     source: { type: 'port', x: 0.4, y0: y - 0.7, y1: y + 0.7 },
     mark: [0.4, y],
     monitor: straight ? { x0: end, y0: y - span, x1: end, y1: y + span } : { x0: x + span, y0: end, x1: x - span, y1: end },
-    region: { x0, y0, width: size, height: size, nx: BEND.pixels, ny: BEND.pixels },
+    region: { x0, y0, width: size, height: size, nx: pixels, ny: pixels },
   }, scale);
 }
 
@@ -100,12 +114,12 @@ export function bendGeometry(straight, scale, polarization, corner) {
 // request asks for the gradient with respect to each pixel's density.
 function bendRequest(state, wavelength, straight, rho, corner) {
   const scale = bendScale(state);
-  const geometry = bendGeometry(straight, scale, state.polarization, corner);
+  const geometry = bendGeometry(straight, scale, state.polarization, bendLayout(state.design.bend2d), corner);
   const n2 = BEND.n ** 2;
   return {
     width: geometry.size,
     height: geometry.size,
-    cell: (BEND.size * scale) / BEND.pixels / bendRefinement(state).refine,
+    cell: (BEND.pixel * scale) / bendRefinement(state).refine,
     background: { eps: 1, mu: 1 },
     shapes: geometry.shapes.map(toShape),
     polarization: state.polarization,
@@ -130,7 +144,7 @@ export async function prepareDesign(state, solve) {
 }
 
 export const designGeometry = (state, rho) => (state.analysis === 'bend2d'
-  ? bendGeometry(false, bendScale(state), state.polarization)
+  ? bendGeometry(false, bendScale(state), state.polarization, bendLayout(state.design.bend2d))
   : cavityGeometry(state.wavelength * (tuned.get(rho) ?? 1)));
 
 // Goal wavelengths, with the centre last so the plotted field comes from it.
@@ -187,7 +201,7 @@ export function references(state) {
   if (state.analysis === 'cavityDesign') return cavityReferences(state);
   if (state.analysis === 'bend2d') {
     return [
-      { name: 'Empty region', requests: gradientRequests(state, new Float64Array(BEND.pixels ** 2)) },
+      { name: 'Empty region', requests: gradientRequests(state, new Float64Array(pixelCount(state.design.bend2d))) },
       { name: 'Sharp corner', requests: goalWavelengths(state).map((wavelength) => bendRequest(state, wavelength, false, undefined, 'sharp')) },
       { name: 'Curved bend', requests: goalWavelengths(state).map((wavelength) => bendRequest(state, wavelength, false, undefined, 'curved')) },
     ];
@@ -236,7 +250,8 @@ export async function optimize(state, solve, onStep) {
   const design = state.design[state.analysis];
   const bend = state.analysis === 'bend2d';
   const n = pixelCount(design);
-  const filter = bend ? coneFilter2d(BEND.pixels, BEND.pixels, design.radius) : coneFilter(n, Math.max(design.radius / (PIXEL * 1000), 1));
+  const side = bend && bendLayout(design).pixels;
+  const filter = bend ? coneFilter2d(side, side, design.radius) : coneFilter(n, Math.max(design.radius / (PIXEL * 1000), 1));
   const prepared = await prepareDesign(state, solve);
   if (!prepared || prepared.error) return prepared;
   let x = randomStart(n, design.seed);

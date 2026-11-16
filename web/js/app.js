@@ -4,7 +4,7 @@ import { GUIDES, MATERIALS, PRESETS, PROBLEMS, blochAt, buildRequests, decodeSta
 import { EvolutionMap, FieldMap, FieldPlot, LineChart, drawDensity, seriesColors } from './plot.js';
 import { Solver } from './solver.js';
 import { CAVITY_Q } from './cavity-design.js';
-import { STAGES, bendWarning, designGeometry, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, prepareDesign, stageLength, totalIterations, references, sharpnessAt } from './design.js';
+import { BEND_STEP, STAGES, bendLayout, bendWarning, designGeometry, finishedLayers, gradientRequests, meanReflection, optimize, pixelCount, plotLayers, prepareDesign, stageLength, totalIterations, references, sharpnessAt } from './design.js';
 
 const $ = (id) => document.getElementById(id);
 const THZ_MICRONS = 299.792458; // c, in THz times microns.
@@ -24,7 +24,7 @@ const VIEW_HELP = {
   mirror: 'Find the layers that reflect the most light at one wavelength, within a fixed thickness.',
   antireflection: 'Find the coating that reflects the least light, averaged across a band of wavelengths.',
   cavityDesign: 'Find the pattern of material around an emitter that holds light for longest in the smallest space, in a square as big as 7 x 7 rods of the crystal it\'s compared with. It measures the local density of states over a bandwidth that narrows as the pixels sharpen. A cavity raises it roughly in proportion to Q / V, while the mode is broader than that bandwidth and the emitter sits at the field\'s peak. The structure and its mesh scale with the wavelength.',
-  bend2d: 'Find the pattern of material that carries light around a tight corner in a slab waveguide, within a square three quarters of a wavelength wide that reaches past the corner. A smooth curve that turns this tightly loses about 7%. Light stays in the slab instead of radiating away at the corner. The structure and its mesh scale with the middle of the band.',
+  bend2d: 'Find the pattern of material that carries light around a tight corner in a slab waveguide, within a square of pixels that reaches past the corner. At first the square is three quarters of a wavelength wide and the guides meet it a quarter of a wavelength from its inner corner, where a smooth curve turning as tightly loses about 7%. Light stays in the slab instead of radiating away at the corner. The structure and its mesh scale with the middle of the band, so the square is set in wavelengths there.',
 };
 const PROBLEM_TEXT = {
   driven: {
@@ -247,6 +247,7 @@ function renderSettings() {
   show('angle-field', a === 'spectrum' || ((a === 'field' || a === 'scatter2d') && state.source === 'plane_wave') || a === 'grating2d' || (designing && !pixelDesign()));
   show('design-fields', designing && !pixelDesign());
   show('design-band', a === 'antireflection' || bend2d());
+  show('design-square', bend2d());
   show('design-run', designing);
   show('left-field', !designing && !planar());
   show('right-field', !designing && !planar());
@@ -419,6 +420,10 @@ function renderDesignSettings() {
     select.replaceChildren(...MATERIALS.filter((m) => m.k === 0).map((m) => new Option(m.name, m.name, false, m.name === d[key])));
   }
   if (d.from !== undefined) [$('design-from').value, $('design-to').value] = [d.from, d.to];
+  if (bend2d()) {
+    const { size, turn } = bendLayout(d);
+    [$('design-size').value, $('design-turn').value, $('design-turn').max] = [size, turn, size - BEND_STEP];
+  }
 }
 
 function bindNumber(id, apply, min = 0) {
@@ -440,6 +445,10 @@ bindNumber('design-radius', (v) => { designSettings().radius = Math.min(100, v);
 bindNumber('design-seed', (v) => { designSettings().seed = Math.round(v); }, 1);
 bindNumber('design-from', (v) => { designSettings().from = v; }, 0.05);
 bindNumber('design-to', (v) => { designSettings().to = v; }, 0.05);
+// The square snaps to eighths of a wavelength, shown once an entry is done.
+bindNumber('design-size', (v) => { designSettings().size = v; }, 0.05);
+bindNumber('design-turn', (v) => { designSettings().turn = v; }, 0.05);
+for (const key of ['size', 'turn']) $(`design-${key}`).addEventListener('change', renderDesignSettings);
 for (const key of ['low', 'high', 'left', 'right']) {
   $(`design-${key}`).addEventListener('change', () => { designSettings()[key] = $(`design-${key}`).value; changed(); });
 }

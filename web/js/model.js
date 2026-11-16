@@ -203,7 +203,7 @@ export function defaultState() {
     design: {
       mirror: { thickness: 2, low: 'Silica glass', high: 'Titanium dioxide', left: 'Air', right: 'Air', radius: 20, seed: 1 },
       antireflection: { thickness: 0.6, low: 'Magnesium fluoride', high: 'Titanium dioxide', left: 'Air', right: 'Silica glass', radius: 15, seed: 1, from: 0.4, to: 0.8 },
-      bend2d: { radius: 3, seed: 1, from: 0.95, to: 1.05 },
+      bend2d: { radius: 3, seed: 1, from: 0.95, to: 1.05, size: 0.75, turn: 0.25 },
       cavityDesign: { cavity: true, seed: 1 },
     },
     ...structuredClone(PRESETS['Mirror with a resonant gap']),
