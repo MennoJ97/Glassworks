@@ -289,6 +289,9 @@ function layout({ title, body, current, prefix = '', panel = '', pager = '', lic
 <title>${escapeHtml(title)} | Glassworks</title>
 <link rel="stylesheet" href="${prefix}../family.css">
 <link rel="stylesheet" href="${prefix}../style.css">
+<link rel="icon" href="${prefix}../favicon.ico" sizes="32x32">
+<link rel="icon" href="${prefix}../favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="${prefix}../apple-touch-icon.png">
 <link rel="stylesheet" href="${prefix}../learn.css">${
     panel
       ? `
